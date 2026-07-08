@@ -4,6 +4,7 @@ import type { Show, ShowCategory, TicketOffer } from "../types";
 const categoryAliases: Record<string, ShowCategory> = {
   "arts & theatre": "theater",
   ballet: "ballet",
+  cabaret: "variety",
   classical: "opera",
   "club dance": "dj",
   comedy: "comedy",
@@ -13,6 +14,9 @@ const categoryAliases: Record<string, ShowCategory> = {
   dj: "dj",
   electronic: "dj",
   house: "dj",
+  immersive: "variety",
+  magic: "variety",
+  miscellaneous: "variety",
   musical: "theater",
   music: "concert",
   "new writing": "play",
@@ -22,8 +26,12 @@ const categoryAliases: Record<string, ShowCategory> = {
   plays: "play",
   drama: "play",
   rock: "concert",
+  "special events": "variety",
+  "spoken word": "variety",
+  storytelling: "variety",
   theatre: "theater",
-  theater: "theater"
+  theater: "theater",
+  variety: "variety"
 };
 
 const categoryPriority: ShowCategory[] = [
@@ -33,6 +41,7 @@ const categoryPriority: ShowCategory[] = [
   "dj",
   "play",
   "comedy",
+  "variety",
   "theater",
   "concert"
 ];

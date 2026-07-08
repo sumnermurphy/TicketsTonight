@@ -41,7 +41,8 @@ export const categoryLabels: Record<ShowCategory, string> = {
   opera: "Opera",
   play: "Plays",
   theater: "Theater",
-  comedy: "Comedy"
+  comedy: "Comedy",
+  variety: "Variety"
 };
 
 export const shows: Show[] = [
@@ -280,6 +281,43 @@ export const shows: Show[] = [
     recommendationSignals: ["category:theater", "category:musical"]
   },
   {
+    id: "show-midnight-salon",
+    title: "Midnight Salon",
+    artistOrCompany: "The Bowery Story Company",
+    category: "variety",
+    startsAt: "2026-07-12T21:00:00-04:00",
+    venue: "Ludlow House",
+    neighborhood: "Lower East Side",
+    areaId: "nyc",
+    distanceMiles: 1.2,
+    vibe: ["storytelling", "cabaret", "late night"],
+    description: "A mixed live bill of storytelling, close-up magic, and cabaret turns in a small room.",
+    ticketOffers: [
+      {
+        id: "salon-seat",
+        label: "Salon seat",
+        priceCents: 3000,
+        listPriceCents: 4000,
+        currency: "USD",
+        remaining: 22,
+        maxQuantity: 4,
+        access: "mobile-entry",
+        source: "promoter",
+        deal: {
+          id: "deal-midnight-salon",
+          label: "Late-room drop",
+          description: "Promoter release for filling the room after dinner.",
+          amountOffCents: 1000,
+          expiresAt: "2026-07-12T19:30:00-04:00"
+        },
+        perks: ["Reserved table option"]
+      }
+    ],
+    source: "promoter",
+    imageTone: "#7B5B2E",
+    recommendationSignals: ["category:variety", "category:storytelling"]
+  },
+  {
     id: "show-pacific-opera",
     title: "The Barber of Seville",
     artistOrCompany: "Pacific Opera",
@@ -445,5 +483,42 @@ export const shows: Show[] = [
     source: "venue-direct",
     imageTone: "#D9A441",
     recommendationSignals: ["category:opera", "category:classical"]
+  },
+  {
+    id: "show-hudson-story-cabaret",
+    title: "River Story Cabaret",
+    artistOrCompany: "Warren Street Live",
+    category: "variety",
+    startsAt: "2026-07-11T20:30:00-04:00",
+    venue: "Half Moon Hall",
+    neighborhood: "Warren Street",
+    areaId: "hudson",
+    distanceMiles: 0.4,
+    vibe: ["storytelling", "cabaret", "weekend trip"],
+    description: "A regional live salon mixing local stories, piano cabaret, and short variety acts.",
+    ticketOffers: [
+      {
+        id: "table",
+        label: "Table seat",
+        priceCents: 2800,
+        listPriceCents: 3600,
+        currency: "USD",
+        remaining: 18,
+        maxQuantity: 4,
+        access: "mobile-entry",
+        source: "venue-direct",
+        deal: {
+          id: "deal-hudson-story-cabaret",
+          label: "Weekend table",
+          description: "Small-room allocation for weekend arts travelers.",
+          amountOffCents: 800,
+          expiresAt: "2026-07-11T18:30:00-04:00"
+        },
+        perks: ["Cabaret table"]
+      }
+    ],
+    source: "venue-direct",
+    imageTone: "#7B5B2E",
+    recommendationSignals: ["category:variety", "category:storytelling"]
   }
 ];

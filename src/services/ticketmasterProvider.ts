@@ -361,7 +361,8 @@ function getCategoryTone(category: ShowCategory): string {
     opera: "#D9A441",
     play: "#314E66",
     theater: "#314E66",
-    comedy: "#B73A26"
+    comedy: "#B73A26",
+    variety: "#7B5B2E"
   };
 
   return tones[category];
@@ -376,7 +377,8 @@ function getClassificationNames(categories: ShowCategory[]): string[] {
     opera: ["opera"],
     play: ["theatre"],
     theater: ["theatre"],
-    comedy: ["comedy"]
+    comedy: ["comedy"],
+    variety: ["miscellaneous", "theatre"]
   };
 
   return uniqueStrings(categories.flatMap((category) => values[category]));

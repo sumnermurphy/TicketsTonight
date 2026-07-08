@@ -80,8 +80,8 @@ async function main() {
   );
   assert(
     (Object.keys(categoryLabels) as string[]).join("|") ===
-      "concert|dj|dance|ballet|opera|play|theater|comedy",
-    "Discovery categories should cover concerts, DJ sets, dance, ballet, opera, plays, theater, and comedy."
+      "concert|dj|dance|ballet|opera|play|theater|comedy|variety",
+    "Discovery categories should cover concerts, DJ sets, dance, ballet, opera, plays, theater, comedy, and adjacent live events."
   );
   assert(areas[0]?.discoveryRole === "primary", "New York should be the primary alpha market.");
   assert(
@@ -205,6 +205,20 @@ async function main() {
     "NYC primary discovery should include theater inventory separately from plays."
   );
 
+  const varietySearch = searchShows({
+    areaId: "nyc",
+    categories: ["variety"],
+    query: "cabaret",
+    onlyDeals: true,
+    dateWindow: "weekend",
+    referenceNow
+  });
+
+  assert(
+    varietySearch.some((show) => show.id === "show-midnight-salon"),
+    "NYC primary discovery should include adjacent live variety inventory."
+  );
+
   const compositeResults = await eventProvider.listShows({
     areaId: "la",
     categories: ["dj"],
@@ -249,6 +263,30 @@ async function main() {
   assert(
     hudsonFeedResults.some((show) => show.id === "feed-artswire-aw-550"),
     "Composite provider should merge normalized Hudson partner-feed events."
+  );
+
+  const hudsonVarietyShows = searchShows({
+    areaId: "hudson",
+    categories: ["variety"],
+    query: "story cabaret",
+    onlyDeals: true,
+    dateWindow: "weekend",
+    referenceNow
+  });
+
+  assert(
+    hudsonVarietyShows.some((show) => show.id === "show-hudson-story-cabaret"),
+    "Hudson discovery should include adjacent live events for the arts-town test market."
+  );
+
+  assert(
+    normalizeFeedEvent({
+      ...partnerFeedEvents[0]!,
+      providerId: "taxonomy-check",
+      externalId: "variety-1",
+      taxonomy: ["spoken word", "cabaret"]
+    }).category === "variety",
+    "Provider taxonomy should normalize adjacent live formats into variety."
   );
 
   const ticketmasterUrl = new URL(
@@ -297,6 +335,28 @@ async function main() {
   assert(
     ticketmasterPlayUrl.searchParams.get("classificationName") === "theatre",
     "Ticketmaster play requests should use the theatre provider classification."
+  );
+  const ticketmasterVarietyUrl = new URL(
+    buildTicketmasterDiscoveryUrl(
+      {
+        areaId: "nyc",
+        categories: ["variety"],
+        query: "",
+        onlyDeals: false,
+        dateWindow: "week",
+        referenceNow
+      },
+      {
+        apiKey: "test-key",
+        now: () => new Date(referenceNow),
+        radiusMiles: 20
+      }
+    )
+  );
+
+  assert(
+    ticketmasterVarietyUrl.searchParams.get("classificationName") === "miscellaneous,theatre",
+    "Ticketmaster variety requests should cover adjacent live provider classifications."
   );
 
   const rawTicketmasterEvent = ticketmasterDiscoveryFixture._embedded?.events?.[0];

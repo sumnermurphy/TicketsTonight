@@ -6,7 +6,8 @@ export type ShowCategory =
   | "opera"
   | "play"
   | "theater"
-  | "comedy";
+  | "comedy"
+  | "variety";
 
 export type DateWindow = "all" | "tonight" | "week" | "weekend";
 
