@@ -8,7 +8,7 @@ import {
   toggleDealAlertStatus
 } from "../src/services/dealAlerts";
 import { checkoutBackend } from "../src/services/checkoutBackend";
-import { getCategoryFacets } from "../src/services/discoveryFacets";
+import { getCategoryFacets, getDateWindowFacets } from "../src/services/discoveryFacets";
 import {
   getDealInsights,
   getDealSummary,
@@ -162,19 +162,32 @@ async function main() {
     dealShows.every((show) => show.ticketOffers.some((offer) => offer.deal)),
     "Deal search should only return shows with deal-backed offers."
   );
+  const nycAreaInventory = searchShows({
+    areaId: "nyc",
+    categories: [],
+    query: "",
+    onlyDeals: false,
+    dateWindow: "all",
+    referenceNow
+  });
   const nycCategoryFacets = getCategoryFacets(
-    searchShows({
-      areaId: "nyc",
-      categories: [],
-      query: "",
-      onlyDeals: false,
-      dateWindow: "all",
-      referenceNow
-    }),
+    nycAreaInventory,
     Object.keys(categoryLabels) as Array<keyof typeof categoryLabels>
   );
   const comedyFacet = nycCategoryFacets.find((facet) => facet.category === "comedy");
   const danceFacet = nycCategoryFacets.find((facet) => facet.category === "dance");
+  const nycDateWindowFacets = getDateWindowFacets(
+    nycAreaInventory,
+    ["tonight", "week", "weekend"],
+    referenceNow
+  );
+  const tonightFacet = nycDateWindowFacets.find((facet) => facet.dateWindow === "tonight");
+  const weekendFacet = nycDateWindowFacets.find((facet) => facet.dateWindow === "weekend");
+  const comedyDateWindowFacets = getDateWindowFacets(
+    nycAreaInventory.filter((show) => show.category === "comedy"),
+    ["weekend"],
+    referenceNow
+  );
 
   assert(
     nycCategoryFacets.length === Object.keys(categoryLabels).length,
@@ -187,6 +200,18 @@ async function main() {
   assert(
     danceFacet?.showCount === 0 && danceFacet.dealCount === 0,
     "Category facets should preserve zero-count categories so users can see availability gaps."
+  );
+  assert(
+    tonightFacet?.showCount === 2 && tonightFacet.dealCount === 2,
+    "Date-window facets should expose tonight availability and deal counts."
+  );
+  assert(
+    weekendFacet && weekendFacet.showCount > tonightFacet!.showCount && weekendFacet.dealCount > 0,
+    "Date-window facets should expose broader weekend availability."
+  );
+  assert(
+    comedyDateWindowFacets[0]?.showCount === 1 && comedyDateWindowFacets[0].dealCount === 1,
+    "Date-window facets should support category-filtered inventory."
   );
   const dealInsights = getDealInsights(dealShows, referenceNow);
   const dealSummary = getDealSummary(dealShows, referenceNow);

@@ -36,8 +36,10 @@ import {
   toggleDealAlertStatus
 } from "./services/dealAlerts";
 import {
+  getDateWindowFacets,
   getCategoryFacets,
-  type CategoryFacet
+  type CategoryFacet,
+  type DateWindowFacet
 } from "./services/discoveryFacets";
 import {
   getDealInsights,
@@ -295,6 +297,21 @@ export default function App() {
   const categoryFacetsByCategory = useMemo(
     () => new Map(categoryFacets.map((facet) => [facet.category, facet])),
     [categoryFacets]
+  );
+  const dateFacetInventory = useMemo(
+    () =>
+      selectedCategories.length
+        ? areaInventory.filter((show) => selectedCategories.includes(show.category))
+        : areaInventory,
+    [areaInventory, selectedCategories]
+  );
+  const dateWindowFacets = useMemo(
+    () => getDateWindowFacets(dateFacetInventory, dateWindows),
+    [dateFacetInventory]
+  );
+  const dateWindowFacetsByWindow = useMemo(
+    () => new Map(dateWindowFacets.map((facet) => [facet.dateWindow, facet])),
+    [dateWindowFacets]
   );
   const dealAlertMatches = useMemo(
     () => getDealAlertMatches(dealAlerts, dealAlertInventory).slice(0, 4),
@@ -583,7 +600,9 @@ export default function App() {
               <DateWindowChip
                 active={dateWindow === window}
                 dateWindow={window}
+                facet={dateWindowFacetsByWindow.get(window)}
                 key={window}
+                loading={inventoryLoading}
                 onPress={() => setDateWindow(window)}
               />
             ))}
@@ -894,10 +913,14 @@ function CategoryChip({
 function DateWindowChip({
   active,
   dateWindow,
+  facet,
+  loading,
   onPress
 }: {
   active: boolean;
   dateWindow: DateWindow;
+  facet: DateWindowFacet | undefined;
+  loading: boolean;
   onPress: () => void;
 }) {
   return (
@@ -908,6 +931,12 @@ function DateWindowChip({
     >
       <Text style={[styles.dateWindowText, active ? styles.dateWindowTextActive : undefined]}>
         {dateWindowLabels[dateWindow]}
+      </Text>
+      <Text
+        numberOfLines={1}
+        style={[styles.dateWindowMeta, active ? styles.dateWindowMetaActive : undefined]}
+      >
+        {getDateWindowFacetCopy(facet, loading)}
       </Text>
     </Pressable>
   );
@@ -1028,6 +1057,22 @@ function getCategoryFacetCopy(facet: CategoryFacet | undefined, loading: boolean
   }
 
   return `${showCopy} · ${facet.dealCount} ${facet.dealCount === 1 ? "deal" : "deals"}`;
+}
+
+function getDateWindowFacetCopy(facet: DateWindowFacet | undefined, loading: boolean): string {
+  if (loading) {
+    return "Checking";
+  }
+
+  if (!facet || facet.showCount === 0) {
+    return "0 shows";
+  }
+
+  if (facet.dealCount > 0) {
+    return `${facet.showCount} · ${facet.dealCount} deals`;
+  }
+
+  return `${facet.showCount} ${facet.showCount === 1 ? "show" : "shows"}`;
 }
 
 function DealCard({ insight, onPress }: { insight: DealInsight; onPress: () => void }) {
@@ -1726,14 +1771,16 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md
   },
   dateWindowChip: {
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "center",
-    minHeight: 36,
+    minWidth: 102,
+    minHeight: 50,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.paper,
-    paddingHorizontal: spacing.lg
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm
   },
   dateWindowChipActive: {
     borderColor: colors.ink,
@@ -1746,6 +1793,15 @@ const styles = StyleSheet.create({
   },
   dateWindowTextActive: {
     color: colors.paper
+  },
+  dateWindowMeta: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 2
+  },
+  dateWindowMetaActive: {
+    color: "#F8F3EA"
   },
   signalPanel: {
     flexDirection: "row",
