@@ -30,6 +30,14 @@ npm install
 npm run web
 ```
 
+Optional live Ticketmaster Discovery inventory can be enabled with public Expo env vars:
+
+```bash
+EXPO_PUBLIC_TICKETMASTER_API_KEY=your_key npm run web
+```
+
+Without that key, the app stays on the checked-in seed catalog and partner-feed fixtures.
+
 Run focused service checks:
 
 ```bash
@@ -55,6 +63,7 @@ npm run android
 - `src/services/discoveryPlanning.ts`: helper layer for source readiness, category gaps, primary-market ordering, and discount levers.
 - `src/services/feedProvider.ts`: feed normalization from provider taxonomy/inventory into the app `Show` model.
 - `src/services/eventCatalog.ts`: discovery search, date-window filtering, deal search, recommendation scoring, composite event providers, and runtime caching for provider-fed shows.
+- `src/services/eventProviderFactory.ts`: default provider stack that keeps fixtures active and adds Ticketmaster Discovery when public Expo config is present.
 - `src/services/location.ts`: location provider interface, demo location provider, distance calculation, and nearest-area resolution.
 - `src/services/notifications.ts`: in-app notification provider for deal-alert matches, with read-state merge helpers for future push/email channels.
 - `src/services/payments.ts`: dormant payment provider groundwork shaped for future Stripe/provider-native checkout.

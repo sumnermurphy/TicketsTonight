@@ -196,10 +196,24 @@ export class CompositeEventProvider implements EventProvider {
   constructor(private readonly providers: EventProvider[]) {}
 
   async listShows(filters: ShowSearchFilters): Promise<Show[]> {
-    const providerResults = await Promise.all(
+    const providerResults = await Promise.allSettled(
       this.providers.map((provider) => provider.listShows(filters))
     );
-    const uniqueShows = dedupeShows(providerResults.flat());
+    const successfulResults = providerResults
+      .filter((result): result is PromiseFulfilledResult<Show[]> => result.status === "fulfilled")
+      .map((result) => result.value);
+
+    if (successfulResults.length === 0) {
+      const firstError = providerResults.find(
+        (result): result is PromiseRejectedResult => result.status === "rejected"
+      );
+
+      throw firstError?.reason instanceof Error
+        ? firstError.reason
+        : new Error("Unable to load event inventory.");
+    }
+
+    const uniqueShows = dedupeShows(successfulResults.flat());
 
     rememberShows(uniqueShows);
 
@@ -223,8 +237,3 @@ export class CompositeEventProvider implements EventProvider {
 function dedupeShows(candidates: Show[]): Show[] {
   return Array.from(new Map(candidates.map((show) => [show.id, show])).values());
 }
-
-export const eventProvider = new CompositeEventProvider([
-  new LocalCatalogProvider(),
-  new PartnerFeedProvider()
-]);

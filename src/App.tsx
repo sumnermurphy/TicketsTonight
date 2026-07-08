@@ -36,11 +36,11 @@ import {
   toggleDealAlertStatus
 } from "./services/dealAlerts";
 import {
-  eventProvider,
   filterShows,
   getBestOffer,
   getShowById
 } from "./services/eventCatalog";
+import { eventProvider } from "./services/eventProviderFactory";
 import { findNearestArea, locationProvider } from "./services/location";
 import {
   markNotificationRead,

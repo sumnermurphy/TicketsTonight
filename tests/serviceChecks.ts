@@ -18,13 +18,18 @@ import {
 } from "../src/services/discoveryPlanning";
 import {
   CompositeEventProvider,
-  eventProvider,
   getDealShows,
   getRecommendedShows,
   getRecommendedShowsFromCatalog,
   getShowById,
+  LocalCatalogProvider,
   searchShows
 } from "../src/services/eventCatalog";
+import {
+  createDefaultEventProvider,
+  createEventProviders,
+  eventProvider
+} from "../src/services/eventProviderFactory";
 import { normalizeFeedEvent } from "../src/services/feedProvider";
 import {
   findNearestArea,
@@ -47,6 +52,7 @@ import {
   TicketmasterDiscoveryProvider,
   type TicketmasterDiscoveryClient
 } from "../src/services/ticketmasterProvider";
+import type { EventProvider } from "../src/types";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -116,6 +122,11 @@ async function main() {
   assert(
     getDiscountLeversForMarket("hudson").includes("regional preview allocations"),
     "Hudson should keep a regional discount lever for later experiments."
+  );
+  assert(
+    createEventProviders({ ticketmasterApiKey: "" }).map((provider) => provider.id).join("|") ===
+      "local-catalog|partner-feed",
+    "Default discovery providers should stay fixture-backed until a marketplace key is configured."
   );
 
   const nycShows = searchShows({
@@ -291,6 +302,45 @@ async function main() {
     "Ticketmaster provider should resolve nearby borough venues into the selected area."
   );
 
+  const factoryTicketmasterClient: TicketmasterDiscoveryClient & { requestedUrls: string[] } = {
+    requestedUrls: [],
+    async listEvents(url: string) {
+      this.requestedUrls.push(url);
+      return ticketmasterDiscoveryFixture;
+    }
+  };
+  const configuredProviders = createEventProviders({
+    ticketmasterApiKey: "test-key",
+    ticketmasterClient: factoryTicketmasterClient,
+    now: () => new Date(referenceNow)
+  });
+  const configuredCompositeProvider = createDefaultEventProvider({
+    ticketmasterApiKey: "test-key",
+    ticketmasterClient: factoryTicketmasterClient,
+    now: () => new Date(referenceNow)
+  });
+  const configuredCompositeShows = await configuredCompositeProvider.listShows({
+    areaId: "nyc",
+    categories: ["theater"],
+    query: "Hadestown",
+    onlyDeals: false,
+    dateWindow: "week",
+    referenceNow
+  });
+
+  assert(
+    configuredProviders.map((provider) => provider.id).includes("ticketmaster-discovery"),
+    "Configured discovery providers should include Ticketmaster when an API key is present."
+  );
+  assert(
+    factoryTicketmasterClient.requestedUrls.length === 1,
+    "Factory-backed Ticketmaster providers should make external discovery requests."
+  );
+  assert(
+    configuredCompositeShows.some((show) => show.id === "tm-tm-nyc-900"),
+    "Factory-backed composite discovery should merge configured marketplace inventory."
+  );
+
   const externalCompositeProvider = new CompositeEventProvider([ticketmasterProvider]);
   const externalCompositeShows = await externalCompositeProvider.listShows({
     areaId: "nyc",
@@ -318,6 +368,33 @@ async function main() {
   assert(
     externalRecommendations.some((recommendation) => recommendation.show.id === "tm-tm-nyc-900"),
     "Provider-fed shows should be rankable by the recommendation engine."
+  );
+
+  const failingExternalProvider: EventProvider = {
+    id: "failing-marketplace",
+    label: "Failing marketplace",
+    async listShows() {
+      throw new Error("Marketplace temporarily unavailable.");
+    },
+    async getShow() {
+      return undefined;
+    }
+  };
+  const resilientCompositeShows = await new CompositeEventProvider([
+    new LocalCatalogProvider(),
+    failingExternalProvider
+  ]).listShows({
+    areaId: "nyc",
+    categories: ["concert"],
+    query: "",
+    onlyDeals: false,
+    dateWindow: "all",
+    referenceNow
+  });
+
+  assert(
+    resilientCompositeShows.some((show) => show.id === "show-alina-ives"),
+    "Composite discovery should keep usable local results when an external provider fails."
   );
 
   const externalProviderHold = await ticketingProvider.createHold({
