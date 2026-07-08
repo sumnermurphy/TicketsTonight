@@ -83,12 +83,7 @@ export function filterShows(candidates: Show[], filters: ShowSearchFilters): Sho
 
       return normalize(searchableText).includes(query);
     })
-    .sort((first, second) => {
-      const dateDelta =
-        new Date(first.startsAt).getTime() - new Date(second.startsAt).getTime();
-
-      return dateDelta === 0 ? first.distanceMiles - second.distanceMiles : dateDelta;
-    });
+    .sort((first, second) => compareShows(first, second, filters.sortMode ?? "soonest"));
 }
 
 export function searchShows(filters: ShowSearchFilters): Show[] {
@@ -149,6 +144,36 @@ export function getBestOffer(show: Show) {
     },
     undefined as Show["ticketOffers"][number] | undefined
   );
+}
+
+function compareShows(
+  first: Show,
+  second: Show,
+  sortMode: NonNullable<ShowSearchFilters["sortMode"]>
+): number {
+  const dateDelta = getStartTime(first) - getStartTime(second);
+
+  if (sortMode === "cheapest") {
+    const priceDelta = getLowestOfferPrice(first) - getLowestOfferPrice(second);
+
+    return priceDelta || dateDelta || first.distanceMiles - second.distanceMiles;
+  }
+
+  if (sortMode === "nearby") {
+    return first.distanceMiles - second.distanceMiles || dateDelta;
+  }
+
+  return dateDelta || first.distanceMiles - second.distanceMiles;
+}
+
+function getLowestOfferPrice(show: Show): number {
+  const prices = show.ticketOffers.map((offer) => offer.priceCents);
+
+  return prices.length ? Math.min(...prices) : Number.MAX_SAFE_INTEGER;
+}
+
+function getStartTime(show: Show): number {
+  return new Date(show.startsAt).getTime();
 }
 
 export function getDealShows(areaId: string): Show[] {

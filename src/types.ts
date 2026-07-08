@@ -10,6 +10,7 @@ export type ShowCategory =
   | "variety";
 
 export type DateWindow = "all" | "tonight" | "week" | "weekend";
+export type DiscoverySortMode = "soonest" | "cheapest" | "nearby";
 
 export type Coordinates = {
   latitude: number;
@@ -88,6 +89,7 @@ export type ShowSearchFilters = {
   onlyDeals: boolean;
   maxPriceCents?: number;
   dateWindow: DateWindow;
+  sortMode?: DiscoverySortMode;
   referenceNow?: string;
 };
 
@@ -185,6 +187,7 @@ export type UserPreferences = {
   dateWindow: DateWindow;
   onlyDeals: boolean;
   maxPriceCents?: number;
+  discoverySortMode: DiscoverySortMode;
   dealAlertMaxPriceCents?: number;
   tasteEnabled: boolean;
   savedShowIds: string[];

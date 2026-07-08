@@ -37,6 +37,7 @@ import {
 } from "../src/services/discoveryPlanning";
 import {
   CompositeEventProvider,
+  getBestOffer,
   getDealShows,
   getRecommendedShows,
   getRecommendedShowsFromCatalog,
@@ -268,6 +269,24 @@ async function main() {
     dateWindow: "all",
     referenceNow
   });
+  const cheapestNycShows = searchShows({
+    areaId: "nyc",
+    categories: [],
+    query: "",
+    onlyDeals: false,
+    dateWindow: "all",
+    sortMode: "cheapest",
+    referenceNow
+  });
+  const nearbyNycShows = searchShows({
+    areaId: "nyc",
+    categories: [],
+    query: "",
+    onlyDeals: false,
+    dateWindow: "all",
+    sortMode: "nearby",
+    referenceNow
+  });
   const nycDiscoveryPicks = getDiscoveryPicks(nycAreaInventory, referenceNow, 4);
   const comedyFacet = nycCategoryFacets.find((facet) => facet.category === "comedy");
   const danceFacet = nycCategoryFacets.find((facet) => facet.category === "dance");
@@ -326,6 +345,17 @@ async function main() {
   assert(
     !under35Shows.some((show) => show.id === "show-midtown-revue"),
     "Max-price filters should exclude shows whose cheapest offer is above the selected budget."
+  );
+  assert(
+    getBestOffer(cheapestNycShows[0]!)?.priceCents ===
+      Math.min(...cheapestNycShows.map((show) => getBestOffer(show)?.priceCents ?? Number.MAX_SAFE_INTEGER)),
+    "Cheapest sort should put the lowest available offer first."
+  );
+  assert(
+    nearbyNycShows.every(
+      (show, index, shows) => index === 0 || shows[index - 1]!.distanceMiles <= show.distanceMiles
+    ),
+    "Nearby sort should order shows by distance."
   );
   assert(nycDiscoveryPicks.length === 4, "Discovery picks should return a bounded best-bets rail.");
   assert(
@@ -1158,6 +1188,7 @@ async function main() {
     selectedCategories: ["concert"],
     selectedNeighborhoods: ["Lower East Side"],
     dateWindow: "tonight",
+    discoverySortMode: "cheapest",
     onlyDeals: true,
     maxPriceCents: 5000,
     dealAlertMaxPriceCents: 3500,
@@ -1179,6 +1210,10 @@ async function main() {
     "Repository should persist deal alert max-price preference."
   );
   assert(storedPreferences.dateWindow === "tonight", "Repository should persist date window preference.");
+  assert(
+    storedPreferences.discoverySortMode === "cheapest",
+    "Repository should persist discovery sort preference."
+  );
   assert(storedPreferences.maxPriceCents === 5000, "Repository should persist discovery max-price preference.");
   assert(
     storedPreferences.savedShowIds.includes("show-alina-ives"),

@@ -74,6 +74,7 @@ import type {
   DateWindow,
   DealAlert,
   DealAlertMatch,
+  DiscoverySortMode,
   InventorySource,
   NotificationMessage,
   OfferAccess,
@@ -91,6 +92,12 @@ const dateWindowLabels: Record<DateWindow, string> = {
   weekend: "Weekend"
 };
 const dateWindows = Object.keys(dateWindowLabels) as DateWindow[];
+const sortModeLabels: Record<DiscoverySortMode, string> = {
+  soonest: "Soonest",
+  cheapest: "Cheapest",
+  nearby: "Nearby"
+};
+const sortModes = Object.keys(sortModeLabels) as DiscoverySortMode[];
 const priceOptions: Array<{ label: string; value?: number }> = [
   { label: "Any price" },
   { label: "Under $35", value: 3500 },
@@ -119,6 +126,7 @@ export default function App() {
   const [selectedCategories, setSelectedCategories] = useState<ShowCategory[]>([]);
   const [selectedNeighborhoods, setSelectedNeighborhoods] = useState<string[]>([]);
   const [dateWindow, setDateWindow] = useState<DateWindow>("all");
+  const [discoverySortMode, setDiscoverySortMode] = useState<DiscoverySortMode>("soonest");
   const [onlyDeals, setOnlyDeals] = useState(false);
   const [maxPriceCents, setMaxPriceCents] = useState<number | undefined>();
   const [dealAlertMaxPriceCents, setDealAlertMaxPriceCents] = useState<number | undefined>();
@@ -153,6 +161,7 @@ export default function App() {
           setSelectedCategories(preferences.selectedCategories);
           setSelectedNeighborhoods(preferences.selectedNeighborhoods ?? []);
           setDateWindow(preferences.dateWindow ?? "all");
+          setDiscoverySortMode(preferences.discoverySortMode ?? "soonest");
           setOnlyDeals(preferences.onlyDeals);
           setMaxPriceCents(preferences.maxPriceCents);
           setDealAlertMaxPriceCents(preferences.dealAlertMaxPriceCents);
@@ -183,6 +192,7 @@ export default function App() {
       selectedCategories,
       selectedNeighborhoods,
       dateWindow,
+      discoverySortMode,
       onlyDeals,
       maxPriceCents,
       dealAlertMaxPriceCents,
@@ -200,6 +210,7 @@ export default function App() {
     dateWindow,
     dealAlertMaxPriceCents,
     dealAlerts,
+    discoverySortMode,
     locationStatus,
     maxPriceCents,
     notifications,
@@ -218,10 +229,12 @@ export default function App() {
       query,
       onlyDeals,
       maxPriceCents,
-      dateWindow
+      dateWindow,
+      sortMode: discoverySortMode
     }),
     [
       dateWindow,
+      discoverySortMode,
       maxPriceCents,
       onlyDeals,
       query,
@@ -237,7 +250,8 @@ export default function App() {
       categories: [],
       query: "",
       onlyDeals: false,
-      dateWindow: "all"
+      dateWindow: "all",
+      sortMode: "soonest"
     }),
     [selectedAreaId]
   );
@@ -765,6 +779,26 @@ export default function App() {
                 key={option.label}
                 label={option.label}
                 onPress={() => setMaxPriceCents(option.value)}
+              />
+            ))}
+          </ScrollView>
+
+          <View style={styles.sortModeHeader}>
+            <Text style={styles.sortModeTitle}>Sort</Text>
+            <Text style={styles.sortModeMeta}>{sortModeLabels[discoverySortMode]}</Text>
+          </View>
+
+          <ScrollView
+            contentContainerStyle={styles.sortModeRail}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          >
+            {sortModes.map((mode) => (
+              <PriceChip
+                active={mode === discoverySortMode}
+                key={mode}
+                label={sortModeLabels[mode]}
+                onPress={() => setDiscoverySortMode(mode)}
               />
             ))}
           </ScrollView>
@@ -2220,6 +2254,28 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   priceFilterRail: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md
+  },
+  sortModeHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.xl
+  },
+  sortModeTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  sortModeMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  sortModeRail: {
     gap: spacing.sm,
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.md
