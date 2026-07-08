@@ -66,18 +66,21 @@ async function main() {
       sortMode: "soonest",
       referenceNow
     };
-    const ticketmasterDiagnostics =
-      apiKey
-        ? await createTicketmasterProviderDiagnostics(filters, {
-            apiKey,
-            client: config.ticketmasterClient ?? new FetchTicketmasterDiscoveryClient(),
-            endpoint: config.ticketmasterEndpoint,
-            radiusMiles: config.ticketmasterRadiusMiles,
-            pageSize: config.ticketmasterPageSize,
-            maxPages: config.ticketmasterMaxPages,
-            now: config.now
-          })
-        : undefined;
+    let ticketmasterError: string | undefined;
+    const ticketmasterDiagnostics = apiKey
+      ? await createTicketmasterProviderDiagnostics(filters, {
+          apiKey,
+          client: config.ticketmasterClient ?? new FetchTicketmasterDiscoveryClient(),
+          endpoint: config.ticketmasterEndpoint,
+          radiusMiles: config.ticketmasterRadiusMiles,
+          pageSize: config.ticketmasterPageSize,
+          maxPages: config.ticketmasterMaxPages,
+          now: config.now
+        }).catch((error: unknown) => {
+          ticketmasterError = getErrorMessage(error);
+          return undefined;
+        })
+      : undefined;
     const parsedCalendarEvents =
       area.id === "hudson" && parsedHudsonCalendar ? parsedHudsonCalendar.events : [];
     const appFacingShows = createAppFacingAuditShows(
@@ -100,7 +103,8 @@ async function main() {
       parsedCalendarEvents,
       parsedCalendarImportedAt: parsedHudsonCalendar?.importedAt,
       ticketmasterConfigured: liveTicketmasterEnabled,
-      ticketmasterDiagnostics
+      ticketmasterDiagnostics,
+      ticketmasterError
     });
 
     console.log(`${area.name}, ${area.region} live inventory`);
@@ -144,6 +148,8 @@ async function main() {
       console.log(
         `Ticketmaster: ${ticketmasterDiagnostics.filteredShowCount} filtered shows, ${ticketmasterDiagnostics.ticketLinkCoveragePercent}% link coverage, ${ticketmasterDiagnostics.duplicateRatePercent}% duplicate rate, ${ticketmasterDiagnostics.discardedEventCount} discarded`
       );
+    } else if (ticketmasterError) {
+      console.log(`Ticketmaster: provider error (${ticketmasterError}); local fallback still showing`);
     } else {
       console.log("Ticketmaster: not configured");
     }
@@ -186,4 +192,8 @@ function getReadinessThresholdCopy(summary: ReturnType<typeof createLiveSupplyAu
     summary.ticketLinkCoveragePercent >= summary.targetTicketLinkCoveragePercent ? "pass" : "gap";
 
   return `${eventStatus} ${summary.eventCount}/${summary.targetEventCount} events, ${linkStatus} ${summary.ticketLinkCoveragePercent}/${summary.targetTicketLinkCoveragePercent}% link coverage`;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

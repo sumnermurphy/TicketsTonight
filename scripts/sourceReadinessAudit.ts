@@ -50,18 +50,21 @@ async function main() {
       sortMode: "soonest",
       referenceNow
     };
-    const ticketmasterDiagnostics =
-      apiKey
-        ? await createTicketmasterProviderDiagnostics(filters, {
-            apiKey,
-            client: config.ticketmasterClient ?? new FetchTicketmasterDiscoveryClient(),
-            endpoint: config.ticketmasterEndpoint,
-            radiusMiles: config.ticketmasterRadiusMiles,
-            pageSize: config.ticketmasterPageSize,
-            maxPages: config.ticketmasterMaxPages,
-            now: config.now
-          })
-        : undefined;
+    let ticketmasterError: string | undefined;
+    const ticketmasterDiagnostics = apiKey
+      ? await createTicketmasterProviderDiagnostics(filters, {
+          apiKey,
+          client: config.ticketmasterClient ?? new FetchTicketmasterDiscoveryClient(),
+          endpoint: config.ticketmasterEndpoint,
+          radiusMiles: config.ticketmasterRadiusMiles,
+          pageSize: config.ticketmasterPageSize,
+          maxPages: config.ticketmasterMaxPages,
+          now: config.now
+        }).catch((error: unknown) => {
+          ticketmasterError = getErrorMessage(error);
+          return undefined;
+        })
+      : undefined;
     const parsedCalendarEvents =
       area.id === "hudson" && parsedHudsonCalendar ? parsedHudsonCalendar.events : [];
     const sourceSummaries = createSourceInventorySummaries({
@@ -70,7 +73,8 @@ async function main() {
       parsedCalendarEvents,
       parsedCalendarImportedAt: parsedHudsonCalendar?.importedAt,
       ticketmasterConfigured: liveTicketmasterEnabled,
-      ticketmasterDiagnostics
+      ticketmasterDiagnostics,
+      ticketmasterError
     });
     const appFacingShows = createAppFacingAuditShows(
       filters,
@@ -153,6 +157,20 @@ function printMarketReadiness({
       `- ${candidate.label} [${candidate.kind}/${candidate.legalStatus}/${candidate.integrationEffort}]: score ${candidate.readinessScore}, events +${candidate.eventCountAdded}, links ${candidate.ticketLinkCoveragePercent}%, duplicate ${candidate.duplicateRatePercent}%, category lift ${candidate.categoryLift.join(", ") || "none"}, market lift ${candidate.marketLift}. ${candidate.recommendedNextAction}`
     );
   }
+
+  const plannedLocalCandidates = rankedCandidates.filter(
+    (candidate) => candidate.kind === "planned-local-pipeline"
+  );
+
+  if (plannedLocalCandidates.length) {
+    console.log("Planned local-pipeline candidates:");
+
+    for (const candidate of plannedLocalCandidates.slice(0, 4)) {
+      console.log(
+        `- ${candidate.label}: ${candidate.legalStatus}, ${candidate.integrationEffort} effort, category lift ${candidate.categoryLift.join(", ") || "none"}. ${candidate.recommendedNextAction}`
+      );
+    }
+  }
 }
 
 function createAppFacingAuditShows(
@@ -170,6 +188,10 @@ function createAppFacingAuditShows(
     ]),
     filters
   );
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 main().catch((error: unknown) => {

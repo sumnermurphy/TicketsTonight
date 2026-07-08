@@ -469,6 +469,10 @@ function getInventoryLegalStatus(summary: SourceInventorySummary): SourceReadine
 }
 
 function getInventoryRecommendedAction(summary: SourceInventorySummary): string {
+  if (summary.importMode === "live-api" && summary.status === "failed") {
+    return "Keep local fallback visible, then retry the provider after rate-limit or provider errors clear.";
+  }
+
   if (summary.importMode === "live-api" && summary.status === "not-configured") {
     return "Configure provider credentials outside git to measure live inventory.";
   }

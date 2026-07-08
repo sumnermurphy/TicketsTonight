@@ -19,6 +19,7 @@ export type SourceInventoryStatus =
   | "checked-in"
   | "parsed"
   | "live"
+  | "failed"
   | "not-configured";
 
 export type SourceInventorySummary = {
@@ -47,6 +48,7 @@ export type SourceInventorySummaryOptions = {
   parsedCalendarImportedAt?: string;
   ticketmasterConfigured: boolean;
   ticketmasterDiagnostics?: TicketmasterProviderDiagnosticsSummary;
+  ticketmasterError?: string;
 };
 
 export function createSourceInventorySummaries({
@@ -55,7 +57,8 @@ export function createSourceInventorySummaries({
   parsedCalendarEvents = [],
   parsedCalendarImportedAt,
   ticketmasterConfigured,
-  ticketmasterDiagnostics
+  ticketmasterDiagnostics,
+  ticketmasterError
 }: SourceInventorySummaryOptions): SourceInventorySummary[] {
   const seedShows = shows.filter((show) => show.areaId === areaId);
   const partnerShows = partnerFeedEvents.map(normalizeFeedEvent).filter((show) => show.areaId === areaId);
@@ -112,6 +115,7 @@ export function createSourceInventorySummaries({
       areaId,
       configured: ticketmasterConfigured,
       diagnostics: ticketmasterDiagnostics,
+      error: ticketmasterError,
       referenceNow
     })
   ];
@@ -160,13 +164,33 @@ function createTicketmasterSourceSummary({
   areaId,
   configured,
   diagnostics,
+  error,
   referenceNow
 }: {
   areaId: string;
   configured: boolean;
   diagnostics?: TicketmasterProviderDiagnosticsSummary;
+  error?: string;
   referenceNow: string;
 }): SourceInventorySummary {
+  if (configured && !diagnostics && error) {
+    return {
+      id: `${areaId}-ticketmaster-discovery`,
+      label: "Ticketmaster Discovery",
+      areaId,
+      importMode: "live-api",
+      status: "failed",
+      freshnessLabel: "provider error",
+      eventCount: 0,
+      ticketLinkCount: 0,
+      activeCategories: [],
+      activeCategoryCount: 0,
+      lastImportedAt: referenceNow,
+      inventorySource: "primary-marketplace",
+      notes: `Ticketmaster request failed; local fallback inventory remains available. ${error}`
+    };
+  }
+
   if (!configured || !diagnostics) {
     return {
       id: `${areaId}-ticketmaster-discovery`,

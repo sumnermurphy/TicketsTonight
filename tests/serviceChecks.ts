@@ -377,6 +377,11 @@ async function main() {
     "Los Angeles should have an active partner-feed fixture for secondary-market validation."
   );
   assert(
+    getNextLocalDiscoverySources("la")[0]?.id === "la-performing-arts-calendar" &&
+      getLocalPipelinePriorityCategories("la").includes("dance"),
+    "Los Angeles should prioritize reusable performing-arts calendars before venue-direct adapters for weak lanes."
+  );
+  assert(
     getMarketDiscoveryGaps("nyc").length === 0,
     "New York source planning should cover the primary category focus."
   );
@@ -1162,6 +1167,15 @@ async function main() {
   const hudsonTicketmasterNoKeySummary = hudsonNoKeySourceSummaries.find(
     (summary) => summary.id === "hudson-ticketmaster-discovery"
   );
+  const hudsonFailedProviderSourceSummaries = createSourceInventorySummaries({
+    areaId: "hudson",
+    referenceNow,
+    ticketmasterConfigured: true,
+    ticketmasterError: "Ticketmaster request failed with 429"
+  });
+  const hudsonTicketmasterFailedSummary = hudsonFailedProviderSourceSummaries.find(
+    (summary) => summary.id === "hudson-ticketmaster-discovery"
+  );
 
   assert(
     hudsonParsedCalendarSummary?.status === "parsed" &&
@@ -1175,6 +1189,12 @@ async function main() {
       hudsonTicketmasterNoKeySummary.importMode === "live-api" &&
       hudsonTicketmasterNoKeySummary.eventCount === 0,
     "Source inventory summaries should report Ticketmaster live API readiness in no-key mode without fetching."
+  );
+  assert(
+    hudsonTicketmasterFailedSummary?.status === "failed" &&
+      hudsonTicketmasterFailedSummary.freshnessLabel === "provider error" &&
+      hudsonTicketmasterFailedSummary.notes.includes("local fallback inventory remains available"),
+    "Source inventory summaries should keep configured provider errors distinct from missing keys."
   );
   const hudsonSourceReadinessAudit = createSourceReadinessAudit({
     areaId: "hudson",
@@ -1200,6 +1220,10 @@ async function main() {
   const losAngelesResidentAdvisorReadiness =
     losAngelesSourceReadinessAudit.rankedCandidates.find(
       (candidate) => candidate.id === "resident-advisor"
+    );
+  const losAngelesPerformingArtsReadiness =
+    losAngelesSourceReadinessAudit.rankedCandidates.find(
+      (candidate) => candidate.id === "la-performing-arts-calendar"
     );
 
   assert(
@@ -1231,6 +1255,13 @@ async function main() {
     "LA RA readiness should capture meaningful nightlife fit while requiring partner/API access."
   );
   assert(
+    losAngelesPerformingArtsReadiness?.legalStatus === "partner-or-api-required" &&
+      losAngelesPerformingArtsReadiness.categoryLift.includes("dance") &&
+      losAngelesPerformingArtsReadiness.categoryLift.includes("theater") &&
+      losAngelesPerformingArtsReadiness.recommendedNextAction.includes("partner rights"),
+    "LA source readiness should include a reusable performing-arts calendar candidate for weak lanes."
+  );
+  assert(
     hudsonSourceReadinessAudit.sourceInventoryEventCount >= 14 &&
       hudsonSourceReadinessAudit.sourceInventoryTicketLinkCoveragePercent >= 80,
     "Source readiness should report source-level event counts and ticket-link coverage for Hudson."
@@ -1238,6 +1269,20 @@ async function main() {
   assert(
     hudsonSourceReadinessAudit.recommendedNextAction.includes("regional calendars"),
     "Hudson source readiness should recommend reusable local calendars rather than treating fixtures as the next product move."
+  );
+  assert(
+    createSourceReadinessAudit({
+      areaId: "hudson",
+      referenceNow,
+      sourceSummaries: hudsonFailedProviderSourceSummaries,
+      ticketmasterConfigured: true
+    }).rankedCandidates.some(
+      (candidate) =>
+        candidate.id === "ticketmaster-discovery" &&
+        candidate.legalStatus === "adapter-ready" &&
+        candidate.recommendedNextAction.includes("local fallback visible")
+    ),
+    "Source readiness should make provider failures compatible with local fallback inventory."
   );
   assert(
     getSafeTicketUrl("javascript:alert(1)") === undefined &&

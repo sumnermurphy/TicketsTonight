@@ -128,6 +128,16 @@ export const discoveryMarketPlans: DiscoveryMarketPlan[] = [
         notes: "Reuses the provider adapter pattern after New York proves the shape."
       },
       {
+        id: "la-performing-arts-calendar",
+        label: "LA performing arts calendars",
+        sourceType: "calendar-feed",
+        lane: "local-pipeline",
+        status: "partner-needed",
+        categories: ["dance", "opera", "play", "theater", "variety"],
+        notes:
+          "Reusable calendar path for LA performing-arts gaps before building individual venue-direct adapters."
+      },
+      {
         id: "la-venue-direct",
         label: "Venue-direct arts inventory",
         sourceType: "venue-direct",

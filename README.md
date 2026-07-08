@@ -189,6 +189,7 @@ npm run android
 - Data strategy: keep Ticketmaster as the broad ticketed baseline, add reusable local calendar/feed pipelines next for measured arts-depth gaps, then evaluate Eventbrite for community/ticket-link breadth, SeatGeek for price-marketplace validation, and PredictHQ-style event intelligence for coverage-gap auditing.
 - Local-source prioritization: use category coverage to pick local pipeline work only when it adds depth beyond broad API coverage.
 - New York performing arts: Ticketmaster remains the broad baseline, while the reusable calendar-feed path now supplies parser-ready dance, ballet, and opera depth before any venue-specific adapter work.
+- Los Angeles performing arts: keep Ticketmaster as the broad baseline, then evaluate reusable performing-arts calendars before venue-direct one-offs.
 - Hudson local pipeline: start with the generic regional calendar-feed path, keep it category-complete for concerts, dance, opera, plays, theater, and variety, and only add bespoke venue adapters after audits show durable gaps.
 - Resident Advisor: treat as a high-fit nightlife candidate for NYC/LA only through a permitted partner/API path; do not scrape or ingest RA without authorization.
 - Discounts: partner-funded promo codes, unsold inventory drops, preview allocations, early-arrival prices, matinee value, and simple last-minute deals.
