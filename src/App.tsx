@@ -43,6 +43,10 @@ import {
   getCoverageAuditStatusCopy
 } from "./services/coverageAudit";
 import {
+  getCuratedDiscoveryResult,
+  getDiscoverySeriesSummaryCopy
+} from "./services/discoveryCuration";
+import {
   getDateWindowFacets,
   getCategoryFacets,
   getMarketDiscoverySummary,
@@ -69,7 +73,6 @@ import {
   getDiscoveryInventoryStatus,
   getDiscoveryResultCountCopy,
   getNextVisibleDiscoveryCount,
-  getPagedDiscoveryResults,
   getRemainingDiscoveryCount,
   initialDiscoveryVisibleCount
 } from "./services/discoveryVisibility";
@@ -342,10 +345,16 @@ export default function App() {
     () => filterShows(areaInventory, discoveryFilters),
     [areaInventory, discoveryFilters]
   );
-  const visibleShows = useMemo(
-    () => getPagedDiscoveryResults(filteredDiscoveryShows, visibleResultLimit),
-    [filteredDiscoveryShows, visibleResultLimit]
+  const curatedDiscoveryResult = useMemo(
+    () =>
+      getCuratedDiscoveryResult(filteredDiscoveryShows, {
+        filters: discoveryFilters,
+        visibleCount: visibleResultLimit,
+        referenceNow: new Date().toISOString()
+      }),
+    [discoveryFilters, filteredDiscoveryShows, visibleResultLimit]
   );
+  const visibleShows = curatedDiscoveryResult.shows;
   const remainingDiscoveryCount = useMemo(
     () => getRemainingDiscoveryCount(filteredDiscoveryShows.length, visibleShows.length),
     [filteredDiscoveryShows.length, visibleShows.length]
@@ -392,12 +401,19 @@ export default function App() {
     [dealAlertInventory]
   );
   const discoveryPicks = useMemo(
-    () => getDiscoveryPicks(visibleShows, new Date().toISOString(), 4),
-    [visibleShows]
+    () =>
+      getDiscoveryPicks(filteredDiscoveryShows, new Date().toISOString(), 4, {
+        areaId: selectedAreaId
+      }),
+    [filteredDiscoveryShows, selectedAreaId]
   );
   const resultSections = useMemo(
-    () => getDiscoveryResultSections(visibleShows, { sortMode: discoverySortMode }),
-    [discoverySortMode, visibleShows]
+    () =>
+      getDiscoveryResultSections(visibleShows, {
+        sortMode: discoverySortMode,
+        includeBestPicks: curatedDiscoveryResult.defaultCurated
+      }),
+    [curatedDiscoveryResult.defaultCurated, discoverySortMode, visibleShows]
   );
   const dealSummary = useMemo(() => getDealSummary(dealAlertInventory), [dealAlertInventory]);
   const categoryFacets = useMemo(
@@ -1362,6 +1378,9 @@ export default function App() {
                       onOpenDetails={() => openShowDetails(show)}
                       onToggleSaved={() => toggleSavedShow(show.id)}
                       saved={savedShowIds.includes(show.id)}
+                      seriesSummary={getDiscoverySeriesSummaryCopy(
+                        curatedDiscoveryResult.seriesByShowId.get(show.id)
+                      )}
                       show={show}
                     />
                   ))}
@@ -1889,12 +1908,14 @@ function ShowCard({
   show,
   onOpenDetails,
   onToggleSaved,
-  saved
+  saved,
+  seriesSummary
 }: {
   show: Show;
   onOpenDetails: () => void;
   onToggleSaved: () => void;
   saved: boolean;
+  seriesSummary?: string;
 }) {
   const bestOffer = getBestOffer(show);
   const savings = getOfferSavings(bestOffer);
@@ -1921,6 +1942,11 @@ function ShowCard({
             <View style={styles.dealPill}>
               <BadgePercent color={colors.coralDark} size={13} />
               <Text style={styles.dealPillText}>{bestOffer.deal.label}</Text>
+            </View>
+          ) : null}
+          {seriesSummary ? (
+            <View style={styles.seriesPill}>
+              <Text style={styles.seriesPillText}>{seriesSummary}</Text>
             </View>
           ) : null}
         </View>
@@ -3544,6 +3570,17 @@ const styles = StyleSheet.create({
   },
   dealPillText: {
     color: colors.coralDark,
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  seriesPill: {
+    borderRadius: radii.pill,
+    backgroundColor: colors.tealSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5
+  },
+  seriesPillText: {
+    color: colors.teal,
     fontSize: 11,
     fontWeight: "900"
   },

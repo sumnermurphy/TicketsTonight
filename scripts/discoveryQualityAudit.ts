@@ -3,14 +3,15 @@ import {
   createDefaultEventProvider,
   readPublicDiscoveryConfig
 } from "../src/services/eventProviderFactory";
-import { createCoverageAudit } from "../src/services/coverageAudit";
-import { getMarketDiscoverySummary } from "../src/services/discoveryFacets";
-import { getSpotifyMatchableShows } from "../src/services/eventCatalog";
+import {
+  createDiscoveryQualityAudit,
+  getDiscoveryQualityAuditStatusCopy
+} from "../src/services/discoveryQualityAudit";
 import { getSafeTicketUrl } from "../src/services/ticketLinks";
-import type { Show, ShowCategory, ShowSearchFilters } from "../src/types";
+import type { Show, ShowSearchFilters } from "../src/types";
 import { loadLocalEnv } from "./env";
 
-const defaultVisibleResultLimit = 120;
+const defaultVisibleResultLimit = 60;
 
 async function main() {
   loadLocalEnv();
@@ -18,7 +19,6 @@ async function main() {
   const referenceNow = new Date().toISOString();
   const config = readPublicDiscoveryConfig();
   const provider = createDefaultEventProvider(config);
-  const categories = Object.keys(categoryLabels) as ShowCategory[];
   console.log(`Live Ticketmaster: ${config.ticketmasterApiKey?.trim() ? "enabled" : "not configured"}`);
 
   for (const area of areas) {
@@ -29,44 +29,47 @@ async function main() {
       onlyDeals: false,
       dateWindow: "all",
       sortMode: "soonest",
-      referenceNow,
-      resultLimit: defaultVisibleResultLimit
+      referenceNow
     };
     const shows = await provider.listShows(filters);
-    const summary = getMarketDiscoverySummary(shows, categories);
-    const coverage = createCoverageAudit(shows, {
+    const audit = createDiscoveryQualityAudit(shows, {
       areaId: area.id,
       referenceNow,
-      windowDays: 30
+      visibleCount: defaultVisibleResultLimit
     });
 
     console.log(`${area.name}, ${area.region} default discovery quality audit`);
-    console.log(`Visible results: ${shows.length}/${defaultVisibleResultLimit}`);
-    console.log(`Ticket links: ${summary.ticketLinkCount}/${summary.showCount}`);
-    console.log(`Active categories: ${summary.activeCategoryCount}`);
-    console.log(`Weak lanes: ${coverage.weakCategoryGroups.map((group) => group.label).join(", ") || "none"}`);
-    console.log(`Spotify-matchable inventory: ${getSpotifyMatchableShows(shows).length}/${shows.length}`);
-    console.log("Source mix:");
+    console.log(`Status: ${getDiscoveryQualityAuditStatusCopy(audit)}`);
+    console.log(`Market expectation: ${audit.marketExpectationCopy}`);
+    console.log(`Raw events: ${audit.rawEventCount}`);
+    console.log(`Curated unique runs: ${audit.curatedUniqueRunCount}`);
+    console.log(
+      `Repeated-run density: ${audit.repeatedPerformanceCount} repeated performances (${audit.duplicateDensityPercent}%)`
+    );
+    console.log(`First page: ${audit.visibleEventCount}/${defaultVisibleResultLimit}`);
+    console.log(`Ticket links: ${audit.ticketLinkCount}/${audit.rawEventCount} (${audit.ticketLinkCoveragePercent}%)`);
+    console.log(`Active categories: ${audit.activeCategoryCount}`);
+    console.log(`Weak lanes: ${audit.weakCategoryGroups.map((group) => group.label).join(", ") || "none"}`);
+    console.log(`Spotify-matchable inventory: ${audit.spotifyMatchableCount}/${audit.rawEventCount}`);
+    console.log(
+      `Resident Advisor: ${audit.residentAdvisorReadiness.status} · ${audit.residentAdvisorReadiness.recommendation}`
+    );
+    console.log(`RA feasibility: ${audit.residentAdvisorReadiness.legalPartnerPath}`);
+    console.log("First-page source mix:");
 
-    for (const sourceCount of coverage.sourceCounts) {
-      console.log(`- ${sourceCount.source}: ${sourceCount.count}`);
+    for (const sourceCount of audit.firstPageSourceCounts) {
+      console.log(`- ${sourceCount.label}: ${sourceCount.count}`);
     }
 
-    console.log("Category mix:");
+    console.log("First-page category mix:");
 
-    for (const category of categories) {
-      const categoryShows = shows.filter((show) => show.category === category);
-
-      if (!categoryShows.length) {
-        continue;
-      }
-
-      console.log(`- ${categoryLabels[category]}: ${categoryShows.length}`);
+    for (const categoryCount of audit.firstPageCategoryCounts) {
+      console.log(`- ${categoryCount.label}: ${categoryCount.count}`);
     }
 
-    console.log("First 12:");
+    console.log("Curated first-page sample:");
 
-    for (const show of shows.slice(0, 12)) {
+    for (const show of audit.firstPageShows.slice(0, 12)) {
       console.log(`- ${formatAuditShow(show)}`);
     }
 

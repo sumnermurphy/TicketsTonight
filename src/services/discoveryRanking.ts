@@ -1,6 +1,7 @@
 import type { InventorySource, Show, TicketOffer } from "../types";
 import { getOfferSavings, getSavingsPercent } from "./dealDiscovery";
 import { getBestOffer } from "./eventCatalog";
+import { getSafeTicketUrl } from "./ticketLinks";
 
 export type DiscoveryPickSignal =
   | "calendar-deal"
@@ -9,6 +10,8 @@ export type DiscoveryPickSignal =
   | "local-source"
   | "tonight"
   | "weekend"
+  | "spotify-match"
+  | "ticket-link"
   | "nearby";
 
 export type DiscoveryPick = {
@@ -18,6 +21,11 @@ export type DiscoveryPick = {
   signal: DiscoveryPickSignal;
   label: string;
   reason: string;
+};
+
+export type DiscoveryPickOptions = {
+  areaId?: string;
+  preferCategoryVariety?: boolean;
 };
 
 const localSources = new Set<InventorySource>([
@@ -30,23 +38,35 @@ const localSources = new Set<InventorySource>([
 export function getDiscoveryPicks(
   shows: Show[],
   referenceNow = new Date().toISOString(),
-  limit = 5
+  limit = 5,
+  options: DiscoveryPickOptions = {}
 ): DiscoveryPick[] {
-  return shows
-    .map((show) => createDiscoveryPick(show, referenceNow))
+  const picks = shows
+    .map((show) => createDiscoveryPick(show, referenceNow, options))
     .sort(
       (first, second) =>
         second.score - first.score || first.show.startsAt.localeCompare(second.show.startsAt)
-    )
-    .slice(0, limit);
+    );
+
+  return options.preferCategoryVariety === false ? picks.slice(0, limit) : selectDiversePicks(picks, limit);
 }
 
-function createDiscoveryPick(show: Show, referenceNow: string): DiscoveryPick {
+function createDiscoveryPick(
+  show: Show,
+  referenceNow: string,
+  options: DiscoveryPickOptions
+): DiscoveryPick {
   const offer = getBestOffer(show);
   const startsWithinHours = getHoursUntil(show.startsAt, referenceNow);
   const savingsCents = getOfferSavings(offer);
   const savingsPercent = getSavingsPercent(offer);
   const hasDeal = Boolean(offer?.deal);
+  const hasTicketLink = show.ticketOffers.some((candidate) =>
+    Boolean(getSafeTicketUrl(candidate.externalUrl))
+  );
+  const hasSpotifySignal = (show.recommendationSignals ?? []).some((signal) =>
+    signal.startsWith("spotify:")
+  );
   const signal = getDiscoveryPickSignal(show, hasDeal, startsWithinHours);
 
   return {
@@ -56,10 +76,13 @@ function createDiscoveryPick(show: Show, referenceNow: string): DiscoveryPick {
       getTimingScore(startsWithinHours) +
       getDealScore(hasDeal, savingsCents, savingsPercent) +
       getSourceScore(show.source) +
+      getTicketLinkScore(hasTicketLink) +
+      getSpotifyScore(hasSpotifySignal) +
+      getMarketFitScore(show, options.areaId) +
       getDistanceScore(show.distanceMiles),
     signal,
     label: getDiscoveryPickLabel(signal, savingsPercent),
-    reason: getDiscoveryPickReason(signal, show, startsWithinHours)
+    reason: getDiscoveryPickReason(signal, show, startsWithinHours, hasTicketLink, hasSpotifySignal)
   };
 }
 
@@ -82,6 +105,14 @@ function getDiscoveryPickSignal(
 
   if (localSources.has(show.source)) {
     return "local-source";
+  }
+
+  if ((show.recommendationSignals ?? []).some((signal) => signal.startsWith("spotify:"))) {
+    return "spotify-match";
+  }
+
+  if (show.ticketOffers.some((offer) => Boolean(getSafeTicketUrl(offer.externalUrl)))) {
+    return "ticket-link";
   }
 
   if (startsWithinHours <= 24) {
@@ -120,13 +151,23 @@ function getDiscoveryPickLabel(signal: DiscoveryPickSignal, savingsPercent: numb
     return "Weekend";
   }
 
+  if (signal === "spotify-match") {
+    return "Taste match";
+  }
+
+  if (signal === "ticket-link") {
+    return "Ticket-ready";
+  }
+
   return "Nearby";
 }
 
 function getDiscoveryPickReason(
   signal: DiscoveryPickSignal,
   show: Show,
-  startsWithinHours: number
+  startsWithinHours: number,
+  hasTicketLink: boolean,
+  hasSpotifySignal: boolean
 ): string {
   if (signal === "calendar-deal") {
     return "Local calendar listing with a deal attached";
@@ -150,6 +191,18 @@ function getDiscoveryPickReason(
 
   if (signal === "weekend") {
     return "Good fit for the next weekend window";
+  }
+
+  if (signal === "spotify-match") {
+    return hasTicketLink ? "Matches music taste and has a ticket link" : "Matches music taste signals";
+  }
+
+  if (signal === "ticket-link") {
+    return "Primary ticket link is ready";
+  }
+
+  if (hasSpotifySignal && hasTicketLink) {
+    return "Taste signal with ticket link ready";
   }
 
   return startsWithinHours <= 7 * 24 ? "Nearby this week" : "Nearby upcoming show";
@@ -181,7 +234,7 @@ function getDealScore(hasDeal: boolean, savingsCents: number, savingsPercent: nu
 
 function getSourceScore(source: InventorySource): number {
   if (source === "primary-marketplace") {
-    return 6;
+    return 14;
   }
 
   if (source === "verified-resale") {
@@ -191,8 +244,58 @@ function getSourceScore(source: InventorySource): number {
   return localSources.has(source) ? 18 : 0;
 }
 
+function getTicketLinkScore(hasTicketLink: boolean): number {
+  return hasTicketLink ? 20 : 0;
+}
+
+function getSpotifyScore(hasSpotifySignal: boolean): number {
+  return hasSpotifySignal ? 7 : 0;
+}
+
+function getMarketFitScore(show: Show, areaId: string | undefined): number {
+  if (areaId === "hudson" && localSources.has(show.source)) {
+    return 14;
+  }
+
+  return 0;
+}
+
 function getDistanceScore(distanceMiles: number): number {
   return Math.max(0, 18 - Math.round(distanceMiles * 2));
+}
+
+function selectDiversePicks(picks: DiscoveryPick[], limit: number): DiscoveryPick[] {
+  const selected: DiscoveryPick[] = [];
+  const selectedIds = new Set<string>();
+  const selectedCategoryCounts = new Map<Show["category"], number>();
+  const maximumPerCategory = Math.max(1, Math.ceil(limit / 2));
+  const selectPick = (pick: DiscoveryPick, enforceCategoryMaximum: boolean) => {
+    if (selected.length >= limit || selectedIds.has(pick.show.id)) {
+      return false;
+    }
+
+    const selectedCategoryCount = selectedCategoryCounts.get(pick.show.category) ?? 0;
+
+    if (enforceCategoryMaximum && selectedCategoryCount >= maximumPerCategory) {
+      return false;
+    }
+
+    selected.push(pick);
+    selectedIds.add(pick.show.id);
+    selectedCategoryCounts.set(pick.show.category, selectedCategoryCount + 1);
+
+    return true;
+  };
+
+  for (const pick of picks) {
+    selectPick(pick, true);
+  }
+
+  for (const pick of picks) {
+    selectPick(pick, false);
+  }
+
+  return selected;
 }
 
 function getHoursUntil(startsAt: string, referenceNow: string): number {

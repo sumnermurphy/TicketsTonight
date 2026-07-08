@@ -33,6 +33,12 @@ import {
   getMarketDiscoverySummary,
   getNeighborhoodFacets
 } from "../src/services/discoveryFacets";
+import { createDiscoveryQualityAudit } from "../src/services/discoveryQualityAudit";
+import {
+  getCuratedDiscoveryResult,
+  getDiscoverySeriesSummaryCopy,
+  shouldCurateDefaultDiscovery
+} from "../src/services/discoveryCuration";
 import { getDiscoveryFilterSummary } from "../src/services/discoveryFilterSummary";
 import {
   discoveryVisibleIncrement,
@@ -122,7 +128,7 @@ import {
   type TicketmasterDiscoveryClient,
   type TicketmasterDiscoveryEvent
 } from "../src/services/ticketmasterProvider";
-import type { EventProvider, Show } from "../src/types";
+import type { EventProvider, Show, ShowSearchFilters } from "../src/types";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -138,6 +144,42 @@ async function assertRejects(action: () => Promise<unknown>, message: string) {
   }
 
   throw new Error(message);
+}
+
+function createSyntheticShow(
+  overrides: Partial<Show> & Pick<Show, "id" | "title" | "startsAt">
+): Show {
+  return {
+    id: overrides.id,
+    title: overrides.title,
+    artistOrCompany: overrides.artistOrCompany ?? overrides.title,
+    category: overrides.category ?? "dj",
+    startsAt: overrides.startsAt,
+    venue: overrides.venue ?? "Synthetic Room",
+    neighborhood: overrides.neighborhood ?? "Test District",
+    areaId: overrides.areaId ?? "nyc",
+    distanceMiles: overrides.distanceMiles ?? 1.2,
+    vibe: overrides.vibe ?? ["house", "late night"],
+    description: overrides.description ?? "Synthetic discovery event for service checks.",
+    ticketOffers:
+      overrides.ticketOffers ??
+      [
+        {
+          id: "entry",
+          label: "Entry",
+          priceCents: 2800,
+          currency: "USD",
+          remaining: 20,
+          maxQuantity: 6,
+          access: "mobile-entry",
+          source: overrides.source ?? "primary-marketplace",
+          externalUrl: "https://example.com/tickets"
+        }
+      ],
+    source: overrides.source ?? "primary-marketplace",
+    imageTone: overrides.imageTone ?? "#314E66",
+    recommendationSignals: overrides.recommendationSignals ?? ["spotify:house"]
+  };
 }
 
 function getRollingWindowShows(candidates: Show[], referenceNow: string, windowDays: number): Show[] {
@@ -544,6 +586,67 @@ async function main() {
     resultLimit: 4
   });
   const nycDiscoveryPicks = getDiscoveryPicks(nycAreaInventory, referenceNow, 4);
+  const repeatedRunInventory = [
+    createSyntheticShow({
+      id: "synthetic-residency-1",
+      title: "Night Bloom Residency",
+      startsAt: "2026-07-10T22:00:00-04:00",
+      venue: "Synthetic Room"
+    }),
+    createSyntheticShow({
+      id: "synthetic-residency-2",
+      title: "Night Bloom Residency",
+      startsAt: "2026-07-11T22:00:00-04:00",
+      venue: "Synthetic Room"
+    }),
+    createSyntheticShow({
+      id: "synthetic-residency-3",
+      title: "Night Bloom Residency",
+      startsAt: "2026-07-17T22:00:00-04:00",
+      venue: "Synthetic Room"
+    }),
+    createSyntheticShow({
+      id: "synthetic-opera-oneoff",
+      title: "Harbor Opera Night",
+      category: "opera",
+      startsAt: "2026-07-12T19:00:00-04:00",
+      venue: "Harbor Stage",
+      source: "calendar-feed",
+      recommendationSignals: ["category:opera", "spotify:opera"]
+    })
+  ];
+  const syntheticDefaultFilters: ShowSearchFilters = {
+    areaId: "nyc",
+    categories: [],
+    query: "",
+    onlyDeals: false,
+    dateWindow: "all",
+    sortMode: "soonest",
+    referenceNow
+  };
+  const syntheticCuratedFirstPage = getCuratedDiscoveryResult(repeatedRunInventory, {
+    filters: syntheticDefaultFilters,
+    visibleCount: 2,
+    referenceNow
+  });
+  const syntheticCuratedExpanded = getCuratedDiscoveryResult(repeatedRunInventory, {
+    filters: syntheticDefaultFilters,
+    visibleCount: 4,
+    referenceNow
+  });
+  const syntheticCategoryFiltered = getCuratedDiscoveryResult(repeatedRunInventory, {
+    filters: {
+      ...syntheticDefaultFilters,
+      categories: ["dj"]
+    },
+    visibleCount: 2,
+    referenceNow
+  });
+  const syntheticQualityAudit = createDiscoveryQualityAudit(repeatedRunInventory, {
+    areaId: "nyc",
+    referenceNow,
+    visibleCount: 2
+  });
   const comedyFacet = nycCategoryFacets.find((facet) => facet.category === "comedy");
   const danceFacet = nycCategoryFacets.find((facet) => facet.category === "dance");
   const nycDateWindowFacets = getDateWindowFacets(
@@ -692,9 +795,65 @@ async function main() {
     new Set(limitedDefaultNycShows.map((show) => show.source)).size >= 2,
     "Default discovery result shaping should keep visible inventory source-diverse when multiple sources are available."
   );
+  assert(
+    shouldCurateDefaultDiscovery(syntheticDefaultFilters) &&
+      !shouldCurateDefaultDiscovery({ ...syntheticDefaultFilters, dateWindow: "week" }),
+    "Default discovery curation should only run for the broad all-upcoming soonest view."
+  );
+  assert(
+    syntheticCuratedFirstPage.rawCount === 4 &&
+      syntheticCuratedFirstPage.curatedCount === 2 &&
+      syntheticCuratedFirstPage.repeatedRunCount === 1 &&
+      syntheticCuratedFirstPage.repeatedPerformanceCount === 2,
+    "Discovery curation should measure raw inventory separately from curated repeated-run inventory."
+  );
+  assert(
+    new Set(
+      syntheticCuratedFirstPage.shows.map(
+        (show) => syntheticCuratedFirstPage.seriesByShowId.get(show.id)?.key
+      )
+    ).size === syntheticCuratedFirstPage.shows.length,
+    "Default discovery curation should show one representative per repeated run before repeats."
+  );
+  assert(
+    getDiscoverySeriesSummaryCopy(
+      syntheticCuratedFirstPage.seriesByShowId.get("synthetic-residency-1")
+    ) === "3 upcoming dates",
+    "Repeated-run representatives should expose upcoming-date copy for cards."
+  );
+  assert(
+    syntheticCuratedExpanded.shows.length === 4 &&
+      syntheticCuratedExpanded.shows.some((show) => show.id === "synthetic-residency-2"),
+    "Load-more depth should still expose additional performances from repeated runs."
+  );
+  assert(
+    !syntheticCategoryFiltered.defaultCurated &&
+      syntheticCategoryFiltered.shows.map((show) => show.id).join("|") ===
+        repeatedRunInventory.slice(0, 2).map((show) => show.id).join("|"),
+    "Active filters should preserve individual matching performances instead of collapsing runs."
+  );
+  assert(
+    syntheticQualityAudit.rawEventCount === 4 &&
+      syntheticQualityAudit.curatedUniqueRunCount === 2 &&
+      syntheticQualityAudit.duplicateDensityPercent === 50 &&
+      syntheticQualityAudit.residentAdvisorReadiness.status === "strong-candidate",
+    "Discovery quality audit should report raw count, curated count, duplicate density, and RA readiness."
+  );
+  assert(
+    createDiscoveryQualityAudit(
+      repeatedRunInventory.map((show) => ({ ...show, areaId: "hudson", source: "calendar-feed" })),
+      { areaId: "hudson", referenceNow, visibleCount: 2 }
+    ).marketExpectationCopy.includes("local-calendar-led"),
+    "Hudson discovery quality audit should keep local-calendar expectations explicit."
+  );
   const soonestResultSections = getDiscoveryResultSections(nycAreaInventory, {
     sortMode: "soonest",
     referenceNow
+  });
+  const curatedResultSections = getDiscoveryResultSections(nycAreaInventory, {
+    sortMode: "soonest",
+    referenceNow,
+    includeBestPicks: true
   });
   const cheapestResultSections = getDiscoveryResultSections(cheapestNycShows, {
     sortMode: "cheapest",
@@ -709,9 +868,21 @@ async function main() {
   );
   assert(
     soonestResultSections.some(
-      (section) => section.title === "Sun, Jul 12" && section.showCount === 2
+      (section) => section.title === "This weekend" && section.showCount >= 2
     ),
-    "Date sections should group multiple shows that share the same event date."
+    "Date sections should group upcoming weekend shows into a scan-friendly weekend section."
+  );
+  assert(
+    curatedResultSections[0]?.title === "Best live picks" &&
+      !curatedResultSections
+        .slice(1)
+        .flatMap((section) => section.shows)
+        .some((show) => curatedResultSections[0]!.shows.some((pick) => pick.id === show.id)),
+    "Curated result sections should lead with best live picks without duplicating them below."
+  );
+  assert(
+    curatedResultSections.some((section) => section.title === "This weekend"),
+    "Curated result sections should group upcoming weekend inventory for scanning."
   );
   assert(
     cheapestResultSections.length === 1 &&
@@ -764,6 +935,12 @@ async function main() {
     nycDiscoveryPicks[0]?.signal === "tonight-deal" &&
       nycDiscoveryPicks[0].label === "Tonight deal",
     "NYC discovery picks should prioritize urgent discounted shows."
+  );
+  assert(
+    getDiscoveryPicks(repeatedRunInventory, referenceNow, 2).some(
+      (pick) => pick.signal === "spotify-match" || pick.signal === "ticket-link"
+    ),
+    "Discovery picks should account for ticket links and Spotify-matchable inventory."
   );
   assert(
     nycDiscoveryPicks.every(
