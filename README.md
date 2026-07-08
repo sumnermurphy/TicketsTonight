@@ -8,6 +8,7 @@ Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ball
 - City selector, near-me area resolution, search, category filters, date windows, deal-only filtering, event cards, and a show-detail sheet.
 - First-class category coverage for concerts, DJ sets, dance, ballet, opera, plays, theater, comedy, and variety/adjacent live events.
 - Deal-aware ticket inventory with list prices, savings, access method, inventory source, and max quantities.
+- Discount discovery ranking that prioritizes stronger savings and urgent deal windows before checkout is active.
 - Checkout groundwork remains behind services, but purchase UI, account sign-in, and wallet are out of the active MVP for now.
 - Saved shows, deal alerts, in-app deal notifications, and persisted discovery preferences through a replaceable repository layer.
 - Spotify-shaped taste-provider groundwork remains in services, but Spotify connection and taste-pick UI are out of the active MVP for now.
@@ -61,6 +62,7 @@ npm run android
 - `src/services/auth.ts`: dormant auth provider groundwork for future checkout/account features.
 - `src/services/checkoutBackend.ts`: dormant backend-style checkout groundwork for future purchase flow.
 - `src/services/dealAlerts.ts`: alert creation and discounted-ticket matching.
+- `src/services/dealDiscovery.ts`: discount insight scoring, savings math, urgency labels, and area deal summaries.
 - `src/services/discoveryPlanning.ts`: helper layer for source readiness, category gaps, primary-market ordering, and discount levers.
 - `src/services/feedProvider.ts`: feed normalization from provider taxonomy/inventory into the app `Show` model.
 - `src/services/eventCatalog.ts`: discovery search, date-window filtering, deal search, recommendation scoring, composite event providers, and runtime caching for provider-fed shows.

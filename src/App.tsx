@@ -36,6 +36,12 @@ import {
   toggleDealAlertStatus
 } from "./services/dealAlerts";
 import {
+  getDealInsights,
+  getDealSummary,
+  getOfferSavings,
+  type DealInsight
+} from "./services/dealDiscovery";
+import {
   filterShows,
   getBestOffer,
   getShowById
@@ -59,8 +65,7 @@ import type {
   OfferAccess,
   Show,
   ShowCategory,
-  ShowSearchFilters,
-  TicketOffer
+  ShowSearchFilters
 } from "./types";
 import { formatDistance, formatMoney, formatShowDate } from "./utils/format";
 
@@ -264,7 +269,11 @@ export default function App() {
     [areaInventory, selectedAreaId]
   );
 
-  const dealShows = useMemo(() => dealAlertInventory.slice(0, 4), [dealAlertInventory]);
+  const dealInsights = useMemo(
+    () => getDealInsights(dealAlertInventory).slice(0, 4),
+    [dealAlertInventory]
+  );
+  const dealSummary = useMemo(() => getDealSummary(dealAlertInventory), [dealAlertInventory]);
   const dealAlertMatches = useMemo(
     () => getDealAlertMatches(dealAlerts, dealAlertInventory).slice(0, 4),
     [dealAlertInventory, dealAlerts]
@@ -566,7 +575,9 @@ export default function App() {
                   Deals only
                 </Text>
                 <Text style={[styles.signalMeta, onlyDeals ? styles.signalMetaActive : undefined]}>
-                  {inventoryLoading ? "Checking deals" : `${dealShows.length} active in ${selectedArea?.name}`}
+                  {inventoryLoading
+                    ? "Checking deals"
+                    : getDealSummaryCopy(dealSummary, selectedArea?.name ?? "area")}
                 </Text>
               </View>
             </Pressable>
@@ -685,19 +696,23 @@ export default function App() {
             </View>
           ) : null}
 
-          {dealShows.length ? (
+          {dealInsights.length ? (
             <View style={styles.dealPanel}>
               <View style={styles.inlineTitle}>
                 <BadgePercent color={colors.coral} size={18} />
-                <Text style={styles.sectionTitle}>Last-minute deals</Text>
+                <Text style={styles.sectionTitle}>Best deals right now</Text>
               </View>
               <ScrollView
                 contentContainerStyle={styles.dealRail}
                 horizontal
                 showsHorizontalScrollIndicator={false}
               >
-                {dealShows.map((show) => (
-                  <DealCard key={show.id} onPress={() => openShowDetails(show)} show={show} />
+                {dealInsights.map((insight) => (
+                  <DealCard
+                    insight={insight}
+                    key={insight.show.id}
+                    onPress={() => openShowDetails(insight.show)}
+                  />
                 ))}
               </ScrollView>
             </View>
@@ -896,33 +911,34 @@ function NotificationCard({
   );
 }
 
-function getOfferSavings(offer: TicketOffer | undefined): number {
-  if (!offer?.listPriceCents) {
-    return 0;
+function getDealSummaryCopy(dealSummary: ReturnType<typeof getDealSummary>, areaName: string): string {
+  if (!dealSummary.dealCount) {
+    return `No deals in ${areaName}`;
   }
 
-  return Math.max(0, offer.listPriceCents - offer.priceCents);
+  if (dealSummary.topSavingsCents > 0) {
+    return `${dealSummary.dealCount} deals · top save ${formatMoney(dealSummary.topSavingsCents)}`;
+  }
+
+  return `${dealSummary.dealCount} active in ${areaName}`;
 }
 
-function DealCard({ show, onPress }: { show: Show; onPress: () => void }) {
-  const offer = getBestOffer(show);
-  const savings = getOfferSavings(offer);
-
-  if (!offer) {
-    return null;
-  }
+function DealCard({ insight, onPress }: { insight: DealInsight; onPress: () => void }) {
+  const { offer, savingsCents, show } = insight;
 
   return (
     <Pressable onPress={onPress} style={[styles.dealCard, { backgroundColor: show.imageTone }]}>
       <View style={styles.dealCardTop}>
-        <Text style={styles.dealCardBadge}>{offer.deal?.label ?? "Deal"}</Text>
-        {savings > 0 ? <Text style={styles.dealCardSavings}>Save {formatMoney(savings)}</Text> : null}
+        <Text style={styles.dealCardBadge}>{insight.strengthLabel}</Text>
+        {savingsCents > 0 ? (
+          <Text style={styles.dealCardSavings}>Save {formatMoney(savingsCents)}</Text>
+        ) : null}
       </View>
       <Text numberOfLines={2} style={styles.dealCardTitle}>
         {show.title}
       </Text>
       <Text numberOfLines={1} style={styles.dealCardMeta}>
-        {show.neighborhood} · {formatShowDate(show.startsAt)}
+        {insight.urgencyLabel} · {show.neighborhood}
       </Text>
       <Text style={styles.dealCardPrice}>{formatMoney(offer.priceCents)}</Text>
     </Pressable>

@@ -9,6 +9,12 @@ import {
 } from "../src/services/dealAlerts";
 import { checkoutBackend } from "../src/services/checkoutBackend";
 import {
+  getDealInsights,
+  getDealSummary,
+  getOfferSavings,
+  getSavingsPercent
+} from "../src/services/dealDiscovery";
+import {
   getDiscoveryMarketPlan,
   getDiscoveryMarketPlans,
   getDiscountLeversForMarket,
@@ -154,6 +160,25 @@ async function main() {
   assert(
     dealShows.every((show) => show.ticketOffers.some((offer) => offer.deal)),
     "Deal search should only return shows with deal-backed offers."
+  );
+  const dealInsights = getDealInsights(dealShows, referenceNow);
+  const dealSummary = getDealSummary(dealShows, referenceNow);
+  const comedyDeal = dealInsights.find((insight) => insight.show.id === "show-canal-comedy");
+
+  assert(dealInsights.length === dealShows.length, "Every deal-backed show should produce a deal insight.");
+  assert(
+    dealInsights.every((insight, index, insights) => index === 0 || insights[index - 1]!.score >= insight.score),
+    "Deal insights should be ranked by discount strength and urgency."
+  );
+  assert(dealSummary.strongestDeal?.show.id === dealInsights[0]?.show.id, "Deal summary should expose the top deal.");
+  assert(dealSummary.topSavingsCents >= 1000, "NYC deal summary should expose meaningful top savings.");
+  assert(
+    comedyDeal?.strength === "best" && comedyDeal.savingsPercent === 25,
+    "High-percent comedy discounts should be labeled as best deals."
+  );
+  assert(
+    getOfferSavings(comedyDeal?.offer) === 800 && getSavingsPercent(comedyDeal?.offer) === 25,
+    "Deal math should expose savings in cents and percent."
   );
 
   const normalizedPlay = normalizeFeedEvent(partnerFeedEvents[0]!);
