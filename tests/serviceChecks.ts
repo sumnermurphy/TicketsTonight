@@ -22,10 +22,12 @@ import {
   getSavingsPercent
 } from "../src/services/dealDiscovery";
 import {
+  getDiscoveryCategoryCoverage,
   getDiscoveryMarketPlan,
   getDiscoveryMarketPlans,
   getDiscoverySourceStrategy,
   getDiscountLeversForMarket,
+  getLocalPipelinePriorityCategories,
   getMarketDiscoveryGaps,
   getNextLocalDiscoverySources,
   getPrimaryDiscoveryMarketPlan,
@@ -128,6 +130,30 @@ async function main() {
     getDiscoverySourceStrategy("nyc")?.readyBroadApiSourceCount === 1,
     "New York source strategy should start with a ready broad API lane."
   );
+  const nycCoverage = getDiscoveryCategoryCoverage("nyc");
+  const nycPlayCoverage = nycCoverage.find((coverage) => coverage.category === "play");
+  const nycDanceCoverage = nycCoverage.find((coverage) => coverage.category === "dance");
+
+  assert(
+    nycCoverage.length === getDiscoveryMarketPlan("nyc")?.categoryFocus.length,
+    "New York category coverage should describe every priority category."
+  );
+  assert(
+    nycPlayCoverage?.coverageLevel === "ready-local" &&
+      nycPlayCoverage.readyLocalPipelineSourceIds.includes("nyc-partner-feed") &&
+      !nycPlayCoverage.needsLocalPipeline,
+    "New York plays should already have ready local pipeline coverage."
+  );
+  assert(
+    nycDanceCoverage?.coverageLevel === "broad-api-ready" &&
+      nycDanceCoverage.needsLocalPipeline &&
+      nycDanceCoverage.partnerNeededLocalPipelineSourceIds.includes("nyc-venue-direct"),
+    "New York dance should be broad-API covered while still needing a local pipeline partner."
+  );
+  assert(
+    getLocalPipelinePriorityCategories("nyc").includes("dance"),
+    "Local pipeline priorities should identify broad-API-covered categories that still need local depth."
+  );
   assert(
     (getDiscoverySourceStrategy("nyc")?.localPipelineSourceCount ?? 0) >= 3,
     "New York source strategy should keep selective local pipelines available after broad APIs."
@@ -153,6 +179,19 @@ async function main() {
   assert(
     getDiscoverySourceStrategy("hudson")?.readyBroadApiSourceCount === 1,
     "Hudson should still run broad marketplace APIs before local gap filling."
+  );
+  const hudsonConcertCoverage = getDiscoveryCategoryCoverage("hudson").find(
+    (coverage) => coverage.category === "concert"
+  );
+
+  assert(
+    hudsonConcertCoverage?.coverageLevel === "ready-local" &&
+      hudsonConcertCoverage.readyLocalPipelineSourceIds.includes("hudson-calendar-feed"),
+    "Hudson concerts should be covered by the reusable local calendar pipeline."
+  );
+  assert(
+    !getLocalPipelinePriorityCategories("hudson").includes("concert"),
+    "Hudson concerts should not be prioritized for bespoke local work once the calendar feed covers them."
   );
   assert(
     getNextLocalDiscoverySources("hudson")[0]?.id === "hudson-calendar-feed",

@@ -15,6 +15,7 @@ Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ball
 - Spotify-shaped taste-provider groundwork remains in services, but Spotify connection and taste-pick UI are out of the active MVP for now.
 - Explicit discovery source plans for New York, Los Angeles, and Hudson so provider work stays focused.
 - Source planning separates broad event APIs from reusable local pipelines, so small venues can fill gaps without turning every venue into a bespoke integration.
+- Category-level coverage planning flags where broad APIs are enough for baseline discovery and where local pipelines add meaningful depth.
 - Ticketmaster Discovery-shaped adapter for normalizing real provider events, classifications, venues, price ranges, and cached detail lookup.
 - Async event-provider pipeline powering visible results, area inventory, deal rails, alerts, saved shows, and provider-fed future checkout groundwork.
 - Typed service boundaries for replacing seed data with real event feeds, taste providers, and ticket providers.
@@ -68,7 +69,7 @@ npm run android
 - `src/services/dealAlerts.ts`: alert creation and discounted-ticket matching.
 - `src/services/discoveryFacets.ts`: market summaries, source diversity, category facets, and date-window availability with discounted-count signals for the selected market.
 - `src/services/dealDiscovery.ts`: discount insight scoring, savings math, urgency labels, and area deal summaries.
-- `src/services/discoveryPlanning.ts`: helper layer for broad-API/local-pipeline lanes, source readiness, category gaps, primary-market ordering, and discount levers.
+- `src/services/discoveryPlanning.ts`: helper layer for broad-API/local-pipeline lanes, category coverage, source readiness, category gaps, primary-market ordering, and discount levers.
 - `src/services/feedProvider.ts`: feed normalization from provider taxonomy/inventory into the app `Show` model.
 - `src/services/eventCatalog.ts`: discovery search, date-window filtering, deal search, recommendation scoring, composite event providers, calendar-feed inventory, and runtime caching for provider-fed shows.
 - `src/services/eventProviderFactory.ts`: default provider stack that keeps fixtures active and adds Ticketmaster Discovery when public Expo config is present.
@@ -99,6 +100,7 @@ npm run android
 
 - Event inventory: follow the checked-in discovery source plans: New York first, Los Angeles second, Hudson as the smaller-market arts-town test.
 - Data strategy: use broad APIs for baseline coverage, then add reusable local calendar/feed/direct-source pipelines only where coverage gaps matter.
+- Local-source prioritization: use category coverage to pick local pipeline work only when it adds depth beyond broad API coverage.
 - Hudson local pipeline: start with the generic calendar-feed path before bespoke venue adapters.
 - Discounts: partner-funded promo codes, unsold inventory drops, preview allocations, early-arrival prices, matinee value, and simple last-minute deals.
 - Later checkout: Stripe Payment Sheet or provider-native checkout once seller-of-record and payout flow are decided.

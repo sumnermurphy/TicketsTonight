@@ -4,7 +4,8 @@ import type {
   DiscoveryMarketPlan,
   DiscoverySourceLane,
   DiscoverySourcePlan,
-  DiscoverySourceStatus
+  DiscoverySourceStatus,
+  ShowCategory
 } from "../types";
 
 const readyStatuses = new Set<DiscoverySourceStatus>(["active-fixture", "integration-ready"]);
@@ -24,6 +25,26 @@ export type DiscoverySourceStrategySummary = {
   seedFixtureSourceCount: number;
   activeFixtureSourceCount: number;
   partnerNeededLocalPipelineCount: number;
+};
+
+export type DiscoveryCategoryCoverageLevel =
+  | "ready-local"
+  | "broad-api-ready"
+  | "fixture-only"
+  | "planned"
+  | "uncovered";
+
+export type DiscoveryCategoryCoverage = {
+  areaId: string;
+  category: ShowCategory;
+  coverageLevel: DiscoveryCategoryCoverageLevel;
+  sourceIds: string[];
+  readySourceIds: string[];
+  readyBroadApiSourceIds: string[];
+  readyLocalPipelineSourceIds: string[];
+  activeFixtureSourceIds: string[];
+  partnerNeededLocalPipelineSourceIds: string[];
+  needsLocalPipeline: boolean;
 };
 
 export function getDiscoveryMarketPlans(): DiscoveryMarketPlan[] {
@@ -94,6 +115,22 @@ export function getNextLocalDiscoverySources(areaId: string): DiscoverySourcePla
     );
 }
 
+export function getDiscoveryCategoryCoverage(areaId: string): DiscoveryCategoryCoverage[] {
+  const plan = getDiscoveryMarketPlan(areaId);
+
+  if (!plan) {
+    return [];
+  }
+
+  return plan.categoryFocus.map((category) => getCategoryCoverage(plan, category));
+}
+
+export function getLocalPipelinePriorityCategories(areaId: string): ShowCategory[] {
+  return getDiscoveryCategoryCoverage(areaId)
+    .filter((coverage) => coverage.needsLocalPipeline)
+    .map((coverage) => coverage.category);
+}
+
 export function getMarketDiscoveryGaps(areaId: string): DiscoveryMarketPlan["categoryFocus"] {
   const plan = getDiscoveryMarketPlan(areaId);
 
@@ -123,4 +160,68 @@ function getSourcesByLane(
 
 function isReadySource(source: DiscoverySourcePlan): boolean {
   return readyStatuses.has(source.status);
+}
+
+function getCategoryCoverage(
+  plan: DiscoveryMarketPlan,
+  category: ShowCategory
+): DiscoveryCategoryCoverage {
+  const sources = plan.sources.filter((source) => source.categories.includes(category));
+  const readySources = sources.filter(isReadySource);
+  const readyBroadApiSources = readySources.filter((source) => source.lane === "broad-api");
+  const readyLocalPipelineSources = readySources.filter(
+    (source) => source.lane === "local-pipeline"
+  );
+  const activeFixtureSources = sources.filter((source) => source.status === "active-fixture");
+  const partnerNeededLocalPipelineSources = sources.filter(
+    (source) => source.lane === "local-pipeline" && source.status === "partner-needed"
+  );
+  const coverageLevel = getCoverageLevel({
+    activeFixtureSources,
+    readyBroadApiSources,
+    readyLocalPipelineSources,
+    sources
+  });
+
+  return {
+    areaId: plan.areaId,
+    category,
+    coverageLevel,
+    sourceIds: sources.map((source) => source.id),
+    readySourceIds: readySources.map((source) => source.id),
+    readyBroadApiSourceIds: readyBroadApiSources.map((source) => source.id),
+    readyLocalPipelineSourceIds: readyLocalPipelineSources.map((source) => source.id),
+    activeFixtureSourceIds: activeFixtureSources.map((source) => source.id),
+    partnerNeededLocalPipelineSourceIds: partnerNeededLocalPipelineSources.map(
+      (source) => source.id
+    ),
+    needsLocalPipeline:
+      readyLocalPipelineSources.length === 0 && partnerNeededLocalPipelineSources.length > 0
+  };
+}
+
+function getCoverageLevel({
+  activeFixtureSources,
+  readyBroadApiSources,
+  readyLocalPipelineSources,
+  sources
+}: {
+  activeFixtureSources: DiscoverySourcePlan[];
+  readyBroadApiSources: DiscoverySourcePlan[];
+  readyLocalPipelineSources: DiscoverySourcePlan[];
+  sources: DiscoverySourcePlan[];
+}): DiscoveryCategoryCoverageLevel {
+  if (readyLocalPipelineSources.length > 0) {
+    return "ready-local";
+  }
+
+  if (readyBroadApiSources.length > 0) {
+    return "broad-api-ready";
+  }
+
+  if (activeFixtureSources.length > 0) {
+    return "fixture-only";
+  }
+
+  return sources.length > 0 ? "planned" : "uncovered";
 }
