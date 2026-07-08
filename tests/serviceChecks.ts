@@ -789,6 +789,22 @@ async function main() {
     getShowById("tm-duplicate-alina-ives")?.id === "show-alina-ives",
     "Duplicate provider ids should resolve to the merged show after composite discovery."
   );
+  assert(
+    getShowById("show-alina-ives")?.ticketOffers.some(
+      (offer) => offer.id === "marketplace-standard"
+    ),
+    "Display ids should resolve to the runtime merged show after cross-source dedupe."
+  );
+  const mergedMarketplaceHold = await ticketingProvider.createHold({
+    showId: "show-alina-ives",
+    offerId: "marketplace-standard",
+    quantity: 1
+  });
+
+  assert(
+    mergedMarketplaceHold.subtotalCents === 3600,
+    "Ticketing holds should accept offers merged into the display show id."
+  );
 
   const failingExternalProvider: EventProvider = {
     id: "failing-marketplace",

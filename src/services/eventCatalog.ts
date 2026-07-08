@@ -121,7 +121,7 @@ export function getRecommendedShowsFromCatalog(
 }
 
 export function getShowById(showId: string): Show | undefined {
-  return baseShows.find((show) => show.id === showId) ?? runtimeShows.get(showId);
+  return runtimeShows.get(showId) ?? getCatalogShows().find((show) => show.id === showId);
 }
 
 export function getBestOffer(show: Show) {
