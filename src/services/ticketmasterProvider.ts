@@ -28,6 +28,34 @@ const supportedTicketmasterCategories: ShowCategory[] = [
   "comedy",
   "variety"
 ];
+export type TicketmasterDiscoveryLane = {
+  id: string;
+  label: string;
+  categories: ShowCategory[];
+};
+
+export const ticketmasterDiscoveryLanes: TicketmasterDiscoveryLane[] = [
+  {
+    id: "music-nightlife",
+    label: "Music and nightlife",
+    categories: ["concert", "dj"]
+  },
+  {
+    id: "stage-comedy",
+    label: "Stage and comedy",
+    categories: ["play", "theater", "comedy"]
+  },
+  {
+    id: "performing-arts",
+    label: "Performing arts",
+    categories: ["dance", "ballet", "opera"]
+  },
+  {
+    id: "adjacent-live",
+    label: "Adjacent live",
+    categories: ["variety"]
+  }
+];
 
 type TicketmasterNamedValue = {
   name?: string;
@@ -111,7 +139,29 @@ type TicketmasterDiscoveryUrlOptions = Pick<
   TicketmasterDiscoveryProviderOptions,
   "apiKey" | "endpoint" | "radiusMiles" | "now" | "pageSize"
 > & {
+  categories?: ShowCategory[];
   page?: number;
+};
+
+export type TicketmasterDiscoveryFetchRequest = {
+  laneId: string;
+  laneLabel: string;
+  page: number;
+  url: string;
+  rawEventCount: number;
+  totalElements?: number;
+};
+
+export type TicketmasterDiscoveryFetchResult = {
+  events: TicketmasterDiscoveryEvent[];
+  requests: TicketmasterDiscoveryFetchRequest[];
+};
+
+export type TicketmasterDiscardReason = "missing-area" | "missing-start";
+
+export type TicketmasterNormalizationResult = {
+  show?: Show;
+  discardReason?: TicketmasterDiscardReason;
 };
 
 export class FetchTicketmasterDiscoveryClient implements TicketmasterDiscoveryClient {
@@ -133,32 +183,7 @@ export class TicketmasterDiscoveryProvider implements EventProvider {
   constructor(private readonly options: TicketmasterDiscoveryProviderOptions) {}
 
   async listShows(filters: ShowSearchFilters): Promise<Show[]> {
-    const pageSize = normalizePositiveInteger(this.options.pageSize, DEFAULT_PAGE_SIZE);
-    const maxPages = normalizePositiveInteger(this.options.maxPages, DEFAULT_MAX_PAGES);
-    const events: TicketmasterDiscoveryEvent[] = [];
-    let expectedTotal: number | undefined;
-
-    for (let page = 0; page < maxPages; page += 1) {
-      const url = buildTicketmasterDiscoveryUrl(filters, {
-        ...this.options,
-        page,
-        pageSize
-      });
-      const response = await this.options.client.listEvents(url);
-      const pageEvents = response._embedded?.events ?? [];
-
-      events.push(...pageEvents);
-      expectedTotal = response.page?.totalElements ?? expectedTotal;
-
-      if (
-        pageEvents.length === 0 ||
-        pageEvents.length < pageSize ||
-        (expectedTotal !== undefined && events.length >= expectedTotal) ||
-        (page + 1) * pageSize >= TICKETMASTER_DEEP_PAGE_LIMIT
-      ) {
-        break;
-      }
-    }
+    const { events } = await fetchTicketmasterDiscoveryEvents(filters, this.options);
 
     const shows = events
       .map((event) => normalizeTicketmasterEvent(event, filters.areaId))
@@ -201,7 +226,7 @@ export function buildTicketmasterDiscoveryUrl(
   const url = new URL(options.endpoint ?? DEFAULT_ENDPOINT);
   const endDate = getDiscoveryEndDate(now, filters.dateWindow);
   const classificationNames = getClassificationNames(
-    filters.categories.length ? filters.categories : supportedTicketmasterCategories
+    options.categories ?? (filters.categories.length ? filters.categories : supportedTicketmasterCategories)
   );
 
   url.searchParams.set("apikey", options.apiKey);
@@ -230,6 +255,72 @@ export function buildTicketmasterDiscoveryUrl(
   return url.toString();
 }
 
+export async function fetchTicketmasterDiscoveryEvents(
+  filters: ShowSearchFilters,
+  options: TicketmasterDiscoveryProviderOptions
+): Promise<TicketmasterDiscoveryFetchResult> {
+  const pageSize = normalizePositiveInteger(options.pageSize, DEFAULT_PAGE_SIZE);
+  const maxPages = normalizePositiveInteger(options.maxPages, DEFAULT_MAX_PAGES);
+  const lanes = getTicketmasterDiscoveryLanes(filters);
+  const events: TicketmasterDiscoveryEvent[] = [];
+  const requests: TicketmasterDiscoveryFetchRequest[] = [];
+
+  for (const lane of lanes) {
+    let laneEventCount = 0;
+    let expectedTotal: number | undefined;
+
+    for (let page = 0; page < maxPages; page += 1) {
+      const url = buildTicketmasterDiscoveryUrl(filters, {
+        ...options,
+        categories: lane.categories,
+        page,
+        pageSize
+      });
+      const response = await options.client.listEvents(url);
+      const pageEvents = response._embedded?.events ?? [];
+
+      events.push(...pageEvents);
+      laneEventCount += pageEvents.length;
+      expectedTotal = response.page?.totalElements ?? expectedTotal;
+      requests.push({
+        laneId: lane.id,
+        laneLabel: lane.label,
+        page,
+        url,
+        rawEventCount: pageEvents.length,
+        totalElements: response.page?.totalElements
+      });
+
+      if (
+        pageEvents.length === 0 ||
+        pageEvents.length < pageSize ||
+        (expectedTotal !== undefined && laneEventCount >= expectedTotal) ||
+        (page + 1) * pageSize >= TICKETMASTER_DEEP_PAGE_LIMIT
+      ) {
+        break;
+      }
+    }
+  }
+
+  return { events, requests };
+}
+
+export function getTicketmasterDiscoveryLanes(
+  filters: ShowSearchFilters
+): TicketmasterDiscoveryLane[] {
+  if (!filters.query.trim() && filters.categories.length === 0) {
+    return ticketmasterDiscoveryLanes;
+  }
+
+  return [
+    {
+      id: "filtered",
+      label: "Filtered request",
+      categories: filters.categories.length ? filters.categories : supportedTicketmasterCategories
+    }
+  ];
+}
+
 export function buildTicketmasterEventUrl(
   externalId: string,
   options: Pick<TicketmasterDiscoveryProviderOptions, "apiKey" | "endpoint">
@@ -249,39 +340,57 @@ export function normalizeTicketmasterEvent(
   event: TicketmasterDiscoveryEvent,
   fallbackAreaId?: string
 ): Show | undefined {
+  return normalizeTicketmasterEventWithDiagnostics(event, fallbackAreaId).show;
+}
+
+export function normalizeTicketmasterEventWithDiagnostics(
+  event: TicketmasterDiscoveryEvent,
+  fallbackAreaId?: string
+): TicketmasterNormalizationResult {
   const area = resolveArea(event, fallbackAreaId);
   const startsAt = getStartDate(event);
 
-  if (!area || !startsAt) {
-    return undefined;
+  if (!area) {
+    return { discardReason: "missing-area" };
+  }
+
+  if (!startsAt) {
+    return { discardReason: "missing-start" };
   }
 
   const venue = event._embedded?.venues?.[0];
   const category = normalizeTicketmasterCategory(event);
   const location = getVenueCoordinates(venue);
   const priceRange = event.priceRanges?.find((range) => range.currency === "USD");
-  const offer = priceRange?.min ? createTicketmasterOffer(event, priceRange.min) : undefined;
+  const offer =
+    priceRange?.min !== undefined && Number.isFinite(priceRange.min)
+      ? createTicketmasterOffer(event, priceRange.min)
+      : event.url
+        ? createTicketmasterLinkOffer(event)
+        : undefined;
 
   return {
-    id: `tm-${event.id}`,
-    title: event.name,
-    artistOrCompany:
-      event._embedded?.attractions?.[0]?.name ?? event.promoter?.name ?? "Ticketmaster event",
-    category,
-    startsAt,
-    venue: venue?.name ?? "Venue TBA",
-    neighborhood: venue?.city?.name ?? area.name,
-    areaId: area.id,
-    distanceMiles: location
-      ? getDistanceBetweenCoordinates(area.coordinates, location)
-      : 0,
-    vibe: getTicketmasterVibes(event),
-    description:
-      event.info ?? event.pleaseNote ?? `${event.name} at ${venue?.name ?? area.name}.`,
-    ticketOffers: offer ? [offer] : [],
-    source: "primary-marketplace",
-    imageTone: getCategoryTone(category),
-    recommendationSignals: getRecommendationSignals(event, category)
+    show: {
+      id: `tm-${event.id}`,
+      title: event.name,
+      artistOrCompany:
+        event._embedded?.attractions?.[0]?.name ?? event.promoter?.name ?? "Ticketmaster event",
+      category,
+      startsAt,
+      venue: venue?.name ?? "Venue TBA",
+      neighborhood: venue?.city?.name ?? area.name,
+      areaId: area.id,
+      distanceMiles: location
+        ? getDistanceBetweenCoordinates(area.coordinates, location)
+        : 0,
+      vibe: getTicketmasterVibes(event),
+      description:
+        event.info ?? event.pleaseNote ?? `${event.name} at ${venue?.name ?? area.name}.`,
+      ticketOffers: offer ? [offer] : [],
+      source: "primary-marketplace",
+      imageTone: getCategoryTone(category),
+      recommendationSignals: getRecommendationSignals(event, category)
+    }
   };
 }
 
@@ -300,6 +409,20 @@ function createTicketmasterOffer(
     source: "primary-marketplace",
     externalUrl: event.url,
     perks: event.url ? ["Partner checkout available"] : undefined
+  };
+}
+
+function createTicketmasterLinkOffer(event: TicketmasterDiscoveryEvent): TicketOffer {
+  return {
+    id: "ticketmaster-link",
+    label: "Ticket page",
+    currency: "USD",
+    remaining: 1,
+    maxQuantity: 8,
+    access: "external-transfer",
+    source: "primary-marketplace",
+    externalUrl: event.url,
+    perks: ["Provider checkout available"]
   };
 }
 

@@ -25,8 +25,8 @@ export class InAppNotificationProvider implements NotificationProvider {
       title: `${match.offer.deal?.label ?? "Deal"} for ${match.show.title}`,
       body:
         match.savingsCents > 0
-          ? `${formatMoney(match.offer.priceCents)} now, save ${formatMoney(match.savingsCents)}.`
-          : `${formatMoney(match.offer.priceCents)} is available now.`,
+          ? `${formatOfferPrice(match.offer.priceCents)} now, save ${formatMoney(match.savingsCents)}.`
+          : `${formatOfferPrice(match.offer.priceCents)} is available now.`,
       showId: match.show.id,
       offerId: match.offer.id,
       alertId: match.alert.id,
@@ -34,6 +34,10 @@ export class InAppNotificationProvider implements NotificationProvider {
       createdAt: now
     }));
   }
+}
+
+function formatOfferPrice(priceCents: number | undefined): string {
+  return priceCents === undefined ? "Provider price" : formatMoney(priceCents);
 }
 
 export function mergeNotifications(

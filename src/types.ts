@@ -51,7 +51,7 @@ export type Deal = {
 export type TicketOffer = {
   id: string;
   label: string;
-  priceCents: number;
+  priceCents?: number;
   listPriceCents?: number;
   currency: "USD";
   remaining: number;

@@ -98,7 +98,8 @@ import type {
   Recommendation,
   Show,
   ShowCategory,
-  ShowSearchFilters
+  ShowSearchFilters,
+  TicketOffer
 } from "./types";
 import { formatDistance, formatMoney, formatShowDate } from "./utils/format";
 
@@ -822,6 +823,11 @@ export default function App() {
                 value={`${coverageAudit.ticketLinkCoveragePercent}%`}
               />
               <MarketSnapshotStat
+                label="Link-only"
+                loading={inventoryLoading}
+                value={String(coverageAudit.linkOnlyOfferCount)}
+              />
+              <MarketSnapshotStat
                 label="Weak lanes"
                 loading={inventoryLoading}
                 value={String(coverageAudit.weakCategoryGroups.length)}
@@ -1508,7 +1514,7 @@ function DealAlertMatchCard({ match, onBuy }: { match: DealAlertMatch; onBuy: ()
         {match.show.neighborhood} · {formatShowDate(match.show.startsAt)}
       </Text>
       <View style={styles.alertMatchFooter}>
-        <Text style={styles.alertMatchPrice}>{formatMoney(match.offer.priceCents)}</Text>
+        <Text style={styles.alertMatchPrice}>{getOfferPriceCopy(match.offer)}</Text>
         {match.savingsCents > 0 ? (
           <Text style={styles.alertMatchSavings}>Save {formatMoney(match.savingsCents)}</Text>
         ) : null}
@@ -1564,6 +1570,28 @@ function getDealSummaryCopy(dealSummary: ReturnType<typeof getDealSummary>, area
 
 function getPriceLabel(maxPriceCents: number | undefined): string {
   return maxPriceCents ? `Under ${formatMoney(maxPriceCents)}` : "Any price";
+}
+
+function getOfferPriceCopy(offer: TicketOffer | undefined, fallback = "Soon"): string {
+  if (!offer) {
+    return fallback;
+  }
+
+  return offer.priceCents === undefined ? "Price on provider" : formatMoney(offer.priceCents);
+}
+
+function getCompactOfferPriceCopy(offer: TicketOffer | undefined): string {
+  if (!offer) {
+    return "Soon";
+  }
+
+  return offer.priceCents === undefined ? "Tickets" : formatMoney(offer.priceCents);
+}
+
+function getOfferMetaCopy(offer: TicketOffer): string {
+  const availability = offer.priceCents === undefined ? "Provider checkout" : `${offer.remaining} left`;
+
+  return `${availability} · ${accessLabels[offer.access]} · ${sourceLabels[offer.source]}`;
 }
 
 function getCategoryFacetCopy(facet: CategoryFacet | undefined, loading: boolean): string {
@@ -1700,7 +1728,7 @@ function DealCard({ insight, onPress }: { insight: DealInsight; onPress: () => v
       <Text numberOfLines={1} style={styles.dealCardMeta}>
         {insight.urgencyLabel} · {show.neighborhood}
       </Text>
-      <Text style={styles.dealCardPrice}>{formatMoney(offer.priceCents)}</Text>
+      <Text style={styles.dealCardPrice}>{getOfferPriceCopy(offer)}</Text>
     </Pressable>
   );
 }
@@ -1730,7 +1758,7 @@ function DiscoveryPickCard({ pick, onPress }: { pick: DiscoveryPick; onPress: ()
           {formatShowDate(show.startsAt)}
         </Text>
         <Text style={styles.discoveryPickPrice}>
-          {offer ? formatMoney(offer.priceCents) : "Soon"}
+          {getCompactOfferPriceCopy(offer)}
         </Text>
       </View>
     </Pressable>
@@ -1758,7 +1786,7 @@ function RecommendationCard({
       <Text numberOfLines={2} style={styles.recommendationMeta}>
         {recommendation.reason || show.neighborhood}
       </Text>
-      <Text style={styles.discoveryPickPrice}>{offer ? formatMoney(offer.priceCents) : "Soon"}</Text>
+      <Text style={styles.discoveryPickPrice}>{getCompactOfferPriceCopy(offer)}</Text>
     </Pressable>
   );
 }
@@ -1778,7 +1806,7 @@ function SavedShowCard({ show, onBuy }: { show: Show; onBuy: () => void }) {
       <Text numberOfLines={1} style={styles.savedShowMeta}>
         {show.neighborhood} · {formatShowDate(show.startsAt)}
       </Text>
-      <Text style={styles.savedShowPrice}>{offer ? formatMoney(offer.priceCents) : "Soon"}</Text>
+      <Text style={styles.savedShowPrice}>{getCompactOfferPriceCopy(offer)}</Text>
     </Pressable>
   );
 }
@@ -1853,13 +1881,15 @@ function ShowCard({
 
         <View style={styles.cardFooter}>
           <View>
-            <Text style={styles.fromLabel}>{bestOffer?.deal ? "Deal from" : "From"}</Text>
+            <Text style={styles.fromLabel}>
+              {bestOffer?.deal ? "Deal from" : bestOffer?.priceCents === undefined ? "Tickets" : "From"}
+            </Text>
             <View style={styles.priceRow}>
-              {bestOffer?.listPriceCents ? (
+              {bestOffer?.priceCents !== undefined && bestOffer.listPriceCents ? (
                 <Text style={styles.listPriceText}>{formatMoney(bestOffer.listPriceCents)}</Text>
               ) : null}
               <Text style={styles.priceText}>
-                {bestOffer ? formatMoney(bestOffer.priceCents) : "Soon"}
+                {getOfferPriceCopy(bestOffer)}
               </Text>
             </View>
             {savings > 0 ? <Text style={styles.savingsText}>Save {formatMoney(savings)}</Text> : null}
@@ -1981,15 +2011,15 @@ function ShowDetailModal({
                           <View style={styles.detailOfferCopy}>
                             <Text style={styles.offerLabel}>{offer.label}</Text>
                             <Text style={styles.offerMeta}>
-                              {offer.remaining} left · {accessLabels[offer.access]} · {sourceLabels[offer.source]}
+                              {getOfferMetaCopy(offer)}
                             </Text>
                             {offer.deal ? <Text style={styles.offerDealText}>{offer.deal.description}</Text> : null}
                           </View>
                           <View style={styles.offerPriceStack}>
-                            {offer.listPriceCents ? (
+                            {offer.priceCents !== undefined && offer.listPriceCents ? (
                               <Text style={styles.offerListPrice}>{formatMoney(offer.listPriceCents)}</Text>
                             ) : null}
-                            <Text style={styles.offerPrice}>{formatMoney(offer.priceCents)}</Text>
+                            <Text style={styles.offerPrice}>{getOfferPriceCopy(offer)}</Text>
                             {ticketLink ? <Text style={styles.offerActionText}>Tickets</Text> : null}
                           </View>
                         </Pressable>
@@ -2001,13 +2031,15 @@ function ShowDetailModal({
 
               <View style={styles.detailFooter}>
                 <View>
-                  <Text style={styles.fromLabel}>{bestOffer?.deal ? "Best deal" : "From"}</Text>
+                  <Text style={styles.fromLabel}>
+                    {bestOffer?.deal ? "Best deal" : bestOffer?.priceCents === undefined ? "Ticket link" : "From"}
+                  </Text>
                   <View style={styles.priceRow}>
-                    {bestOffer?.listPriceCents ? (
+                    {bestOffer?.priceCents !== undefined && bestOffer.listPriceCents ? (
                       <Text style={styles.listPriceText}>{formatMoney(bestOffer.listPriceCents)}</Text>
                     ) : null}
                     <Text style={styles.priceText}>
-                      {bestOffer ? formatMoney(bestOffer.priceCents) : "Soon"}
+                      {getOfferPriceCopy(bestOffer)}
                     </Text>
                   </View>
                   {savings > 0 ? <Text style={styles.savingsText}>Save {formatMoney(savings)}</Text> : null}

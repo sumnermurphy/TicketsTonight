@@ -27,6 +27,10 @@ export class MockTicketingProvider implements TicketingProvider {
       throw new Error("That ticket offer is no longer available.");
     }
 
+    if (offer.priceCents === undefined) {
+      throw new Error("That ticket offer opens with the provider and cannot be held in app.");
+    }
+
     const maxAllowed = Math.min(offer.remaining, offer.maxQuantity);
 
     if (request.quantity < 1 || request.quantity > maxAllowed) {

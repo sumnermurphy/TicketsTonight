@@ -53,7 +53,10 @@ export function getDealAlertMatches(
             alert,
             show,
             offer,
-            savingsCents: Math.max(0, (offer.listPriceCents ?? offer.priceCents) - offer.priceCents)
+            savingsCents:
+              offer.priceCents === undefined
+                ? 0
+                : Math.max(0, (offer.listPriceCents ?? offer.priceCents) - offer.priceCents)
           };
         })
         .filter((match): match is DealAlertMatch => Boolean(match))
@@ -76,7 +79,10 @@ function showMatchesAlert(show: Show, alert: DealAlert, referenceNow: string): b
     return false;
   }
 
-  if (alert.maxPriceCents && offer.priceCents > alert.maxPriceCents) {
+  if (
+    alert.maxPriceCents &&
+    (offer.priceCents === undefined || offer.priceCents > alert.maxPriceCents)
+  ) {
     return false;
   }
 

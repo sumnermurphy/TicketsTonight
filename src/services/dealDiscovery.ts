@@ -21,7 +21,7 @@ export type DealSummary = {
 };
 
 export function getOfferSavings(offer: TicketOffer | undefined): number {
-  if (!offer?.listPriceCents) {
+  if (!offer?.listPriceCents || offer.priceCents === undefined) {
     return 0;
   }
 
@@ -29,7 +29,7 @@ export function getOfferSavings(offer: TicketOffer | undefined): number {
 }
 
 export function getSavingsPercent(offer: TicketOffer | undefined): number {
-  if (!offer?.listPriceCents || offer.listPriceCents <= 0) {
+  if (!offer?.listPriceCents || offer.listPriceCents <= 0 || offer.priceCents === undefined) {
     return offer?.deal?.discountPercent ?? 0;
   }
 
@@ -93,8 +93,12 @@ function getBestDiscountedOffer(show: Show): TicketOffer | undefined {
       const percentDelta = getSavingsPercent(second) - getSavingsPercent(first);
       const savingsDelta = getOfferSavings(second) - getOfferSavings(first);
 
-      return percentDelta || savingsDelta || first.priceCents - second.priceCents;
+      return percentDelta || savingsDelta || getDealOfferPrice(first) - getDealOfferPrice(second);
     })[0];
+}
+
+function getDealOfferPrice(offer: TicketOffer): number {
+  return offer.priceCents ?? Number.MAX_SAFE_INTEGER;
 }
 
 function getDealStrength(savingsCents: number, savingsPercent: number): DealStrength {

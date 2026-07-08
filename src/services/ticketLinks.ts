@@ -7,7 +7,7 @@ export type TicketLinkIntent = {
   label: string;
   url: string;
   source: InventorySource;
-  priceCents: number;
+  priceCents?: number;
   dealLabel?: string;
 };
 

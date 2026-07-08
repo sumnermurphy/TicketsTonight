@@ -11,8 +11,8 @@ Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ball
 - Best-bets ranking that lifts urgent deals, local-source picks, nearby shows, and weekend options above the full chronological list.
 - Discount discovery ranking that prioritizes stronger savings and urgent deal windows before checkout is active.
 - Deal alerts can track the current area/category/date filters with optional under-$35, under-$50, or under-$75 price thresholds.
-- External ticket links can be opened from provider-backed offers while in-app checkout remains deferred.
-- NYC coverage audit targets 200 events over 30 days with 70% ticket-link coverage, exposed through a service, CLI script, and compact app summary.
+- External ticket links can be opened from provider-backed offers while in-app checkout remains deferred, including link-only provider listings when live sources do not expose prices.
+- NYC coverage audit targets 200 events over 30 days with 70% ticket-link coverage, exposed through a service, CLI script, and compact app summary with priced-vs-link-only counts.
 - Checkout groundwork remains behind services, but purchase UI, account sign-in, and wallet are out of the active MVP for now.
 - Saved shows, deal alerts, in-app deal notifications, and persisted discovery preferences through a replaceable repository layer.
 - Spotify PKCE auth can connect a listener with `user-top-read`, pull top artists, tracks, and genres, and rank provider-backed recommendations in-app.
@@ -20,7 +20,8 @@ Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ball
 - Source planning separates broad event APIs from reusable local pipelines, so small venues can fill gaps without turning every venue into a bespoke integration.
 - Broad API acquisition planning ranks next candidate sources before any bespoke local venue work.
 - Category-level coverage planning flags where broad APIs are enough for baseline discovery and where local pipelines add meaningful depth.
-- Ticketmaster Discovery-shaped adapter for paginated live event ingestion plus normalizing real provider events, classifications, venues, price ranges, and cached detail lookup.
+- Ticketmaster Discovery-shaped adapter for paginated live event ingestion plus normalizing real provider events, classifications, venues, price ranges, link-only ticket pages, and cached detail lookup.
+- Ticketmaster unfiltered area loads fan out across music/nightlife, stage/comedy, performing arts, and adjacent-live lanes to improve broad discovery coverage before bespoke local work.
 - Async event-provider pipeline with cross-source dedupe powering visible results, area inventory, deal rails, alerts, saved shows, and provider-fed future checkout groundwork.
 - Typed service boundaries for replacing seed data with real event feeds, taste providers, and ticket providers.
 
@@ -73,6 +74,14 @@ Run the NYC coverage audit:
 npm run audit:coverage
 ```
 
+Run live Ticketmaster provider diagnostics:
+
+```bash
+EXPO_PUBLIC_TICKETMASTER_API_KEY=your_key npm run audit:providers
+```
+
+The provider diagnostics command redacts API keys from printed request URLs and separates priced offers from link-only ticket pages.
+
 For native preview, use:
 
 ```bash
@@ -91,7 +100,7 @@ npm run android
 - `src/services/auth.ts`: dormant auth provider groundwork for future checkout/account features.
 - `src/services/checkoutBackend.ts`: dormant backend-style checkout groundwork for future purchase flow.
 - `src/services/calendarFeedProvider.ts`: generic local calendar feed normalizer for ICS/RSS/HTML/manual-import style listings.
-- `src/services/coverageAudit.ts`: 30-day market coverage audit for event-count, ticket-link, category-lane, date-window, and source-breadth targets.
+- `src/services/coverageAudit.ts`: 30-day market coverage audit for event-count, ticket-link, priced-offer, link-only-offer, category-lane, date-window, and source-breadth targets.
 - `src/services/dealAlerts.ts`: alert creation and discounted-ticket matching.
 - `src/services/discoveryAcquisition.ts`: broad API recommendation and local-pipeline trigger planning so provider work starts with scalable sources.
 - `src/services/discoveryFacets.ts`: market summaries, source diversity, link-ready show counts, neighborhood facets, category facets, and date-window availability with discounted-count signals for the selected market.
@@ -109,7 +118,8 @@ npm run android
 - `src/services/personalization.ts`: Spotify PKCE auth, token exchange, top artists/tracks/genres fetches, demo taste provider, and recommendation-context creation.
 - `src/services/storage.ts`: repository for preferences and orders, backed by browser storage on web and memory fallback elsewhere.
 - `src/services/ticketLinks.ts`: safe external ticket-link intent selection for provider-backed offers while checkout is deferred.
-- `src/services/ticketmasterProvider.ts`: Ticketmaster Discovery request builder, fetch client, event normalizer, and `EventProvider` implementation.
+- `src/services/providerDiagnostics.ts`: live provider diagnostics for Ticketmaster fan-out, duplicate events, category mix, priced offers, link-only ticket pages, and redacted request URLs.
+- `src/services/ticketmasterProvider.ts`: Ticketmaster Discovery request builder, lane fan-out fetcher, fetch client, event normalizer, and `EventProvider` implementation.
 - `src/services/ticketing.ts`: ticketing provider interface plus a mock provider.
 - `src/types.ts`: shared app, ticketing, and recommendation types.
 - `src/App.tsx`: provider-backed mobile discovery, detail, saved-show, discount alert, inbox, and preference UI.

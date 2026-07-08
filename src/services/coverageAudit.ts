@@ -48,6 +48,8 @@ export type CoverageAuditSummary = {
   ticketLinkCount: number;
   ticketLinkCoveragePercent: number;
   targetTicketLinkCoveragePercent: number;
+  pricedOfferCount: number;
+  linkOnlyOfferCount: number;
   status: CoverageAuditStatus;
   categoryCounts: CoverageAuditCategoryCount[];
   categoryGroupCounts: CoverageAuditCategoryGroupCount[];
@@ -145,6 +147,8 @@ export function createCoverageAudit(
     .filter((show) => show.areaId === options.areaId)
     .filter((show) => isWithinRollingWindow(show.startsAt, referenceNow, windowDays));
   const ticketLinkCount = auditedShows.filter(hasTicketLink).length;
+  const pricedOfferCount = getPricedOfferCount(auditedShows);
+  const linkOnlyOfferCount = getLinkOnlyOfferCount(auditedShows);
   const ticketLinkCoveragePercent = getPercent(ticketLinkCount, auditedShows.length);
   const categoryCounts = createCategoryCounts(auditedShows);
   const categoryCountsByCategory = new Map(
@@ -179,6 +183,8 @@ export function createCoverageAudit(
     ticketLinkCount,
     ticketLinkCoveragePercent,
     targetTicketLinkCoveragePercent: target.ticketLinkCoveragePercent,
+    pricedOfferCount,
+    linkOnlyOfferCount,
     status,
     categoryCounts,
     categoryGroupCounts,
@@ -307,6 +313,26 @@ function isWithinRollingWindow(startsAt: string, referenceNow: string, windowDay
 
 function hasTicketLink(show: Show): boolean {
   return show.ticketOffers.some((offer) => Boolean(getSafeTicketUrl(offer.externalUrl)));
+}
+
+function getPricedOfferCount(shows: Show[]): number {
+  return shows.reduce(
+    (total, show) =>
+      total +
+      show.ticketOffers.filter((offer) => offer.priceCents !== undefined).length,
+    0
+  );
+}
+
+function getLinkOnlyOfferCount(shows: Show[]): number {
+  return shows.reduce(
+    (total, show) =>
+      total +
+      show.ticketOffers.filter(
+        (offer) => offer.priceCents === undefined && Boolean(getSafeTicketUrl(offer.externalUrl))
+      ).length,
+    0
+  );
 }
 
 function getPercent(numerator: number, denominator: number): number {

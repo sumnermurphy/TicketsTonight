@@ -19,6 +19,7 @@ import {
   getCoverageAuditActionCopy,
   getCoverageAuditStatusCopy
 } from "../src/services/coverageAudit";
+import { createTicketmasterProviderDiagnostics } from "../src/services/providerDiagnostics";
 import { checkoutBackend } from "../src/services/checkoutBackend";
 import {
   getCategoryFacets,
@@ -95,7 +96,8 @@ import {
   buildTicketmasterDiscoveryUrl,
   normalizeTicketmasterEvent,
   TicketmasterDiscoveryProvider,
-  type TicketmasterDiscoveryClient
+  type TicketmasterDiscoveryClient,
+  type TicketmasterDiscoveryEvent
 } from "../src/services/ticketmasterProvider";
 import type { EventProvider, Show } from "../src/types";
 
@@ -430,7 +432,11 @@ async function main() {
   );
   assert(
     under35Shows.length > 0 &&
-      under35Shows.every((show) => show.ticketOffers.some((offer) => offer.priceCents <= 3500)),
+      under35Shows.every((show) =>
+        show.ticketOffers.some(
+          (offer) => offer.priceCents !== undefined && offer.priceCents <= 3500
+        )
+      ),
     "Max-price filters should only return shows with an offer under the selected budget."
   );
   assert(
@@ -890,6 +896,57 @@ async function main() {
       ticketmasterTicketLink.source === "primary-marketplace",
     "Ticketmaster-normalized offers should expose an external ticket-link intent without enabling checkout UI."
   );
+  const linkOnlyTicketmasterEvent: TicketmasterDiscoveryEvent = {
+    id: "tm-nyc-902",
+    name: "Ailey II: New Works",
+    url: "https://example.com/ticketmaster/ailey-ii",
+    info: "A provider event with an external ticket page but no public price range.",
+    dates: {
+      start: {
+        dateTime: "2026-07-12T19:00:00Z",
+        localDate: "2026-07-12",
+        localTime: "15:00:00"
+      }
+    },
+    classifications: [
+      {
+        segment: { name: "Arts & Theatre" },
+        genre: { name: "Dance" }
+      }
+    ],
+    _embedded: {
+      attractions: [{ name: "Ailey II" }],
+      venues: [
+        {
+          name: "The Joyce Theater",
+          city: { name: "New York" },
+          state: { stateCode: "NY" },
+          location: {
+            latitude: "40.7427",
+            longitude: "-74.0009"
+          }
+        }
+      ]
+    }
+  };
+  const normalizedLinkOnlyTicketmasterEvent = normalizeTicketmasterEvent(
+    linkOnlyTicketmasterEvent,
+    "nyc"
+  );
+  const linkOnlyTicketmasterTicketLink = normalizedLinkOnlyTicketmasterEvent
+    ? getBestTicketLinkIntent(normalizedLinkOnlyTicketmasterEvent)
+    : undefined;
+
+  assert(
+    normalizedLinkOnlyTicketmasterEvent?.ticketOffers[0]?.id === "ticketmaster-link" &&
+      normalizedLinkOnlyTicketmasterEvent.ticketOffers[0].priceCents === undefined,
+    "Ticketmaster events without price ranges should still expose link-only ticket offers."
+  );
+  assert(
+    linkOnlyTicketmasterTicketLink?.url === "https://example.com/ticketmaster/ailey-ii" &&
+      linkOnlyTicketmasterTicketLink.priceCents === undefined,
+    "Link-only Ticketmaster offers should create external intents without inventing prices."
+  );
 
   const fixtureTicketmasterClient: TicketmasterDiscoveryClient & { requestedUrls: string[] } = {
     requestedUrls: [],
@@ -938,6 +995,48 @@ async function main() {
     ticketmasterDjShows.some((show) => show.id === "tm-tm-nyc-901" && show.areaId === "nyc"),
     "Ticketmaster provider should resolve nearby borough venues into the selected area."
   );
+  const fanoutTicketmasterClient: TicketmasterDiscoveryClient & { requestedUrls: string[] } = {
+    requestedUrls: [],
+    async listEvents(url: string) {
+      this.requestedUrls.push(url);
+
+      return {
+        _embedded: {
+          events: []
+        },
+        page: {
+          totalElements: 0
+        }
+      };
+    }
+  };
+  const fanoutTicketmasterProvider = new TicketmasterDiscoveryProvider({
+    apiKey: "test-key",
+    client: fanoutTicketmasterClient,
+    now: () => new Date(referenceNow)
+  });
+
+  await fanoutTicketmasterProvider.listShows({
+    areaId: "nyc",
+    categories: [],
+    query: "",
+    onlyDeals: false,
+    dateWindow: "week",
+    referenceNow
+  });
+
+  const fanoutClassifications = fanoutTicketmasterClient.requestedUrls.map(
+    (url) => new URL(url).searchParams.get("classificationName") ?? ""
+  );
+
+  assert(
+    fanoutTicketmasterClient.requestedUrls.length === 4 &&
+      fanoutClassifications.includes("music") &&
+      fanoutClassifications.includes("theatre,comedy") &&
+      fanoutClassifications.includes("dance,ballet,opera") &&
+      fanoutClassifications.includes("miscellaneous,theatre"),
+    "Unfiltered Ticketmaster provider loads should fan out across focused discovery lanes."
+  );
   const pagedTicketmasterEvents = ticketmasterDiscoveryFixture._embedded?.events?.slice(0, 2) ?? [];
 
   assert(pagedTicketmasterEvents.length === 2, "Ticketmaster fixture should include paged NYC events.");
@@ -970,7 +1069,7 @@ async function main() {
   });
   const pagedTicketmasterShows = await pagedTicketmasterProvider.listShows({
     areaId: "nyc",
-    categories: [],
+    categories: ["theater", "dj"],
     query: "",
     onlyDeals: false,
     dateWindow: "week",
@@ -987,6 +1086,53 @@ async function main() {
     pagedTicketmasterShows.some((show) => show.id === "tm-tm-nyc-900") &&
       pagedTicketmasterShows.some((show) => show.id === "tm-tm-nyc-901"),
     "Ticketmaster pagination should merge normalized shows from multiple pages."
+  );
+  const diagnosticsTicketmasterClient: TicketmasterDiscoveryClient = {
+    async listEvents() {
+      return {
+        _embedded: {
+          events: [rawTicketmasterEvent, linkOnlyTicketmasterEvent]
+        },
+        page: {
+          totalElements: 2
+        }
+      };
+    }
+  };
+  const ticketmasterDiagnostics = await createTicketmasterProviderDiagnostics(
+    {
+      areaId: "nyc",
+      categories: [],
+      query: "",
+      onlyDeals: false,
+      dateWindow: "week",
+      referenceNow
+    },
+    {
+      apiKey: "diagnostic-key",
+      client: diagnosticsTicketmasterClient,
+      now: () => new Date(referenceNow)
+    }
+  );
+
+  assert(
+    ticketmasterDiagnostics.requestCount === 4 &&
+      ticketmasterDiagnostics.rawEventCount === 8 &&
+      ticketmasterDiagnostics.filteredShowCount === 2 &&
+      ticketmasterDiagnostics.duplicateShowCount === 6,
+    "Provider diagnostics should measure lane fan-out volume and duplicate provider events."
+  );
+  assert(
+    ticketmasterDiagnostics.pricedOfferCount === 1 &&
+      ticketmasterDiagnostics.linkOnlyOfferCount === 1 &&
+      ticketmasterDiagnostics.ticketLinkCount === 2,
+    "Provider diagnostics should separate priced inventory from link-only ticket coverage."
+  );
+  assert(
+    ticketmasterDiagnostics.requests.every(
+      (request) => request.url.includes("apikey=REDACTED") && !request.url.includes("diagnostic-key")
+    ),
+    "Provider diagnostics should redact Ticketmaster API keys from request URLs."
   );
 
   const factoryTicketmasterClient: TicketmasterDiscoveryClient & { requestedUrls: string[] } = {
@@ -1170,6 +1316,47 @@ async function main() {
     externalProviderHold.subtotalCents === 9900,
     "Ticketing holds should work for provider-fed external inventory."
   );
+  const linkOnlyCompositeShows = await new CompositeEventProvider([
+    new TicketmasterDiscoveryProvider({
+      apiKey: "test-key",
+      client: {
+        async listEvents() {
+          return {
+            _embedded: {
+              events: [linkOnlyTicketmasterEvent]
+            },
+            page: {
+              totalElements: 1
+            }
+          };
+        }
+      },
+      now: () => new Date(referenceNow)
+    })
+  ]).listShows({
+    areaId: "nyc",
+    categories: ["dance"],
+    query: "",
+    onlyDeals: false,
+    dateWindow: "week",
+    referenceNow
+  });
+  const linkOnlyCompositeShow = linkOnlyCompositeShows[0];
+
+  assert(
+    linkOnlyCompositeShow?.id === "tm-tm-nyc-902" &&
+      getBestTicketLinkIntent(linkOnlyCompositeShow)?.offerId === "ticketmaster-link",
+    "Composite discovery should preserve provider-fed link-only ticket offers."
+  );
+  await assertRejects(
+    () =>
+      ticketingProvider.createHold({
+        showId: "tm-tm-nyc-902",
+        offerId: "ticketmaster-link",
+        quantity: 1
+      }),
+    "Link-only provider offers should stay outside the mocked in-app checkout path."
+  );
 
   const tonightShows = searchShows({
     areaId: "nyc",
@@ -1239,7 +1426,9 @@ async function main() {
   );
   assert(
     maxPriceAlertMatches.length > 0 &&
-      maxPriceAlertMatches.every((match) => match.offer.priceCents <= 3500),
+      maxPriceAlertMatches.every(
+        (match) => match.offer.priceCents !== undefined && match.offer.priceCents <= 3500
+      ),
     "Max-price deal alerts should only match offers under the selected price."
   );
   assert(

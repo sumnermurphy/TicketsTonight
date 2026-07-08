@@ -57,7 +57,9 @@ export function filterShows(candidates: Show[], filters: ShowSearchFilters): Sho
     .filter((show) =>
       maxPriceCents === undefined
         ? true
-        : show.ticketOffers.some((offer) => offer.priceCents <= maxPriceCents)
+        : show.ticketOffers.some(
+            (offer) => offer.priceCents !== undefined && offer.priceCents <= maxPriceCents
+          )
     )
     .filter((show) =>
       filters.categories.length === 0 ? true : filters.categories.includes(show.category)
@@ -190,7 +192,7 @@ export function getBestOffer(show: Show) {
         return offer;
       }
 
-      return offer.priceCents < best.priceCents ? offer : best;
+      return getOfferPriceForSort(offer) < getOfferPriceForSort(best) ? offer : best;
     },
     undefined as Show["ticketOffers"][number] | undefined
   );
@@ -217,7 +219,9 @@ function compareShows(
 }
 
 function getLowestOfferPrice(show: Show): number {
-  const prices = show.ticketOffers.map((offer) => offer.priceCents);
+  const prices = show.ticketOffers
+    .map((offer) => offer.priceCents)
+    .filter((price): price is number => price !== undefined);
 
   return prices.length ? Math.min(...prices) : Number.MAX_SAFE_INTEGER;
 }
@@ -394,7 +398,7 @@ function mergeTicketOffers(first: TicketOffer[], second: TicketOffer[]): TicketO
   return Array.from(offers.values()).sort(
     (firstOffer, secondOffer) =>
       getOfferDisplayScore(secondOffer) - getOfferDisplayScore(firstOffer) ||
-      firstOffer.priceCents - secondOffer.priceCents
+      getOfferPriceForSort(firstOffer) - getOfferPriceForSort(secondOffer)
   );
 }
 
@@ -420,9 +424,14 @@ function getShowDisplayScore(show: Show): number {
 
 function getOfferDisplayScore(offer: TicketOffer): number {
   const discountScore = offer.deal ? 100 : 0;
-  const priceScore = Math.max(0, 50 - Math.round(offer.priceCents / 1000));
+  const priceScore =
+    offer.priceCents === undefined ? 0 : Math.max(0, 50 - Math.round(offer.priceCents / 1000));
 
   return sourceDisplayPriority[offer.source] + discountScore + priceScore;
+}
+
+export function getOfferPriceForSort(offer: TicketOffer): number {
+  return offer.priceCents ?? Number.MAX_SAFE_INTEGER;
 }
 
 function getRicherText(first: string, second: string): string {

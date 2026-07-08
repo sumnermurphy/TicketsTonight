@@ -30,6 +30,9 @@ async function main() {
   console.log(
     `Ticket links: ${audit.ticketLinkCount}/${audit.eventCount} (${audit.ticketLinkCoveragePercent}%, target ${audit.targetTicketLinkCoveragePercent}%)`
   );
+  console.log(
+    `Ticket offers: ${audit.pricedOfferCount} priced, ${audit.linkOnlyOfferCount} link-only`
+  );
   console.log(`Status: ${getCoverageAuditStatusCopy(audit)}`);
   console.log(`Next action: ${getCoverageAuditActionCopy(audit)}`);
   console.log("Category lanes:");
