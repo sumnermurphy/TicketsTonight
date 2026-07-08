@@ -16,6 +16,7 @@ import {
   getMarketDiscoverySummary,
   getNeighborhoodFacets
 } from "../src/services/discoveryFacets";
+import { getDiscoveryFilterSummary } from "../src/services/discoveryFilterSummary";
 import {
   getDealInsights,
   getDealSummary,
@@ -356,6 +357,34 @@ async function main() {
       (show, index, shows) => index === 0 || shows[index - 1]!.distanceMiles <= show.distanceMiles
     ),
     "Nearby sort should order shows by distance."
+  );
+  const defaultFilterSummary = getDiscoveryFilterSummary({
+    categories: [],
+    neighborhoods: [],
+    query: "",
+    onlyDeals: false,
+    dateWindow: "all",
+    sortMode: "soonest"
+  });
+  const activeFilterSummary = getDiscoveryFilterSummary({
+    categories: ["concert", "dj"],
+    neighborhoods: ["Lower East Side"],
+    query: "Alina",
+    onlyDeals: true,
+    maxPriceCents: 3500,
+    dateWindow: "tonight",
+    sortMode: "cheapest"
+  });
+
+  assert(
+    defaultFilterSummary.activeCount === 0 && !defaultFilterSummary.hasActiveFilters,
+    "Default discovery filters should not produce active summary chips."
+  );
+  assert(
+    activeFilterSummary.activeCount === 7 &&
+      activeFilterSummary.labels.join("|") ===
+        '2 types|Lower East Side|Search "Alina"|Deals only|Under $35|Tonight|Cheapest first',
+    "Active discovery filters should produce a compact summary for visible reset state."
   );
   assert(nycDiscoveryPicks.length === 4, "Discovery picks should return a bounded best-bets rail.");
   assert(

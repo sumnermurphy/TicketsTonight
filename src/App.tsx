@@ -45,6 +45,7 @@ import {
   type MarketDiscoverySummary,
   type NeighborhoodFacet
 } from "./services/discoveryFacets";
+import { getDiscoveryFilterSummary } from "./services/discoveryFilterSummary";
 import {
   getDealInsights,
   getDealSummary,
@@ -396,6 +397,27 @@ export default function App() {
     () => new Map(dateWindowFacets.map((facet) => [facet.dateWindow, facet])),
     [dateWindowFacets]
   );
+  const filterSummary = useMemo(
+    () =>
+      getDiscoveryFilterSummary({
+        categories: selectedCategories,
+        neighborhoods: selectedNeighborhoods,
+        query,
+        onlyDeals,
+        maxPriceCents,
+        dateWindow,
+        sortMode: discoverySortMode
+      }),
+    [
+      dateWindow,
+      discoverySortMode,
+      maxPriceCents,
+      onlyDeals,
+      query,
+      selectedCategories,
+      selectedNeighborhoods
+    ]
+  );
   const dealAlertMatches = useMemo(
     () => getDealAlertMatches(dealAlerts, dealAlertInventory).slice(0, 4),
     [dealAlertInventory, dealAlerts]
@@ -446,6 +468,16 @@ export default function App() {
         ? current.filter((candidate) => candidate !== neighborhood)
         : [...current, neighborhood]
     );
+  };
+
+  const clearDiscoveryFilters = () => {
+    setQuery("");
+    setSelectedCategories([]);
+    setSelectedNeighborhoods([]);
+    setDateWindow("all");
+    setDiscoverySortMode("soonest");
+    setOnlyDeals(false);
+    setMaxPriceCents(undefined);
   };
 
   const useNearbyArea = async () => {
@@ -997,6 +1029,32 @@ export default function App() {
                     onPress={() => openShowDetails(pick.show)}
                     pick={pick}
                   />
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          {filterSummary.hasActiveFilters ? (
+            <View style={styles.activeFilterPanel}>
+              <View style={styles.activeFilterHeader}>
+                <Text style={styles.activeFilterTitle}>
+                  {filterSummary.activeCount} active {filterSummary.activeCount === 1 ? "filter" : "filters"}
+                </Text>
+                <Pressable accessibilityRole="button" onPress={clearDiscoveryFilters}>
+                  <Text style={styles.activeFilterReset}>Reset</Text>
+                </Pressable>
+              </View>
+              <ScrollView
+                contentContainerStyle={styles.activeFilterRail}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+              >
+                {filterSummary.labels.map((label) => (
+                  <View key={label} style={styles.activeFilterChip}>
+                    <Text numberOfLines={1} style={styles.activeFilterChipText}>
+                      {label}
+                    </Text>
+                  </View>
                 ))}
               </ScrollView>
             </View>
@@ -2746,6 +2804,49 @@ const styles = StyleSheet.create({
     color: "#D7D9D9",
     fontSize: 13,
     marginTop: spacing.sm
+  },
+  activeFilterPanel: {
+    marginTop: spacing.md,
+    marginBottom: spacing.xs
+  },
+  activeFilterHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    marginBottom: spacing.sm
+  },
+  activeFilterTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  activeFilterReset: {
+    color: colors.coralDark,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  activeFilterRail: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.sm
+  },
+  activeFilterChip: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 34,
+    maxWidth: 180,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.teal,
+    backgroundColor: colors.tealSoft,
+    paddingHorizontal: spacing.md
+  },
+  activeFilterChipText: {
+    color: colors.teal,
+    fontSize: 12,
+    fontWeight: "900"
   },
   resultsHeader: {
     alignItems: "center",
