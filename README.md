@@ -82,6 +82,12 @@ Run the NYC live supply audit against the current 50-event discovery target:
 npm run audit:live-supply
 ```
 
+Run the default discovery quality audit for the app-facing shaped result list:
+
+```bash
+npm run audit:quality
+```
+
 Run live Ticketmaster provider diagnostics:
 
 ```bash
@@ -152,6 +158,7 @@ npm run android
 - Event inventory: follow the checked-in discovery source plans: New York first, Los Angeles second, Hudson as the smaller-market arts-town test.
 - Data strategy: use broad APIs for baseline coverage, validate Eventbrite/SeatGeek-style ticket-link breadth next, use event-intelligence sources for coverage audits, then add reusable local calendar/feed/direct-source pipelines only where measured gaps matter.
 - Local-source prioritization: use category coverage to pick local pipeline work only when it adds depth beyond broad API coverage.
+- New York performing arts: Ticketmaster now clears overall live supply but still leaves dance/ballet/opera below target; prioritize a reusable local calendar/feed pipeline for performing arts before adding another broad marketplace.
 - Hudson local pipeline: start with the generic calendar-feed path before bespoke venue adapters.
 - Discounts: partner-funded promo codes, unsold inventory drops, preview allocations, early-arrival prices, matinee value, and simple last-minute deals.
 - Later checkout: Stripe Payment Sheet or provider-native checkout once seller-of-record and payout flow are decided.

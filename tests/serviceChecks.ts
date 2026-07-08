@@ -363,6 +363,16 @@ async function main() {
     sortMode: "nearby",
     referenceNow
   });
+  const limitedDefaultNycShows = searchShows({
+    areaId: "nyc",
+    categories: [],
+    query: "",
+    onlyDeals: false,
+    dateWindow: "all",
+    sortMode: "soonest",
+    referenceNow,
+    resultLimit: 4
+  });
   const nycDiscoveryPicks = getDiscoveryPicks(nycAreaInventory, referenceNow, 4);
   const comedyFacet = nycCategoryFacets.find((facet) => facet.category === "comedy");
   const danceFacet = nycCategoryFacets.find((facet) => facet.category === "dance");
@@ -476,6 +486,11 @@ async function main() {
       (show, index, shows) => index === 0 || shows[index - 1]!.distanceMiles <= show.distanceMiles
     ),
     "Nearby sort should order shows by distance."
+  );
+  assert(
+    limitedDefaultNycShows.length === 4 &&
+      new Set(limitedDefaultNycShows.map((show) => show.category)).size >= 3,
+    "Default discovery result shaping should limit visible inventory while keeping category variety."
   );
   const soonestResultSections = getDiscoveryResultSections(nycAreaInventory, {
     sortMode: "soonest",
@@ -981,6 +996,46 @@ async function main() {
       linkOnlyTicketmasterTicketLink.priceCents === undefined,
     "Link-only Ticketmaster offers should create external intents without inventing prices."
   );
+  assert(
+    normalizedLinkOnlyTicketmasterEvent?.category === "dance",
+    "Ticketmaster Arts & Theatre dance taxonomy should normalize separately from DJ events."
+  );
+  assert(
+    normalizeTicketmasterEvent(
+      {
+        ...linkOnlyTicketmasterEvent,
+        id: "tm-nyc-903",
+        name: "American Ballet Theatre",
+        classifications: [
+          {
+            segment: { name: "Arts & Theatre" },
+            genre: { name: "Dance" },
+            subGenre: { name: "Ballet" }
+          }
+        ]
+      },
+      "nyc"
+    )?.category === "ballet",
+    "Ticketmaster ballet subgenres should normalize to ballet."
+  );
+  assert(
+    normalizeTicketmasterEvent(
+      {
+        ...linkOnlyTicketmasterEvent,
+        id: "tm-nyc-904",
+        name: "Met Opera",
+        classifications: [
+          {
+            segment: { name: "Arts & Theatre" },
+            genre: { name: "Opera" },
+            subGenre: { name: "Opera" }
+          }
+        ]
+      },
+      "nyc"
+    )?.category === "opera",
+    "Ticketmaster opera taxonomy should normalize to opera."
+  );
 
   const fixtureTicketmasterClient: TicketmasterDiscoveryClient & { requestedUrls: string[] } = {
     requestedUrls: [],
@@ -1059,17 +1114,28 @@ async function main() {
     referenceNow
   });
 
-  const fanoutClassifications = fanoutTicketmasterClient.requestedUrls.map(
-    (url) => new URL(url).searchParams.get("classificationName") ?? ""
+  const fanoutUrls = fanoutTicketmasterClient.requestedUrls.map((url) => new URL(url));
+  const musicFanoutUrl = fanoutUrls.find(
+    (url) => url.searchParams.get("classificationName") === "music"
+  );
+  const stageFanoutUrl = fanoutUrls.find((url) =>
+    url.searchParams.get("genreId")?.includes("KnvZfZ7v7l1")
+  );
+  const performingArtsFanoutUrl = fanoutUrls.find((url) =>
+    url.searchParams.get("genreId")?.includes("KnvZfZ7v7nI")
+  );
+  const adjacentLiveFanoutUrl = fanoutUrls.find((url) =>
+    url.searchParams.get("genreId")?.includes("KnvZfZ7v7lJ")
   );
 
   assert(
     fanoutTicketmasterClient.requestedUrls.length === 4 &&
-      fanoutClassifications.includes("music") &&
-      fanoutClassifications.includes("theatre,comedy") &&
-      fanoutClassifications.includes("dance,ballet,opera") &&
-      fanoutClassifications.includes("miscellaneous,theatre"),
-    "Unfiltered Ticketmaster provider loads should fan out across focused discovery lanes."
+      musicFanoutUrl &&
+      stageFanoutUrl?.searchParams.get("segmentId") === "KZFzniwnSyZfZ7v7na" &&
+      performingArtsFanoutUrl?.searchParams.get("segmentId") === "KZFzniwnSyZfZ7v7na" &&
+      adjacentLiveFanoutUrl?.searchParams.get("segmentId") === "KZFzniwnSyZfZ7v7na" &&
+      performingArtsFanoutUrl.searchParams.get("classificationName") === null,
+    "Unfiltered Ticketmaster provider loads should fan out with exact Arts & Theatre provider ids where names are ambiguous."
   );
   const pagedTicketmasterEvents = ticketmasterDiscoveryFixture._embedded?.events?.slice(0, 2) ?? [];
 

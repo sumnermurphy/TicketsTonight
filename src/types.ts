@@ -91,6 +91,7 @@ export type ShowSearchFilters = {
   dateWindow: DateWindow;
   sortMode?: DiscoverySortMode;
   referenceNow?: string;
+  resultLimit?: number;
 };
 
 export type TicketHoldRequest = {

@@ -32,6 +32,26 @@ export type TicketmasterDiscoveryLane = {
   id: string;
   label: string;
   categories: ShowCategory[];
+  providerParams?: TicketmasterDiscoveryProviderParams;
+};
+
+type TicketmasterDiscoveryProviderParams = Partial<{
+  classificationName: string;
+  genreId: string;
+  segmentId: string;
+  subGenreId: string;
+}>;
+
+const ticketmasterArtsSegmentId = "KZFzniwnSyZfZ7v7na";
+const ticketmasterArtsGenreIds = {
+  circus: "KnvZfZ7v7n1",
+  comedy: "KnvZfZ7vAe1",
+  dance: "KnvZfZ7v7nI",
+  magic: "KnvZfZ7v7lv",
+  opera: "KnvZfZ7v7lk",
+  performanceArt: "KnvZfZ7v7l6",
+  theatre: "KnvZfZ7v7l1",
+  variety: "KnvZfZ7v7lJ"
 };
 
 export const ticketmasterDiscoveryLanes: TicketmasterDiscoveryLane[] = [
@@ -43,17 +63,34 @@ export const ticketmasterDiscoveryLanes: TicketmasterDiscoveryLane[] = [
   {
     id: "stage-comedy",
     label: "Stage and comedy",
-    categories: ["play", "theater", "comedy"]
+    categories: ["play", "theater", "comedy"],
+    providerParams: {
+      segmentId: ticketmasterArtsSegmentId,
+      genreId: [ticketmasterArtsGenreIds.theatre, ticketmasterArtsGenreIds.comedy].join(",")
+    }
   },
   {
     id: "performing-arts",
     label: "Performing arts",
-    categories: ["dance", "ballet", "opera"]
+    categories: ["dance", "ballet", "opera"],
+    providerParams: {
+      segmentId: ticketmasterArtsSegmentId,
+      genreId: [ticketmasterArtsGenreIds.dance, ticketmasterArtsGenreIds.opera].join(",")
+    }
   },
   {
     id: "adjacent-live",
     label: "Adjacent live",
-    categories: ["variety"]
+    categories: ["variety"],
+    providerParams: {
+      segmentId: ticketmasterArtsSegmentId,
+      genreId: [
+        ticketmasterArtsGenreIds.circus,
+        ticketmasterArtsGenreIds.magic,
+        ticketmasterArtsGenreIds.performanceArt,
+        ticketmasterArtsGenreIds.variety
+      ].join(",")
+    }
   }
 ];
 
@@ -141,6 +178,7 @@ type TicketmasterDiscoveryUrlOptions = Pick<
 > & {
   categories?: ShowCategory[];
   page?: number;
+  providerParams?: TicketmasterDiscoveryProviderParams;
 };
 
 export type TicketmasterDiscoveryFetchRequest = {
@@ -248,7 +286,13 @@ export function buildTicketmasterDiscoveryUrl(
     url.searchParams.set("keyword", filters.query.trim());
   }
 
-  if (classificationNames.length) {
+  for (const [key, value] of Object.entries(options.providerParams ?? {})) {
+    if (value) {
+      url.searchParams.set(key, value);
+    }
+  }
+
+  if (!options.providerParams && classificationNames.length) {
     url.searchParams.set("classificationName", classificationNames.join(","));
   }
 
@@ -274,7 +318,8 @@ export async function fetchTicketmasterDiscoveryEvents(
         ...options,
         categories: lane.categories,
         page,
-        pageSize
+        pageSize,
+        providerParams: lane.providerParams
       });
       const response = await options.client.listEvents(url);
       const pageEvents = response._embedded?.events ?? [];
@@ -316,7 +361,8 @@ export function getTicketmasterDiscoveryLanes(
     {
       id: "filtered",
       label: "Filtered request",
-      categories: filters.categories.length ? filters.categories : supportedTicketmasterCategories
+      categories: filters.categories.length ? filters.categories : supportedTicketmasterCategories,
+      providerParams: getFilteredTicketmasterProviderParams(filters.categories)
     }
   ];
 }
@@ -500,25 +546,64 @@ function getStartDate(event: TicketmasterDiscoveryEvent): string | undefined {
 }
 
 function normalizeTicketmasterCategory(event: TicketmasterDiscoveryEvent): ShowCategory {
-  return normalizeCategory(
-    (event.classifications ?? []).flatMap((classification) => [
-      classification.genre?.name,
-      classification.subGenre?.name,
-      classification.segment?.name,
-      classification.type?.name,
-      classification.subType?.name
-    ])
-  );
+  const titleHint = getTitleCategoryHint(event.name);
+
+  if (titleHint) {
+    return titleHint;
+  }
+
+  for (const classification of event.classifications ?? []) {
+    const segment = normalizeTicketmasterTerm(classification.segment?.name);
+    const genre = normalizeTicketmasterTerm(classification.genre?.name);
+    const subGenre = normalizeTicketmasterTerm(classification.subGenre?.name);
+
+    if (segment === "music") {
+      return genre === "dance/electronic" || subGenre === "club dance" ? "dj" : "concert";
+    }
+
+    if (segment === "arts & theatre") {
+      if (subGenre === "ballet") {
+        return "ballet";
+      }
+
+      if (genre === "dance" || subGenre === "dance") {
+        return "dance";
+      }
+
+      if (genre === "opera" || subGenre === "opera") {
+        return "opera";
+      }
+
+      if (genre === "comedy" || subGenre === "comedy") {
+        return "comedy";
+      }
+
+      if (["drama", "monologue", "mystery"].includes(subGenre)) {
+        return "play";
+      }
+
+      if (
+        [
+          "circus & specialty acts",
+          "magic & illusion",
+          "performance art",
+          "variety"
+        ].includes(genre)
+      ) {
+        return "variety";
+      }
+
+      if (genre === "theatre" || subGenre === "musical") {
+        return "theater";
+      }
+    }
+  }
+
+  return normalizeCategory(getTicketmasterTaxonomyTerms(event));
 }
 
 function getTicketmasterVibes(event: TicketmasterDiscoveryEvent): string[] {
-  const values = (event.classifications ?? []).flatMap((classification) => [
-    classification.genre?.name,
-    classification.subGenre?.name,
-    classification.type?.name
-  ]);
-
-  return uniqueStrings(values)
+  return uniqueStrings(getTicketmasterTaxonomyTerms(event))
     .map((value) => value.toLowerCase())
     .slice(0, 4);
 }
@@ -563,6 +648,80 @@ function getClassificationNames(categories: ShowCategory[]): string[] {
   };
 
   return uniqueStrings(categories.flatMap((category) => values[category]));
+}
+
+function getFilteredTicketmasterProviderParams(
+  categories: ShowCategory[]
+): TicketmasterDiscoveryProviderParams | undefined {
+  if (!categories.length) {
+    return undefined;
+  }
+
+  if (categories.every((category) => ["dance", "ballet", "opera"].includes(category))) {
+    return {
+      segmentId: ticketmasterArtsSegmentId,
+      genreId: [
+        ...(categories.includes("dance") || categories.includes("ballet")
+          ? [ticketmasterArtsGenreIds.dance]
+          : []),
+        ...(categories.includes("opera") ? [ticketmasterArtsGenreIds.opera] : [])
+      ].join(",")
+    };
+  }
+
+  if (categories.every((category) => ["play", "theater", "comedy"].includes(category))) {
+    return {
+      segmentId: ticketmasterArtsSegmentId,
+      genreId: [
+        ...(categories.includes("play") || categories.includes("theater")
+          ? [ticketmasterArtsGenreIds.theatre]
+          : []),
+        ...(categories.includes("comedy") ? [ticketmasterArtsGenreIds.comedy] : [])
+      ].join(",")
+    };
+  }
+
+  if (categories.every((category) => category === "variety")) {
+    return ticketmasterDiscoveryLanes.find((lane) => lane.id === "adjacent-live")?.providerParams;
+  }
+
+  return undefined;
+}
+
+function getTitleCategoryHint(title: string): ShowCategory | undefined {
+  const normalizedTitle = title.toLowerCase();
+
+  if (/\bballet\b/.test(normalizedTitle)) {
+    return "ballet";
+  }
+
+  if (/\bopera\b/.test(normalizedTitle)) {
+    return "opera";
+  }
+
+  return undefined;
+}
+
+function getTicketmasterTaxonomyTerms(event: TicketmasterDiscoveryEvent): string[] {
+  return (event.classifications ?? [])
+    .flatMap((classification) => [
+      classification.genre?.name,
+      classification.subGenre?.name,
+      classification.segment?.name,
+      classification.type?.name,
+      classification.subType?.name
+    ])
+    .filter(isMeaningfulTicketmasterTerm);
+}
+
+function isMeaningfulTicketmasterTerm(value: string | undefined): value is string {
+  const normalizedValue = normalizeTicketmasterTerm(value);
+
+  return Boolean(normalizedValue && normalizedValue !== "undefined" && normalizedValue !== "other");
+}
+
+function normalizeTicketmasterTerm(value: string | undefined): string {
+  return value?.trim().toLowerCase() ?? "";
 }
 
 function getDiscoveryEndDate(now: Date, dateWindow: ShowSearchFilters["dateWindow"]): Date {

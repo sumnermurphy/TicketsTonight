@@ -9,6 +9,7 @@ import type {
   RecommendationContext,
   Show,
   ShowSearchFilters,
+  ShowCategory,
   TicketOffer
 } from "../types";
 
@@ -48,7 +49,7 @@ export function filterShows(candidates: Show[], filters: ShowSearchFilters): Sho
   const neighborhoods = new Set((filters.neighborhoods ?? []).map(normalize));
   const maxPriceCents = filters.maxPriceCents;
 
-  return candidates
+  const filteredShows = candidates
     .filter((show) => show.areaId === filters.areaId)
     .filter((show) => isWithinDateWindow(show.startsAt, filters.dateWindow, filters.referenceNow))
     .filter((show) =>
@@ -86,6 +87,8 @@ export function filterShows(candidates: Show[], filters: ShowSearchFilters): Sho
       return normalize(searchableText).includes(query);
     })
     .sort((first, second) => compareShows(first, second, filters.sortMode ?? "soonest"));
+
+  return shapeDiscoveryResults(filteredShows, filters);
 }
 
 export function searchShows(filters: ShowSearchFilters): Show[] {
@@ -224,6 +227,124 @@ function getLowestOfferPrice(show: Show): number {
     .filter((price): price is number => price !== undefined);
 
   return prices.length ? Math.min(...prices) : Number.MAX_SAFE_INTEGER;
+}
+
+function shapeDiscoveryResults(shows: Show[], filters: ShowSearchFilters): Show[] {
+  const resultLimit = normalizePositiveInteger(filters.resultLimit);
+
+  if (!resultLimit || shows.length <= resultLimit) {
+    return shows;
+  }
+
+  if (shouldBalanceDefaultDiscovery(filters)) {
+    return selectBalancedDefaultShows(shows, resultLimit);
+  }
+
+  return shows.slice(0, resultLimit);
+}
+
+function shouldBalanceDefaultDiscovery(filters: ShowSearchFilters): boolean {
+  return (
+    (filters.sortMode ?? "soonest") === "soonest" &&
+    filters.categories.length === 0 &&
+    !filters.query.trim() &&
+    !filters.onlyDeals &&
+    filters.maxPriceCents === undefined &&
+    (filters.neighborhoods?.length ?? 0) === 0
+  );
+}
+
+function selectBalancedDefaultShows(shows: Show[], limit: number): Show[] {
+  const selectedIds = new Set<string>();
+  const originalIndexById = new Map(shows.map((show, index) => [show.id, index]));
+  const showsByCategory = new Map<ShowCategory, Show[]>();
+  const activeCategories = new Set<ShowCategory>();
+  const selectedCountsByCategory = new Map<ShowCategory, number>();
+
+  for (const show of shows) {
+    activeCategories.add(show.category);
+    showsByCategory.set(show.category, [...(showsByCategory.get(show.category) ?? []), show]);
+  }
+
+  const minimumPerCategory =
+    activeCategories.size >= limit ? 1 : Math.max(2, Math.min(8, Math.floor(limit / 12)));
+  const maximumPerCategory = Math.max(minimumPerCategory, Math.ceil(limit * 0.35));
+
+  for (const category of activeCategories) {
+    const rankedCategoryShows = [...(showsByCategory.get(category) ?? [])].sort(
+      (first, second) =>
+        getDefaultDiscoveryQualityScore(second) - getDefaultDiscoveryQualityScore(first) ||
+        getStartTime(first) - getStartTime(second)
+    );
+
+    for (const show of rankedCategoryShows.slice(0, minimumPerCategory)) {
+      if (selectedIds.size >= limit) {
+        break;
+      }
+
+      selectedIds.add(show.id);
+      selectedCountsByCategory.set(category, (selectedCountsByCategory.get(category) ?? 0) + 1);
+    }
+
+    if (selectedIds.size >= limit) {
+      break;
+    }
+  }
+
+  for (const show of shows) {
+    if (selectedIds.size >= limit) {
+      break;
+    }
+
+    if (selectedIds.has(show.id)) {
+      continue;
+    }
+
+    const selectedCategoryCount = selectedCountsByCategory.get(show.category) ?? 0;
+
+    if (selectedCategoryCount >= maximumPerCategory) {
+      continue;
+    }
+
+    selectedIds.add(show.id);
+    selectedCountsByCategory.set(show.category, selectedCategoryCount + 1);
+  }
+
+  if (selectedIds.size < limit) {
+    for (const show of shows) {
+      if (selectedIds.size >= limit) {
+        break;
+      }
+
+      selectedIds.add(show.id);
+    }
+  }
+
+  return shows
+    .filter((show) => selectedIds.has(show.id))
+    .sort((first, second) => originalIndexById.get(first.id)! - originalIndexById.get(second.id)!);
+}
+
+function getDefaultDiscoveryQualityScore(show: Show): number {
+  const bestOffer = getBestOffer(show);
+  const hasTicketLink = show.ticketOffers.some((offer) => Boolean(offer.externalUrl));
+  const hasKnownPrice = show.ticketOffers.some((offer) => offer.priceCents !== undefined);
+
+  return (
+    (sourceDisplayPriority[show.source] ?? 0) +
+    (bestOffer?.deal ? 40 : 0) +
+    (hasTicketLink ? 18 : 0) +
+    (hasKnownPrice ? 8 : 0) +
+    Math.max(0, 16 - Math.round(show.distanceMiles))
+  );
+}
+
+function normalizePositiveInteger(value: number | undefined): number | undefined {
+  if (!Number.isFinite(value) || value === undefined) {
+    return undefined;
+  }
+
+  return Math.max(1, Math.floor(value));
 }
 
 function getStartTime(show: Show): number {

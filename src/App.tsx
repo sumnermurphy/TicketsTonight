@@ -119,6 +119,7 @@ const sortModeLabels: Record<DiscoverySortMode, string> = {
   nearby: "Nearby"
 };
 const sortModes = Object.keys(sortModeLabels) as DiscoverySortMode[];
+const visibleDiscoveryResultLimit = 120;
 const priceOptions: Array<{ label: string; value?: number }> = [
   { label: "Any price" },
   { label: "Under $35", value: 3500 },
@@ -260,7 +261,8 @@ export default function App() {
       onlyDeals,
       maxPriceCents,
       dateWindow,
-      sortMode: discoverySortMode
+      sortMode: discoverySortMode,
+      resultLimit: visibleDiscoveryResultLimit
     }),
     [
       dateWindow,
