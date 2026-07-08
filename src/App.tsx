@@ -65,12 +65,24 @@ import {
 } from "./services/discoveryRanking";
 import { getDiscoveryResultSections } from "./services/discoveryResultSections";
 import {
+  discoveryVisibleIncrement,
+  getDiscoveryInventoryStatus,
+  getDiscoveryResultCountCopy,
+  getNextVisibleDiscoveryCount,
+  getPagedDiscoveryResults,
+  getRemainingDiscoveryCount,
+  initialDiscoveryVisibleCount
+} from "./services/discoveryVisibility";
+import {
   filterShows,
   getBestOffer,
   getRecommendedShowsFromCatalog,
   getShowById
 } from "./services/eventCatalog";
-import { eventProvider } from "./services/eventProviderFactory";
+import {
+  eventProvider,
+  readPublicDiscoveryConfig
+} from "./services/eventProviderFactory";
 import { findNearestArea, locationProvider } from "./services/location";
 import {
   markNotificationRead,
@@ -119,7 +131,9 @@ const sortModeLabels: Record<DiscoverySortMode, string> = {
   nearby: "Nearby"
 };
 const sortModes = Object.keys(sortModeLabels) as DiscoverySortMode[];
-const visibleDiscoveryResultLimit = 120;
+const ticketmasterConfigured = Boolean(
+  readPublicDiscoveryConfig().ticketmasterApiKey?.trim()
+);
 const priceOptions: Array<{ label: string; value?: number }> = [
   { label: "Any price" },
   { label: "Under $35", value: 3500 },
@@ -161,14 +175,13 @@ export default function App() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [tasteLoading, setTasteLoading] = useState(false);
   const [tasteError, setTasteError] = useState<string | null>(null);
+  const [visibleResultLimit, setVisibleResultLimit] = useState(initialDiscoveryVisibleCount);
   const [savedShowIds, setSavedShowIds] = useState<string[]>([]);
   const [dealAlerts, setDealAlerts] = useState<DealAlert[]>([]);
   const [notifications, setNotifications] = useState<NotificationMessage[]>([]);
-  const [visibleShows, setVisibleShows] = useState<Show[]>([]);
   const [areaInventory, setAreaInventory] = useState<Show[]>([]);
-  const [discoveryLoading, setDiscoveryLoading] = useState(true);
   const [inventoryLoading, setInventoryLoading] = useState(true);
-  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   const selectedArea = areas.find((area) => area.id === selectedAreaId) ?? areas[0];
@@ -261,8 +274,7 @@ export default function App() {
       onlyDeals,
       maxPriceCents,
       dateWindow,
-      sortMode: discoverySortMode,
-      resultLimit: visibleDiscoveryResultLimit
+      sortMode: discoverySortMode
     }),
     [
       dateWindow,
@@ -291,37 +303,8 @@ export default function App() {
   useEffect(() => {
     let mounted = true;
 
-    setDiscoveryLoading(true);
-    setDiscoveryError(null);
-
-    eventProvider
-      .listShows(discoveryFilters)
-      .then((shows) => {
-        if (mounted) {
-          setVisibleShows(shows);
-        }
-      })
-      .catch((error) => {
-        if (mounted) {
-          setVisibleShows([]);
-          setDiscoveryError(error instanceof Error ? error.message : "Unable to load shows.");
-        }
-      })
-      .finally(() => {
-        if (mounted) {
-          setDiscoveryLoading(false);
-        }
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [discoveryFilters]);
-
-  useEffect(() => {
-    let mounted = true;
-
     setInventoryLoading(true);
+    setInventoryError(null);
 
     eventProvider
       .listShows(areaInventoryFilters)
@@ -330,9 +313,14 @@ export default function App() {
           setAreaInventory(shows);
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (mounted) {
           setAreaInventory([]);
+          setInventoryError(
+            error instanceof Error
+              ? `${error.message}. Local fallback inventory may still be limited.`
+              : "Provider refresh failed. Local fallback inventory may still be limited."
+          );
         }
       })
       .finally(() => {
@@ -345,6 +333,47 @@ export default function App() {
       mounted = false;
     };
   }, [areaInventoryFilters]);
+
+  useEffect(() => {
+    setVisibleResultLimit(initialDiscoveryVisibleCount);
+  }, [discoveryFilters]);
+
+  const filteredDiscoveryShows = useMemo(
+    () => filterShows(areaInventory, discoveryFilters),
+    [areaInventory, discoveryFilters]
+  );
+  const visibleShows = useMemo(
+    () => getPagedDiscoveryResults(filteredDiscoveryShows, visibleResultLimit),
+    [filteredDiscoveryShows, visibleResultLimit]
+  );
+  const remainingDiscoveryCount = useMemo(
+    () => getRemainingDiscoveryCount(filteredDiscoveryShows.length, visibleShows.length),
+    [filteredDiscoveryShows.length, visibleShows.length]
+  );
+  const discoveryResultCountCopy = useMemo(
+    () =>
+      getDiscoveryResultCountCopy({
+        loading: inventoryLoading,
+        totalCount: filteredDiscoveryShows.length,
+        visibleCount: visibleShows.length,
+        dateWindowLabel: dateWindowLabels[dateWindow]
+      }),
+    [dateWindow, filteredDiscoveryShows.length, inventoryLoading, visibleShows.length]
+  );
+  const discoveryInventoryStatus = useMemo(
+    () =>
+      getDiscoveryInventoryStatus({
+        areaId: selectedAreaId,
+        shows: areaInventory,
+        ticketmasterConfigured,
+        inventoryError
+      }),
+    [areaInventory, inventoryError, selectedAreaId]
+  );
+  const loadMoreCopy = `Show ${Math.min(
+    discoveryVisibleIncrement,
+    remainingDiscoveryCount
+  )} more`;
 
   const dealAlertInventory = useMemo(
     () =>
@@ -808,6 +837,17 @@ export default function App() {
                 loading={inventoryLoading}
                 value={String(marketSummary.sourceCount)}
               />
+            </View>
+            <View
+              style={[
+                styles.providerStatus,
+                discoveryInventoryStatus.tone === "live" ? styles.providerStatusLive : undefined,
+                discoveryInventoryStatus.tone === "warning" ? styles.providerStatusWarning : undefined
+              ]}
+            >
+              <Text style={styles.providerStatusText}>
+                {inventoryLoading ? "Refreshing provider inventory" : discoveryInventoryStatus.copy}
+              </Text>
             </View>
           </View>
 
@@ -1281,11 +1321,7 @@ export default function App() {
             <View>
               <Text style={styles.sectionTitle}>Upcoming near you</Text>
               <Text style={styles.resultCount}>
-                {discoveryLoading
-                  ? "Loading shows"
-                  : `${visibleShows.length} ${visibleShows.length === 1 ? "show" : "shows"} · ${
-                      dateWindowLabels[dateWindow]
-                    }`}
+                {discoveryResultCountCopy}
               </Text>
             </View>
             <View style={styles.discountBadge}>
@@ -1293,18 +1329,18 @@ export default function App() {
             </View>
           </View>
 
-          {discoveryError ? (
+          {inventoryError ? (
             <View style={styles.providerNotice}>
-              <Text style={styles.providerNoticeText}>{discoveryError}</Text>
+              <Text style={styles.providerNoticeText}>{inventoryError}</Text>
             </View>
           ) : null}
 
-          {discoveryLoading && visibleShows.length ? (
+          {inventoryLoading && visibleShows.length ? (
             <Text style={styles.refreshingText}>Refreshing provider inventory</Text>
           ) : null}
 
           <View style={styles.showList}>
-            {discoveryLoading && !visibleShows.length ? (
+            {inventoryLoading && !visibleShows.length ? (
               <View style={styles.loadingState}>
                 <ActivityIndicator color={colors.teal} />
                 <Text style={styles.loadingTitle}>Loading local inventory</Text>
@@ -1333,7 +1369,28 @@ export default function App() {
               </View>
             ))}
 
-            {!discoveryLoading && !visibleShows.length ? (
+            {remainingDiscoveryCount > 0 ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={inventoryLoading}
+                onPress={() =>
+                  setVisibleResultLimit((current) =>
+                    getNextVisibleDiscoveryCount(current, filteredDiscoveryShows.length)
+                  )
+                }
+                style={[
+                  styles.loadMoreButton,
+                  inventoryLoading ? styles.loadMoreButtonDisabled : undefined
+                ]}
+              >
+                <Text style={styles.loadMoreButtonText}>{loadMoreCopy}</Text>
+                <Text style={styles.loadMoreButtonMeta}>
+                  {remainingDiscoveryCount} still available
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {!inventoryLoading && !visibleShows.length ? (
               <View style={styles.emptyState}>
                 <Music2 color={colors.teal} size={30} />
                 <Text style={styles.emptyTitle}>No shows match that mix.</Text>
@@ -2333,6 +2390,28 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textTransform: "uppercase"
   },
+  providerStatus: {
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.fog,
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
+  },
+  providerStatusLive: {
+    borderColor: colors.teal,
+    backgroundColor: colors.tealSoft
+  },
+  providerStatusWarning: {
+    borderColor: "#F0C6B9",
+    backgroundColor: "#FFF1EC"
+  },
+  providerStatusText: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "900"
+  },
   coverageAuditPanel: {
     marginHorizontal: spacing.xl,
     marginTop: spacing.sm,
@@ -3324,6 +3403,31 @@ const styles = StyleSheet.create({
   showList: {
     gap: spacing.lg,
     paddingHorizontal: spacing.xl
+  },
+  loadMoreButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 58,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.teal,
+    backgroundColor: colors.tealSoft,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md
+  },
+  loadMoreButtonDisabled: {
+    opacity: 0.65
+  },
+  loadMoreButtonText: {
+    color: colors.teal,
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  loadMoreButtonMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 3
   },
   resultSection: {
     gap: spacing.sm

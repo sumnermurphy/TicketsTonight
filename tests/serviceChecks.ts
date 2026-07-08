@@ -35,6 +35,15 @@ import {
 } from "../src/services/discoveryFacets";
 import { getDiscoveryFilterSummary } from "../src/services/discoveryFilterSummary";
 import {
+  discoveryVisibleIncrement,
+  getDiscoveryInventoryStatus,
+  getDiscoveryResultCountCopy,
+  getNextVisibleDiscoveryCount,
+  getPagedDiscoveryResults,
+  getRemainingDiscoveryCount,
+  initialDiscoveryVisibleCount
+} from "../src/services/discoveryVisibility";
+import {
   getDealInsights,
   getDealSummary,
   getOfferSavings,
@@ -154,6 +163,109 @@ async function main() {
     (Object.keys(categoryLabels) as string[]).join("|") ===
       "concert|dj|dance|ballet|opera|play|theater|comedy|variety",
     "Discovery categories should cover concerts, DJ sets, dance, ballet, opera, plays, theater, comedy, and adjacent live events."
+  );
+  const visibilityShows = Array.from({ length: 130 }, (_, index): Show => ({
+    id: `visibility-${index}`,
+    title: `Visibility Show ${index}`,
+    artistOrCompany: "Visibility Fixture",
+    category: "concert",
+    startsAt: `2026-07-${String(10 + Math.floor(index / 10)).padStart(2, "0")}T20:00:00-04:00`,
+    venue: "Visibility Room",
+    neighborhood: "New York",
+    areaId: "nyc",
+    distanceMiles: 1,
+    vibe: ["live"],
+    description: "Synthetic show for discovery visibility paging.",
+    ticketOffers: [],
+    source: "venue-direct",
+    imageTone: "#314E66",
+    recommendationSignals: ["category:concert"]
+  }));
+  const visibilityFirstPage = getPagedDiscoveryResults(
+    visibilityShows,
+    initialDiscoveryVisibleCount
+  );
+
+  assert(
+    visibilityFirstPage.length === 60 && visibilityShows.length === 130,
+    "Discovery visibility should keep total filtered inventory separate from the visible page."
+  );
+  assert(
+    getNextVisibleDiscoveryCount(
+      initialDiscoveryVisibleCount,
+      visibilityShows.length,
+      discoveryVisibleIncrement
+    ) === 120 &&
+      getNextVisibleDiscoveryCount(120, visibilityShows.length, discoveryVisibleIncrement) === 130,
+    "Discovery visibility should load more in bounded increments without exceeding total count."
+  );
+  assert(
+    getRemainingDiscoveryCount(visibilityShows.length, visibilityFirstPage.length) === 70,
+    "Discovery visibility should report remaining filtered inventory after the visible page."
+  );
+  assert(
+    getDiscoveryResultCountCopy({
+      loading: false,
+      totalCount: visibilityShows.length,
+      visibleCount: visibilityFirstPage.length,
+      dateWindowLabel: "All"
+    }) === "Showing 60 of 130 shows · All",
+    "Discovery result copy should show visible and total counts when more inventory is available."
+  );
+  assert(
+    getPagedDiscoveryResults(visibilityShows.slice(0, 15), initialDiscoveryVisibleCount).length === 15,
+    "Discovery visibility should tolerate filter resets when the filtered total is below the initial page size."
+  );
+  const primaryVisibilityShow: Show = {
+    ...visibilityShows[0]!,
+    id: "visibility-primary",
+    source: "primary-marketplace",
+    ticketOffers: [
+      {
+        id: "ticketmaster-link",
+        label: "Ticket page",
+        currency: "USD",
+        remaining: 10,
+        maxQuantity: 4,
+        access: "external-transfer",
+        source: "primary-marketplace",
+        externalUrl: "https://example.com/tickets"
+      }
+    ]
+  };
+
+  assert(
+    getDiscoveryInventoryStatus({
+      areaId: "nyc",
+      shows: [primaryVisibilityShow],
+      ticketmasterConfigured: true
+    }).copy === "Live inventory loaded · Primary links available",
+    "Discovery status should identify live primary-marketplace inventory with ticket links."
+  );
+  assert(
+    getDiscoveryInventoryStatus({
+      areaId: "nyc",
+      shows: visibilityShows.slice(0, 1),
+      ticketmasterConfigured: false
+    }).copy === "Local fallback inventory · Add provider key for live events",
+    "Discovery status should explain fixture fallback when live provider config is missing."
+  );
+  assert(
+    getDiscoveryInventoryStatus({
+      areaId: "hudson",
+      shows: [{ ...visibilityShows[0]!, areaId: "hudson", source: "calendar-feed" }],
+      ticketmasterConfigured: true
+    }).copy === "Local calendar coverage · Broad provider is limited in Hudson",
+    "Discovery status should keep Hudson positioned as a local-calendar-led market."
+  );
+  assert(
+    getDiscoveryInventoryStatus({
+      areaId: "nyc",
+      shows: visibilityShows.slice(0, 1),
+      ticketmasterConfigured: true,
+      inventoryError: "Provider failed"
+    }).copy === "Local fallback inventory · Provider refresh failed",
+    "Discovery status should make provider failures compatible with local fallback inventory."
   );
   assert(areas[0]?.discoveryRole === "primary", "New York should be the primary alpha market.");
   assert(
