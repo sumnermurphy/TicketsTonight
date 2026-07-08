@@ -8,6 +8,7 @@ Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ball
 - City selector, near-me area resolution, search, category filters, date windows, deal-only filtering, event cards, and a show-detail sheet.
 - First-class category coverage for concerts, DJ sets, dance, ballet, opera, plays, theater, comedy, and variety/adjacent live events.
 - Deal-aware ticket inventory with list prices, savings, access method, inventory source, and max quantities.
+- Best-bets ranking that lifts urgent deals, local-source picks, nearby shows, and weekend options above the full chronological list.
 - Discount discovery ranking that prioritizes stronger savings and urgent deal windows before checkout is active.
 - Deal alerts can track the current area/category/date filters with optional under-$35, under-$50, or under-$75 price thresholds.
 - Checkout groundwork remains behind services, but purchase UI, account sign-in, and wallet are out of the active MVP for now.
@@ -70,6 +71,7 @@ npm run android
 - `src/services/discoveryFacets.ts`: market summaries, source diversity, category facets, and date-window availability with discounted-count signals for the selected market.
 - `src/services/dealDiscovery.ts`: discount insight scoring, savings math, urgency labels, and area deal summaries.
 - `src/services/discoveryPlanning.ts`: helper layer for broad-API/local-pipeline lanes, category coverage, source readiness, category gaps, primary-market ordering, and discount levers.
+- `src/services/discoveryRanking.ts`: best-bets scoring for urgent deals, local-source inventory, timing, and distance.
 - `src/services/feedProvider.ts`: feed normalization from provider taxonomy/inventory into the app `Show` model.
 - `src/services/eventCatalog.ts`: discovery search, date-window filtering, deal search, recommendation scoring, composite event providers, calendar-feed inventory, and runtime caching for provider-fed shows.
 - `src/services/eventProviderFactory.ts`: default provider stack that keeps fixtures active and adds Ticketmaster Discovery when public Expo config is present.

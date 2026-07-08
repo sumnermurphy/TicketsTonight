@@ -21,6 +21,7 @@ import {
   getOfferSavings,
   getSavingsPercent
 } from "../src/services/dealDiscovery";
+import { getDiscoveryPicks } from "../src/services/discoveryRanking";
 import {
   getDiscoveryCategoryCoverage,
   getDiscoveryMarketPlan,
@@ -244,6 +245,7 @@ async function main() {
     nycAreaInventory,
     Object.keys(categoryLabels) as Array<keyof typeof categoryLabels>
   );
+  const nycDiscoveryPicks = getDiscoveryPicks(nycAreaInventory, referenceNow, 4);
   const comedyFacet = nycCategoryFacets.find((facet) => facet.category === "comedy");
   const danceFacet = nycCategoryFacets.find((facet) => facet.category === "dance");
   const nycDateWindowFacets = getDateWindowFacets(
@@ -283,6 +285,18 @@ async function main() {
   assert(
     nycMarketSummary.nextStartsAt === "2026-07-08T20:00:00-04:00",
     "Market summary should expose the next upcoming show time."
+  );
+  assert(nycDiscoveryPicks.length === 4, "Discovery picks should return a bounded best-bets rail.");
+  assert(
+    nycDiscoveryPicks[0]?.signal === "tonight-deal" &&
+      nycDiscoveryPicks[0].label === "Tonight deal",
+    "NYC discovery picks should prioritize urgent discounted shows."
+  );
+  assert(
+    nycDiscoveryPicks.every(
+      (pick, index, picks) => index === 0 || picks[index - 1]!.score >= pick.score
+    ),
+    "Discovery picks should be sorted by score."
   );
   assert(
     comedyFacet?.showCount === 1 && comedyFacet.dealCount === 1,
@@ -468,6 +482,27 @@ async function main() {
         show.source === "calendar-feed"
     ),
     "Composite provider should merge reusable Hudson calendar-feed events."
+  );
+  const hudsonDiscoveryPicks = getDiscoveryPicks(
+    searchShows({
+      areaId: "hudson",
+      categories: [],
+      query: "",
+      onlyDeals: false,
+      dateWindow: "all",
+      referenceNow
+    }),
+    referenceNow,
+    5
+  );
+  const hudsonCalendarPick = hudsonDiscoveryPicks.find(
+    (pick) => pick.show.id === "calendar-hudson-arts-calendar-hac-101"
+  );
+
+  assert(
+    hudsonCalendarPick?.signal === "calendar-deal" &&
+      hudsonCalendarPick.reason.includes("Local calendar"),
+    "Hudson discovery picks should recognize reusable calendar-feed deals."
   );
 
   const hudsonVarietyShows = searchShows({

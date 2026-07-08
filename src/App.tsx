@@ -50,6 +50,10 @@ import {
   type DealInsight
 } from "./services/dealDiscovery";
 import {
+  getDiscoveryPicks,
+  type DiscoveryPick
+} from "./services/discoveryRanking";
+import {
   filterShows,
   getBestOffer,
   getShowById
@@ -291,6 +295,10 @@ export default function App() {
   const dealInsights = useMemo(
     () => getDealInsights(dealAlertInventory).slice(0, 4),
     [dealAlertInventory]
+  );
+  const discoveryPicks = useMemo(
+    () => getDiscoveryPicks(visibleShows, new Date().toISOString(), 4),
+    [visibleShows]
   );
   const dealSummary = useMemo(() => getDealSummary(dealAlertInventory), [dealAlertInventory]);
   const categoryFacets = useMemo(
@@ -823,6 +831,28 @@ export default function App() {
             </View>
           ) : null}
 
+          {discoveryPicks.length ? (
+            <View style={styles.discoveryPickPanel}>
+              <View style={styles.inlineTitlePadded}>
+                <Sparkles color={colors.teal} size={18} />
+                <Text style={styles.sectionTitle}>Best bets</Text>
+              </View>
+              <ScrollView
+                contentContainerStyle={styles.discoveryPickRail}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+              >
+                {discoveryPicks.map((pick) => (
+                  <DiscoveryPickCard
+                    key={pick.show.id}
+                    onPress={() => openShowDetails(pick.show)}
+                    pick={pick}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
           <View style={styles.resultsHeader}>
             <View>
               <Text style={styles.sectionTitle}>Upcoming near you</Text>
@@ -1152,6 +1182,38 @@ function DealCard({ insight, onPress }: { insight: DealInsight; onPress: () => v
         {insight.urgencyLabel} · {show.neighborhood}
       </Text>
       <Text style={styles.dealCardPrice}>{formatMoney(offer.priceCents)}</Text>
+    </Pressable>
+  );
+}
+
+function DiscoveryPickCard({ pick, onPress }: { pick: DiscoveryPick; onPress: () => void }) {
+  const { offer, show } = pick;
+
+  return (
+    <Pressable onPress={onPress} style={styles.discoveryPickCard}>
+      <View style={[styles.discoveryPickStripe, { backgroundColor: show.imageTone }]} />
+      <View style={styles.discoveryPickTop}>
+        <Text numberOfLines={1} style={styles.discoveryPickLabel}>
+          {pick.label}
+        </Text>
+        <Text numberOfLines={1} style={styles.discoveryPickSource}>
+          {sourceLabels[show.source]}
+        </Text>
+      </View>
+      <Text numberOfLines={2} style={styles.discoveryPickTitle}>
+        {show.title}
+      </Text>
+      <Text numberOfLines={2} style={styles.discoveryPickReason}>
+        {pick.reason}
+      </Text>
+      <View style={styles.discoveryPickFooter}>
+        <Text numberOfLines={1} style={styles.discoveryPickDate}>
+          {formatShowDate(show.startsAt)}
+        </Text>
+        <Text style={styles.discoveryPickPrice}>
+          {offer ? formatMoney(offer.priceCents) : "Soon"}
+        </Text>
+      </View>
     </Pressable>
   );
 }
@@ -1827,6 +1889,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: spacing.sm
   },
+  inlineTitlePadded: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl
+  },
   sectionTitle: {
     color: colors.ink,
     fontSize: 18,
@@ -2267,6 +2335,84 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "900",
     marginTop: spacing.sm
+  },
+  discoveryPickPanel: {
+    marginTop: spacing.xs
+  },
+  discoveryPickRail: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md
+  },
+  discoveryPickCard: {
+    width: 218,
+    minHeight: 156,
+    justifyContent: "space-between",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    padding: spacing.lg,
+    overflow: "hidden"
+  },
+  discoveryPickStripe: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 5
+  },
+  discoveryPickTop: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    marginTop: spacing.xs
+  },
+  discoveryPickLabel: {
+    color: colors.teal,
+    flexShrink: 1,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  discoveryPickSource: {
+    color: colors.mutedInk,
+    flexShrink: 1,
+    fontSize: 11,
+    fontWeight: "800",
+    textAlign: "right"
+  },
+  discoveryPickTitle: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "900",
+    lineHeight: 22,
+    marginTop: spacing.md
+  },
+  discoveryPickReason: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: spacing.sm
+  },
+  discoveryPickFooter: {
+    alignItems: "flex-end",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    marginTop: spacing.md
+  },
+  discoveryPickDate: {
+    color: colors.mutedInk,
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  discoveryPickPrice: {
+    color: colors.ink,
+    fontSize: 17,
+    fontWeight: "900"
   },
   recommendationPanel: {
     marginTop: spacing.sm
