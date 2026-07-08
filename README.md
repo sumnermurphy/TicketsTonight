@@ -11,6 +11,7 @@ Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ball
 - Best-bets ranking that lifts urgent deals, local-source picks, nearby shows, and weekend options above the full chronological list.
 - Discount discovery ranking that prioritizes stronger savings and urgent deal windows before checkout is active.
 - Deal alerts can track the current area/category/date filters with optional under-$35, under-$50, or under-$75 price thresholds.
+- External ticket links can be opened from provider-backed offers while in-app checkout remains deferred.
 - Checkout groundwork remains behind services, but purchase UI, account sign-in, and wallet are out of the active MVP for now.
 - Saved shows, deal alerts, in-app deal notifications, and persisted discovery preferences through a replaceable repository layer.
 - Spotify-shaped taste-provider groundwork remains in services, but Spotify connection and taste-pick UI are out of the active MVP for now.
@@ -84,6 +85,7 @@ npm run android
 - `src/services/payments.ts`: dormant payment provider groundwork shaped for future Stripe/provider-native checkout.
 - `src/services/personalization.ts`: dormant taste profile provider groundwork for future Spotify/personalization work.
 - `src/services/storage.ts`: repository for preferences and orders, backed by browser storage on web and memory fallback elsewhere.
+- `src/services/ticketLinks.ts`: safe external ticket-link intent selection for provider-backed offers while checkout is deferred.
 - `src/services/ticketmasterProvider.ts`: Ticketmaster Discovery request builder, fetch client, event normalizer, and `EventProvider` implementation.
 - `src/services/ticketing.ts`: ticketing provider interface plus a mock provider.
 - `src/types.ts`: shared app, ticketing, and recommendation types.

@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -69,6 +70,11 @@ import {
   notificationProvider
 } from "./services/notifications";
 import { appRepository } from "./services/storage";
+import {
+  getBestTicketLinkIntent,
+  getTicketLinkIntent,
+  type TicketLinkIntent
+} from "./services/ticketLinks";
 import { colors, radii, shadows, spacing } from "./theme";
 import type {
   Area,
@@ -1597,6 +1603,20 @@ function ShowCard({
   );
 }
 
+async function openExternalTicketLink(intent: TicketLinkIntent) {
+  try {
+    const canOpen = await Linking.canOpenURL(intent.url);
+
+    if (!canOpen && Platform.OS !== "web") {
+      throw new Error("Unsupported ticket link");
+    }
+
+    await Linking.openURL(intent.url);
+  } catch {
+    Alert.alert("Ticket link unavailable", "Try again from the venue or ticket provider site.");
+  }
+}
+
 function ShowDetailModal({
   show,
   saved,
@@ -1610,6 +1630,7 @@ function ShowDetailModal({
 }) {
   const bestOffer = show ? getBestOffer(show) : undefined;
   const savings = getOfferSavings(bestOffer);
+  const bestTicketLink = show ? getBestTicketLinkIntent(show) : undefined;
 
   return (
     <Modal animationType="slide" onRequestClose={onClose} transparent visible={Boolean(show)}>
@@ -1667,23 +1688,41 @@ function ShowDetailModal({
                   </View>
 
                   <View style={styles.detailOfferList}>
-                    {show.ticketOffers.map((offer) => (
-                      <View key={offer.id} style={styles.detailOfferRow}>
-                        <View style={styles.detailOfferCopy}>
-                          <Text style={styles.offerLabel}>{offer.label}</Text>
-                          <Text style={styles.offerMeta}>
-                            {offer.remaining} left · {accessLabels[offer.access]} · {sourceLabels[offer.source]}
-                          </Text>
-                          {offer.deal ? <Text style={styles.offerDealText}>{offer.deal.description}</Text> : null}
-                        </View>
-                        <View style={styles.offerPriceStack}>
-                          {offer.listPriceCents ? (
-                            <Text style={styles.offerListPrice}>{formatMoney(offer.listPriceCents)}</Text>
-                          ) : null}
-                          <Text style={styles.offerPrice}>{formatMoney(offer.priceCents)}</Text>
-                        </View>
-                      </View>
-                    ))}
+                    {show.ticketOffers.map((offer) => {
+                      const ticketLink = getTicketLinkIntent(show, offer);
+
+                      return (
+                        <Pressable
+                          accessibilityRole={ticketLink ? "link" : undefined}
+                          disabled={!ticketLink}
+                          key={offer.id}
+                          onPress={() => {
+                            if (ticketLink) {
+                              void openExternalTicketLink(ticketLink);
+                            }
+                          }}
+                          style={[
+                            styles.detailOfferRow,
+                            ticketLink ? styles.detailOfferRowLinked : undefined
+                          ]}
+                        >
+                          <View style={styles.detailOfferCopy}>
+                            <Text style={styles.offerLabel}>{offer.label}</Text>
+                            <Text style={styles.offerMeta}>
+                              {offer.remaining} left · {accessLabels[offer.access]} · {sourceLabels[offer.source]}
+                            </Text>
+                            {offer.deal ? <Text style={styles.offerDealText}>{offer.deal.description}</Text> : null}
+                          </View>
+                          <View style={styles.offerPriceStack}>
+                            {offer.listPriceCents ? (
+                              <Text style={styles.offerListPrice}>{formatMoney(offer.listPriceCents)}</Text>
+                            ) : null}
+                            <Text style={styles.offerPrice}>{formatMoney(offer.priceCents)}</Text>
+                            {ticketLink ? <Text style={styles.offerActionText}>Tickets</Text> : null}
+                          </View>
+                        </Pressable>
+                      );
+                    })}
                   </View>
                 </View>
               </ScrollView>
@@ -1702,6 +1741,16 @@ function ShowDetailModal({
                   {savings > 0 ? <Text style={styles.savingsText}>Save {formatMoney(savings)}</Text> : null}
                 </View>
                 <View style={styles.detailFooterActions}>
+                  {bestTicketLink ? (
+                    <Pressable
+                      accessibilityRole="link"
+                      onPress={() => void openExternalTicketLink(bestTicketLink)}
+                      style={styles.externalTicketButton}
+                    >
+                      <Ticket color={colors.paper} size={16} />
+                      <Text style={styles.externalTicketButtonText}>Tickets</Text>
+                    </Pressable>
+                  ) : null}
                   <Pressable
                     accessibilityLabel={saved ? "Remove saved show" : "Save show"}
                     onPress={() => onToggleSaved(show.id)}
@@ -3245,6 +3294,10 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     padding: spacing.lg
   },
+  detailOfferRowLinked: {
+    borderColor: colors.teal,
+    backgroundColor: colors.tealSoft
+  },
   detailOfferCopy: {
     flex: 1,
     minWidth: 0
@@ -3263,6 +3316,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: spacing.sm
+  },
+  externalTicketButton: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: spacing.xs,
+    minHeight: 38,
+    borderRadius: radii.pill,
+    backgroundColor: colors.teal,
+    paddingHorizontal: spacing.md
+  },
+  externalTicketButtonText: {
+    color: colors.paper,
+    fontSize: 13,
+    fontWeight: "900"
   },
   checkoutSheet: {
     maxHeight: "86%",
@@ -3346,6 +3414,13 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 16,
     fontWeight: "900"
+  },
+  offerActionText: {
+    color: colors.teal,
+    fontSize: 11,
+    fontWeight: "900",
+    marginTop: 4,
+    textTransform: "uppercase"
   },
   quantityRow: {
     alignItems: "center",

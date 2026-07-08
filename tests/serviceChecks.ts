@@ -73,6 +73,11 @@ import { authProvider } from "../src/services/auth";
 import { mockCardPaymentMethod, paymentProvider } from "../src/services/payments";
 import { ticketingProvider } from "../src/services/ticketing";
 import {
+  getBestTicketLinkIntent,
+  getSafeTicketUrl,
+  getTicketLinkIntent
+} from "../src/services/ticketLinks";
+import {
   buildTicketmasterDiscoveryUrl,
   normalizeTicketmasterEvent,
   TicketmasterDiscoveryProvider,
@@ -502,6 +507,25 @@ async function main() {
     normalizedCalendarShow.ticketOffers[0]?.deal?.label === "Calendar preview",
     "Calendar feed deal metadata should map onto ticket offers."
   );
+  const calendarTicketLink = getBestTicketLinkIntent(normalizedCalendarShow);
+
+  assert(
+    calendarTicketLink?.url === "https://example.com/hudson-arts-calendar/hac-101" &&
+      calendarTicketLink.offerId === "calendar-listing",
+    "Calendar ticket URLs should become safe external ticket-link intents."
+  );
+  assert(
+    getSafeTicketUrl("javascript:alert(1)") === undefined &&
+      getSafeTicketUrl("not a url") === undefined,
+    "Ticket-link safety should reject unsafe or malformed URLs."
+  );
+  assert(
+    getTicketLinkIntent(normalizedCalendarShow, {
+      ...normalizedCalendarShow.ticketOffers[0]!,
+      externalUrl: "mailto:tickets@example.com"
+    }) === undefined,
+    "Ticket-link intents should only allow HTTP or HTTPS offer URLs."
+  );
 
   const feedSearch = searchShows({
     areaId: "nyc",
@@ -750,6 +774,13 @@ async function main() {
     normalizedTicketmasterEvent.ticketOffers[0]?.externalUrl ===
       "https://example.com/ticketmaster/hadestown",
     "Ticketmaster ticket links should be preserved as offer metadata."
+  );
+  const ticketmasterTicketLink = getBestTicketLinkIntent(normalizedTicketmasterEvent);
+
+  assert(
+    ticketmasterTicketLink?.url === "https://example.com/ticketmaster/hadestown" &&
+      ticketmasterTicketLink.source === "primary-marketplace",
+    "Ticketmaster-normalized offers should expose an external ticket-link intent without enabling checkout UI."
   );
 
   const fixtureTicketmasterClient: TicketmasterDiscoveryClient & { requestedUrls: string[] } = {
