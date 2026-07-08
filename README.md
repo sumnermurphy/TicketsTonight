@@ -48,6 +48,12 @@ EXPO_PUBLIC_TICKETMASTER_API_KEY=your_key npm run web
 
 For local CLI audits, copy `.env.example` to `.env.local` and set `EXPO_PUBLIC_TICKETMASTER_API_KEY` there. Local `.env` files are ignored by git.
 
+```bash
+cp .env.example .env.local
+# edit .env.local and set EXPO_PUBLIC_TICKETMASTER_API_KEY=...
+npm run audit:live-inventory
+```
+
 The adapter defaults to 100 results per page and up to 3 pages. Override the live fetch breadth with:
 
 ```bash
@@ -82,6 +88,12 @@ Run the live supply audit for New York, Los Angeles, and Hudson:
 npm run audit:live-supply
 ```
 
+Run the live inventory audit for fixture, parser, and Ticketmaster source readiness:
+
+```bash
+npm run audit:live-inventory
+```
+
 Run the default discovery quality audit for the app-facing shaped result lists:
 
 ```bash
@@ -94,13 +106,13 @@ Run the non-secret Spotify readiness audit:
 npm run audit:spotify
 ```
 
-Run live Ticketmaster provider diagnostics:
+Run live Ticketmaster provider diagnostics for New York, Los Angeles, and Hudson:
 
 ```bash
 EXPO_PUBLIC_TICKETMASTER_API_KEY=your_key npm run audit:providers
 ```
 
-The provider diagnostics command redacts API keys from printed request URLs and separates priced offers from link-only ticket pages.
+The live inventory and provider diagnostics commands run in no-key mode without making Ticketmaster requests. When a key is configured, they redact API keys from printed request URLs and separate raw events, normalized events, duplicates, discarded events, priced offers, and link-only ticket pages.
 
 For native preview, use:
 
@@ -114,6 +126,7 @@ npm run android
 - `src/data/catalog.ts`: alpha-market areas, categories, and seed event inventory.
 - `src/data/broadApiCandidates.ts`: ranked broad API candidates for baseline event coverage, ticket links, price inventory, and coverage-gap auditing.
 - `src/data/discoveryPlans.ts`: market-by-market discovery source strategy for New York, Los Angeles, and Hudson.
+- `src/data/htmlCalendarFixtures.ts`: sample HTML calendar payloads with JSON-LD event blocks for parser-backed local import tests.
 - `src/data/localCalendarFeeds.ts`: reusable calendar source metadata and fixture-backed/parser-ready local calendar examples for NYC performing arts and Hudson regional arts.
 - `src/data/partnerFeeds.ts`: raw partner feed fixtures that mimic external inventory in the supported alpha markets.
 - `src/data/ticketmasterFixtures.ts`: Ticketmaster Discovery-shaped fixture payload for adapter tests.
@@ -130,6 +143,7 @@ npm run android
 - `src/services/discoveryRanking.ts`: best-bets scoring for urgent deals, local-source inventory, timing, and distance.
 - `src/services/discoveryResultSections.ts`: scan-friendly result grouping for soonest discovery while preserving cheapest/nearby sort order.
 - `src/services/feedProvider.ts`: feed normalization from provider taxonomy/inventory into the app `Show` model.
+- `src/services/htmlCalendarImporter.ts`: reusable JSON-LD HTML calendar importer that turns event pages/listings into local calendar events.
 - `src/services/eventCatalog.ts`: discovery search, date-window filtering, deal search, recommendation scoring, composite event providers, cross-source event dedupe, calendar-feed inventory, and runtime caching for provider-fed shows.
 - `src/services/eventProviderFactory.ts`: default provider stack that keeps fixtures active and adds Ticketmaster Discovery when public Expo config is present.
 - `src/services/location.ts`: location provider interface, demo location provider, distance calculation, and nearest-area resolution.
@@ -140,11 +154,13 @@ npm run android
 - `src/services/storage.ts`: repository for preferences and orders, backed by browser storage on web and memory fallback elsewhere.
 - `src/services/ticketLinks.ts`: safe external ticket-link intent selection for provider-backed offers while checkout is deferred.
 - `src/services/providerDiagnostics.ts`: live provider diagnostics for Ticketmaster fan-out, duplicate events, category mix, priced offers, link-only ticket pages, and redacted request URLs.
+- `src/services/sourceInventoryAudit.ts`: source-level freshness/import summaries for fixture, parsed calendar, and live API inventory.
 - `src/services/ticketmasterProvider.ts`: Ticketmaster Discovery request builder, lane fan-out fetcher, fetch client, event normalizer, and `EventProvider` implementation.
 - `src/services/ticketing.ts`: ticketing provider interface plus a mock provider.
 - `src/types.ts`: shared app, ticketing, and recommendation types.
 - `src/App.tsx`: provider-backed mobile discovery, detail, saved-show, discount alert, inbox, and preference UI.
 - `scripts/env.ts`: local `.env.local` loader for audit scripts without committing provider keys.
+- `scripts/liveInventoryAudit.ts`: multi-market live inventory audit for fixture fallback, parsed calendar imports, and Ticketmaster no-key/keyed readiness.
 - `tests/serviceChecks.ts`: discovery, market scope, feed normalization, provider adapters, deal filtering, discount alerts, and dormant checkout groundwork checks.
 
 ## Provider seams

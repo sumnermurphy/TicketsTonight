@@ -4,6 +4,7 @@ import {
   localCalendarEvents,
   localCalendarSources
 } from "../src/data/localCalendarFeeds";
+import { hudsonHallHtmlCalendarFixture } from "../src/data/htmlCalendarFixtures";
 import { partnerFeedEvents } from "../src/data/partnerFeeds";
 import { ticketmasterDiscoveryFixture } from "../src/data/ticketmasterFixtures";
 import { parseEnvFile } from "../scripts/env";
@@ -23,6 +24,7 @@ import {
   getCoverageAuditActionCopy,
   getCoverageAuditStatusCopy
 } from "../src/services/coverageAudit";
+import { importHtmlCalendarEvents } from "../src/services/htmlCalendarImporter";
 import { createTicketmasterProviderDiagnostics } from "../src/services/providerDiagnostics";
 import { checkoutBackend } from "../src/services/checkoutBackend";
 import {
@@ -94,6 +96,7 @@ import {
   type SpotifyCodeExchangeRequest
 } from "../src/services/personalization";
 import { createSpotifyConfigAudit } from "../src/services/spotifyConfigAudit";
+import { createSourceInventorySummaries } from "../src/services/sourceInventoryAudit";
 import { AppRepository, MemoryStorageAdapter } from "../src/services/storage";
 import { authProvider } from "../src/services/auth";
 import { mockCardPaymentMethod, paymentProvider } from "../src/services/payments";
@@ -733,9 +736,29 @@ async function main() {
   );
   assert(hudsonConcertCalendarEvent, "Hudson calendar fixtures should include a concert listing.");
   assert(linkOnlyCalendarEvent, "NYC calendar fixtures should include a link-only listing.");
+  assert(hudsonCalendarSource, "Hudson calendar source should be available for importer tests.");
 
   const normalizedCalendarShow = normalizeCalendarEvent(hudsonConcertCalendarEvent);
   const normalizedLinkOnlyCalendarShow = normalizeCalendarEvent(linkOnlyCalendarEvent);
+  const hudsonHtmlCalendarImport = importHtmlCalendarEvents(
+    hudsonHallHtmlCalendarFixture,
+    hudsonCalendarSource,
+    {
+      importedAt: referenceNow,
+      defaultVenueName: "Hudson Hall",
+      defaultNeighborhood: "Warren Street",
+      defaultDistanceMiles: 0.4,
+      defaultImageTone: "#4A6B5F",
+      defaultTags: ["regional calendar"],
+      externalIdPrefix: "hudsonhall"
+    }
+  );
+  const importedRuckusEvent = hudsonHtmlCalendarImport.events.find((event) =>
+    event.title.includes("Ruckus")
+  );
+  const normalizedImportedRuckusShow = importedRuckusEvent
+    ? normalizeCalendarEvent(importedRuckusEvent)
+    : undefined;
 
   assert(
     normalizedCalendarShow.id === "calendar-hudson-arts-calendar-hac-101",
@@ -768,6 +791,44 @@ async function main() {
       linkOnlyCalendarTicketLink?.url ===
         "https://www.nycballet.com/season-and-tickets/fall-2026/jewels",
     "Calendar feed events with ticket URLs but no price should still expose link-only external offers."
+  );
+  assert(
+    hudsonHtmlCalendarImport.importedEventCount === 2 &&
+      hudsonHtmlCalendarImport.skippedReasons.some((reason) => reason.reason === "invalid-json"),
+    "HTML calendar importer should parse JSON-LD Event blocks and report malformed source blocks."
+  );
+  assert(
+    importedRuckusEvent?.ticketUrl === "https://hudsonhall.org/event/ruckus/" &&
+      importedRuckusEvent.priceCents === 0 &&
+      normalizedImportedRuckusShow?.source === "calendar-feed",
+    "Imported HTML calendar events should preserve real ticket links and normalize into calendar-feed shows."
+  );
+  const hudsonNoKeySourceSummaries = createSourceInventorySummaries({
+    areaId: "hudson",
+    referenceNow,
+    parsedCalendarEvents: hudsonHtmlCalendarImport.events,
+    parsedCalendarImportedAt: hudsonHtmlCalendarImport.importedAt,
+    ticketmasterConfigured: false
+  });
+  const hudsonParsedCalendarSummary = hudsonNoKeySourceSummaries.find(
+    (summary) => summary.importMode === "calendar-html-import"
+  );
+  const hudsonTicketmasterNoKeySummary = hudsonNoKeySourceSummaries.find(
+    (summary) => summary.id === "hudson-ticketmaster-discovery"
+  );
+
+  assert(
+    hudsonParsedCalendarSummary?.status === "parsed" &&
+      hudsonParsedCalendarSummary.eventCount === 2 &&
+      hudsonParsedCalendarSummary.ticketLinkCount === 2 &&
+      hudsonParsedCalendarSummary.freshnessLabel === "parser sample import",
+    "Source inventory summaries should distinguish parsed HTML calendar imports from checked-in fixtures."
+  );
+  assert(
+    hudsonTicketmasterNoKeySummary?.status === "not-configured" &&
+      hudsonTicketmasterNoKeySummary.importMode === "live-api" &&
+      hudsonTicketmasterNoKeySummary.eventCount === 0,
+    "Source inventory summaries should report Ticketmaster live API readiness in no-key mode without fetching."
   );
   assert(
     getSafeTicketUrl("javascript:alert(1)") === undefined &&
@@ -1358,14 +1419,73 @@ async function main() {
     ticketmasterDiagnostics.requestCount === 4 &&
       ticketmasterDiagnostics.rawEventCount === 8 &&
       ticketmasterDiagnostics.filteredShowCount === 2 &&
-      ticketmasterDiagnostics.duplicateShowCount === 6,
-    "Provider diagnostics should measure lane fan-out volume and duplicate provider events."
+      ticketmasterDiagnostics.duplicateShowCount === 6 &&
+      ticketmasterDiagnostics.duplicateRatePercent === 75 &&
+      ticketmasterDiagnostics.discardedEventCount === 0,
+    "Provider diagnostics should measure lane fan-out volume, duplicate rate, and discarded provider events."
   );
   assert(
     ticketmasterDiagnostics.pricedOfferCount === 1 &&
       ticketmasterDiagnostics.linkOnlyOfferCount === 1 &&
-      ticketmasterDiagnostics.ticketLinkCount === 2,
+      ticketmasterDiagnostics.ticketLinkCount === 2 &&
+      ticketmasterDiagnostics.ticketLinkCoveragePercent === 100,
     "Provider diagnostics should separate priced inventory from link-only ticket coverage."
+  );
+  const nycLiveSourceSummaries = createSourceInventorySummaries({
+    areaId: "nyc",
+    referenceNow,
+    ticketmasterConfigured: true,
+    ticketmasterDiagnostics
+  });
+  const nycTicketmasterLiveSource = nycLiveSourceSummaries.find(
+    (summary) => summary.id === "nyc-ticketmaster-discovery"
+  );
+
+  assert(
+    nycTicketmasterLiveSource?.status === "live" &&
+      nycTicketmasterLiveSource.eventCount === ticketmasterDiagnostics.filteredShowCount &&
+      nycTicketmasterLiveSource.duplicateRatePercent === 75 &&
+      nycTicketmasterLiveSource.discardedEventCount === 0,
+    "Source inventory summaries should distinguish keyed Ticketmaster live API imports from fixtures."
+  );
+  const discardOnlyTicketmasterClient: TicketmasterDiscoveryClient = {
+    async listEvents() {
+      return {
+        _embedded: {
+          events: [
+            {
+              ...linkOnlyTicketmasterEvent,
+              id: "tm-discard-missing-start",
+              dates: undefined
+            }
+          ]
+        },
+        page: {
+          totalElements: 1
+        }
+      };
+    }
+  };
+  const discardDiagnostics = await createTicketmasterProviderDiagnostics(
+    {
+      areaId: "nyc",
+      categories: ["dance"],
+      query: "",
+      onlyDeals: false,
+      dateWindow: "week",
+      referenceNow
+    },
+    {
+      apiKey: "diagnostic-key",
+      client: discardOnlyTicketmasterClient,
+      now: () => new Date(referenceNow)
+    }
+  );
+
+  assert(
+    discardDiagnostics.discardedEventCount === 1 &&
+      discardDiagnostics.discardReasons[0]?.id === "missing-start",
+    "Provider diagnostics should expose discarded Ticketmaster events and their reasons."
   );
   assert(
     ticketmasterDiagnostics.requests.every(

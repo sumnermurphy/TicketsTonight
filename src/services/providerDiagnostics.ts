@@ -33,8 +33,11 @@ export type TicketmasterProviderDiagnosticsSummary = {
   normalizedShowCount: number;
   uniqueShowCount: number;
   duplicateShowCount: number;
+  duplicateRatePercent: number;
+  discardedEventCount: number;
   filteredShowCount: number;
   ticketLinkCount: number;
+  ticketLinkCoveragePercent: number;
   pricedOfferCount: number;
   linkOnlyOfferCount: number;
   requests: TicketmasterProviderDiagnosticRequest[];
@@ -56,6 +59,9 @@ export async function createTicketmasterProviderDiagnostics(
     .filter((show): show is Show => Boolean(show));
   const uniqueShows = dedupeShowsById(normalizedShows);
   const filteredShows = filterShows(uniqueShows, filters);
+  const duplicateShowCount = normalizedShows.length - uniqueShows.length;
+  const discardedEventCount = normalizationResults.length - normalizedShows.length;
+  const ticketLinkCount = filteredShows.filter(hasTicketLink).length;
 
   return {
     providerId: "ticketmaster-discovery",
@@ -65,9 +71,12 @@ export async function createTicketmasterProviderDiagnostics(
     rawEventCount: fetchResult.events.length,
     normalizedShowCount: normalizedShows.length,
     uniqueShowCount: uniqueShows.length,
-    duplicateShowCount: normalizedShows.length - uniqueShows.length,
+    duplicateShowCount,
+    duplicateRatePercent: getPercent(duplicateShowCount, normalizedShows.length),
+    discardedEventCount,
     filteredShowCount: filteredShows.length,
-    ticketLinkCount: filteredShows.filter(hasTicketLink).length,
+    ticketLinkCount,
+    ticketLinkCoveragePercent: getPercent(ticketLinkCount, filteredShows.length),
     pricedOfferCount: countOffers(filteredShows, (offer) => offer.priceCents !== undefined),
     linkOnlyOfferCount: countOffers(
       filteredShows,
@@ -143,4 +152,12 @@ function createDiscardReasonCounts(
       count: reasons.filter((candidate) => candidate === reason).length
     }))
     .filter((count) => count.count > 0);
+}
+
+function getPercent(numerator: number, denominator: number): number {
+  if (denominator <= 0) {
+    return 0;
+  }
+
+  return Math.round((numerator / denominator) * 100);
 }
