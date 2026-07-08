@@ -1,11 +1,12 @@
 # Tickets Tonight
 
-Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ballet, opera, theater, comedy, and adjacent live events. The active MVP is discovery plus discount tracking; checkout and Spotify personalization are intentionally deferred.
+Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ballet, opera, plays, theater, comedy, and adjacent live events. The active MVP is discovery plus discount tracking; checkout and Spotify personalization are intentionally deferred.
 
 ## What is built
 
 - Expo React Native app with provider-backed local-area event discovery.
 - City selector, near-me area resolution, search, category filters, date windows, deal-only filtering, event cards, and a show-detail sheet.
+- First-class category coverage for concerts, DJ sets, dance, ballet, opera, plays, theater, and comedy.
 - Deal-aware ticket inventory with list prices, savings, access method, inventory source, and max quantities.
 - Checkout groundwork remains behind services, but purchase UI, account sign-in, and wallet are out of the active MVP for now.
 - Saved shows, deal alerts, in-app deal notifications, and persisted discovery preferences through a replaceable repository layer.

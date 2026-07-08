@@ -53,7 +53,7 @@ export function filterShows(candidates: Show[], filters: ShowSearchFilters): Sho
         .join(" ")
         .toLowerCase();
 
-      return searchableText.includes(query);
+      return normalize(searchableText).includes(query);
     })
     .sort((first, second) => {
       const dateDelta =

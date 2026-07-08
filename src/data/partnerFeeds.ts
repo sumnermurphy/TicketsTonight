@@ -69,7 +69,7 @@ export const partnerFeedEvents: PartnerFeedEvent[] = [
         perks: ["Post-show bar"]
       }
     ],
-    recommendationSignals: ["category:theater"]
+    recommendationSignals: ["category:play"]
   },
   {
     providerId: "nightlist",
@@ -137,6 +137,6 @@ export const partnerFeedEvents: PartnerFeedEvent[] = [
         perks: ["Mobile entry"]
       }
     ],
-    recommendationSignals: ["category:theater"]
+    recommendationSignals: ["category:play"]
   }
 ];

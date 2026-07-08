@@ -1,4 +1,4 @@
-import { areas } from "../src/data/catalog";
+import { areas, categoryLabels } from "../src/data/catalog";
 import { discoveryMarketPlans } from "../src/data/discoveryPlans";
 import { partnerFeedEvents } from "../src/data/partnerFeeds";
 import { ticketmasterDiscoveryFixture } from "../src/data/ticketmasterFixtures";
@@ -78,6 +78,11 @@ async function main() {
     areaIds.join("|") === "nyc|la|hudson",
     "Discovery markets should be narrowed to New York, Los Angeles, and Hudson."
   );
+  assert(
+    (Object.keys(categoryLabels) as string[]).join("|") ===
+      "concert|dj|dance|ballet|opera|play|theater|comedy",
+    "Discovery categories should cover concerts, DJ sets, dance, ballet, opera, plays, theater, and comedy."
+  );
   assert(areas[0]?.discoveryRole === "primary", "New York should be the primary alpha market.");
   assert(
     areas.find((area) => area.id === "hudson")?.discoveryRole === "test",
@@ -152,7 +157,7 @@ async function main() {
   );
 
   const normalizedPlay = normalizeFeedEvent(partnerFeedEvents[0]!);
-  assert(normalizedPlay.category === "theater", "Partner taxonomy should normalize theatre/play to theater.");
+  assert(normalizedPlay.category === "play", "Partner taxonomy should normalize plays separately from theater.");
   assert(
     normalizedPlay.ticketOffers[0]?.deal?.label === "Preview price",
     "Partner feed deal metadata should map onto ticket offers."
@@ -160,7 +165,7 @@ async function main() {
 
   const feedSearch = searchShows({
     areaId: "nyc",
-    categories: ["theater"],
+    categories: ["play"],
     query: "Small Hours",
     onlyDeals: true,
     dateWindow: "week",
@@ -170,6 +175,34 @@ async function main() {
   assert(
     feedSearch.some((show) => show.id === "feed-venuecloud-vc-1001"),
     "Search should include normalized partner feed events."
+  );
+
+  const comedySearch = searchShows({
+    areaId: "nyc",
+    categories: ["comedy"],
+    query: "stand-up",
+    onlyDeals: true,
+    dateWindow: "weekend",
+    referenceNow
+  });
+
+  assert(
+    comedySearch.some((show) => show.id === "show-canal-comedy"),
+    "NYC primary discovery should include discounted comedy inventory."
+  );
+
+  const theaterSearch = searchShows({
+    areaId: "nyc",
+    categories: ["theater"],
+    query: "musical",
+    onlyDeals: true,
+    dateWindow: "week",
+    referenceNow
+  });
+
+  assert(
+    theaterSearch.some((show) => show.id === "show-midtown-revue"),
+    "NYC primary discovery should include theater inventory separately from plays."
   );
 
   const compositeResults = await eventProvider.listShows({
@@ -206,7 +239,7 @@ async function main() {
 
   const hudsonFeedResults = await eventProvider.listShows({
     areaId: "hudson",
-    categories: ["theater"],
+    categories: ["play"],
     query: "Orchard",
     onlyDeals: true,
     dateWindow: "week",
@@ -242,6 +275,28 @@ async function main() {
   assert(
     ticketmasterUrl.searchParams.get("classificationName") === "theatre",
     "Ticketmaster requests should map app categories into provider classifications."
+  );
+  const ticketmasterPlayUrl = new URL(
+    buildTicketmasterDiscoveryUrl(
+      {
+        areaId: "nyc",
+        categories: ["play"],
+        query: "",
+        onlyDeals: false,
+        dateWindow: "week",
+        referenceNow
+      },
+      {
+        apiKey: "test-key",
+        now: () => new Date(referenceNow),
+        radiusMiles: 20
+      }
+    )
+  );
+
+  assert(
+    ticketmasterPlayUrl.searchParams.get("classificationName") === "theatre",
+    "Ticketmaster play requests should use the theatre provider classification."
   );
 
   const rawTicketmasterEvent = ticketmasterDiscoveryFixture._embedded?.events?.[0];

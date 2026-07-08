@@ -4,6 +4,7 @@ export type ShowCategory =
   | "dance"
   | "ballet"
   | "opera"
+  | "play"
   | "theater"
   | "comedy";
 

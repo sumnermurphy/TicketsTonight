@@ -359,6 +359,7 @@ function getCategoryTone(category: ShowCategory): string {
     dance: "#28706D",
     ballet: "#0D7C75",
     opera: "#D9A441",
+    play: "#314E66",
     theater: "#314E66",
     comedy: "#B73A26"
   };
@@ -373,6 +374,7 @@ function getClassificationNames(categories: ShowCategory[]): string[] {
     dance: ["dance"],
     ballet: ["ballet"],
     opera: ["opera"],
+    play: ["theatre"],
     theater: ["theatre"],
     comedy: ["comedy"]
   };

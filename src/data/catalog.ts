@@ -39,6 +39,7 @@ export const categoryLabels: Record<ShowCategory, string> = {
   dance: "Dance",
   ballet: "Ballet",
   opera: "Opera",
+  play: "Plays",
   theater: "Theater",
   comedy: "Comedy"
 };
@@ -180,7 +181,7 @@ export const shows: Show[] = [
     id: "show-othello",
     title: "Othello",
     artistOrCompany: "Warehouse Stage Company",
-    category: "theater",
+    category: "play",
     startsAt: "2026-07-10T20:00:00-04:00",
     venue: "Pier 4 Playhouse",
     neighborhood: "Red Hook",
@@ -202,7 +203,81 @@ export const shows: Show[] = [
     ],
     source: "venue-direct",
     imageTone: "#314E66",
-    recommendationSignals: ["category:theater"]
+    recommendationSignals: ["category:play"]
+  },
+  {
+    id: "show-canal-comedy",
+    title: "Canal Room Stand-Up",
+    artistOrCompany: "Maya Lin, Drew Sato, Eli Price",
+    category: "comedy",
+    startsAt: "2026-07-11T21:30:00-04:00",
+    venue: "Canal Room",
+    neighborhood: "SoHo",
+    areaId: "nyc",
+    distanceMiles: 1.6,
+    vibe: ["stand-up", "late show", "small room"],
+    description: "A tight late-night comedy showcase with touring comics and downtown regulars.",
+    ticketOffers: [
+      {
+        id: "late-show",
+        label: "Late show seat",
+        priceCents: 2400,
+        listPriceCents: 3200,
+        currency: "USD",
+        remaining: 32,
+        maxQuantity: 6,
+        access: "mobile-entry",
+        source: "promoter",
+        deal: {
+          id: "deal-canal-comedy-late",
+          label: "Late-show deal",
+          description: "Promoter allocation for filling the late room.",
+          amountOffCents: 800,
+          expiresAt: "2026-07-11T20:30:00-04:00"
+        },
+        perks: ["Mobile entry"]
+      }
+    ],
+    source: "promoter",
+    imageTone: "#B73A26",
+    recommendationSignals: ["category:comedy"]
+  },
+  {
+    id: "show-midtown-revue",
+    title: "Midtown Revue",
+    artistOrCompany: "48th Street Workshop",
+    category: "theater",
+    startsAt: "2026-07-13T19:00:00-04:00",
+    venue: "Orpheum Studio",
+    neighborhood: "Theater District",
+    areaId: "nyc",
+    distanceMiles: 2.8,
+    vibe: ["musical theater", "workshop", "new songs"],
+    description: "A staged musical-theater workshop with a rotating cast and piano-led arrangements.",
+    ticketOffers: [
+      {
+        id: "preview",
+        label: "Preview seat",
+        priceCents: 4200,
+        listPriceCents: 5200,
+        currency: "USD",
+        remaining: 18,
+        maxQuantity: 6,
+        access: "mobile-entry",
+        source: "venue-direct",
+        deal: {
+          id: "deal-midtown-revue-preview",
+          label: "Workshop preview",
+          description: "Preview allocation for early audience feedback.",
+          amountOffCents: 1000,
+          expiresAt: "2026-07-13T17:00:00-04:00"
+        },
+        perks: ["Talkback optional"]
+      }
+    ],
+    source: "venue-direct",
+    imageTone: "#314E66",
+    recommendationSignals: ["category:theater", "category:musical"]
   },
   {
     id: "show-pacific-opera",

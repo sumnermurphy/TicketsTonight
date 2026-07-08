@@ -4,7 +4,7 @@ export const discoveryMarketPlans: DiscoveryMarketPlan[] = [
   {
     areaId: "nyc",
     priority: 1,
-    categoryFocus: ["concert", "dj", "dance", "ballet", "opera", "theater"],
+    categoryFocus: ["concert", "dj", "dance", "ballet", "opera", "play", "theater", "comedy"],
     discountLevers: [
       "same-day drops",
       "preview allocations",
@@ -17,7 +17,7 @@ export const discoveryMarketPlans: DiscoveryMarketPlan[] = [
         label: "NY seed catalog",
         sourceType: "seed-catalog",
         status: "active-fixture",
-        categories: ["concert", "dj", "ballet", "theater"],
+        categories: ["concert", "dj", "ballet", "play", "theater", "comedy"],
         notes: "Keeps the primary alpha experience usable while provider integrations are wired in."
       },
       {
@@ -25,7 +25,7 @@ export const discoveryMarketPlans: DiscoveryMarketPlan[] = [
         label: "NY partner feed",
         sourceType: "partner-feed",
         status: "active-fixture",
-        categories: ["theater"],
+        categories: ["play"],
         notes: "Exercises normalized feed inventory, preview pricing, and deal alerts."
       },
       {
@@ -33,7 +33,7 @@ export const discoveryMarketPlans: DiscoveryMarketPlan[] = [
         label: "Ticketmaster Discovery",
         sourceType: "marketplace-api",
         status: "integration-ready",
-        categories: ["concert", "dj", "dance", "ballet", "opera", "theater", "comedy"],
+        categories: ["concert", "dj", "dance", "ballet", "opera", "play", "theater", "comedy"],
         notes: "First real inventory adapter for city/category/date discovery and cached detail lookup."
       },
       {
@@ -41,7 +41,7 @@ export const discoveryMarketPlans: DiscoveryMarketPlan[] = [
         label: "Venue-direct performing arts",
         sourceType: "venue-direct",
         status: "partner-needed",
-        categories: ["dance", "ballet", "opera", "theater"],
+        categories: ["dance", "ballet", "opera", "play", "theater"],
         notes: "Best path to controlled discount experiments for performing arts inventory."
       },
       {
@@ -57,7 +57,7 @@ export const discoveryMarketPlans: DiscoveryMarketPlan[] = [
   {
     areaId: "la",
     priority: 2,
-    categoryFocus: ["concert", "dj", "opera", "theater", "dance"],
+    categoryFocus: ["concert", "dj", "opera", "play", "theater", "dance", "comedy"],
     discountLevers: [
       "early arrival",
       "same-week unsold inventory",
@@ -86,7 +86,7 @@ export const discoveryMarketPlans: DiscoveryMarketPlan[] = [
         label: "Marketplace API expansion",
         sourceType: "marketplace-api",
         status: "integration-ready",
-        categories: ["concert", "dj", "opera", "theater", "comedy"],
+        categories: ["concert", "dj", "opera", "play", "theater", "comedy"],
         notes: "Reuses the provider adapter pattern after New York proves the shape."
       },
       {
@@ -94,7 +94,7 @@ export const discoveryMarketPlans: DiscoveryMarketPlan[] = [
         label: "Venue-direct arts inventory",
         sourceType: "venue-direct",
         status: "partner-needed",
-        categories: ["dance", "opera", "theater"],
+        categories: ["dance", "opera", "play", "theater"],
         notes: "Validates whether venue-direct supply differs enough from marketplace inventory."
       }
     ]
@@ -102,7 +102,7 @@ export const discoveryMarketPlans: DiscoveryMarketPlan[] = [
   {
     areaId: "hudson",
     priority: 3,
-    categoryFocus: ["dance", "opera", "theater", "concert"],
+    categoryFocus: ["dance", "opera", "play", "theater", "concert"],
     discountLevers: [
       "regional preview allocations",
       "weekend-trip bundles",
@@ -123,7 +123,7 @@ export const discoveryMarketPlans: DiscoveryMarketPlan[] = [
         label: "Hudson partner feed",
         sourceType: "partner-feed",
         status: "active-fixture",
-        categories: ["theater"],
+        categories: ["play"],
         notes: "Exercises regional preview pricing and smaller-market feed normalization."
       },
       {
@@ -131,7 +131,7 @@ export const discoveryMarketPlans: DiscoveryMarketPlan[] = [
         label: "Regional calendar feed",
         sourceType: "calendar-feed",
         status: "integration-ready",
-        categories: ["concert", "dance", "opera", "theater"],
+        categories: ["concert", "dance", "opera", "play", "theater"],
         notes: "Best next source pattern for small-market calendars and weekend arts discovery."
       },
       {
@@ -139,7 +139,7 @@ export const discoveryMarketPlans: DiscoveryMarketPlan[] = [
         label: "Venue-direct regional arts",
         sourceType: "venue-direct",
         status: "partner-needed",
-        categories: ["concert", "dance", "opera", "theater"],
+        categories: ["concert", "dance", "opera", "play", "theater"],
         notes: "Gives the discount strategy a direct path to regional allocations."
       }
     ]

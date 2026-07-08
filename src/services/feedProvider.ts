@@ -15,13 +15,27 @@ const categoryAliases: Record<string, ShowCategory> = {
   house: "dj",
   musical: "theater",
   music: "concert",
+  "new writing": "play",
   opera: "opera",
   pop: "concert",
-  play: "theater",
+  play: "play",
+  plays: "play",
+  drama: "play",
   rock: "concert",
   theatre: "theater",
   theater: "theater"
 };
+
+const categoryPriority: ShowCategory[] = [
+  "ballet",
+  "opera",
+  "dance",
+  "dj",
+  "play",
+  "comedy",
+  "theater",
+  "concert"
+];
 
 export function normalizeFeedEvent(event: PartnerFeedEvent): Show {
   return {
@@ -44,15 +58,17 @@ export function normalizeFeedEvent(event: PartnerFeedEvent): Show {
 }
 
 export function normalizeCategory(taxonomy: Array<string | undefined>): ShowCategory {
+  const matches = new Set<ShowCategory>();
+
   for (const value of taxonomy) {
     const category = value ? categoryAliases[value.trim().toLowerCase()] : undefined;
 
     if (category) {
-      return category;
+      matches.add(category);
     }
   }
 
-  return "concert";
+  return categoryPriority.find((category) => matches.has(category)) ?? "concert";
 }
 
 function normalizeFeedOffer(event: PartnerFeedEvent, offer: PartnerFeedOffer): TicketOffer {
