@@ -675,6 +675,11 @@ export default function App() {
       openShowDetails(show);
     }
   };
+  const showSpotifyEmptyState =
+    tasteEnabled &&
+    musicConnection?.status === "connected" &&
+    !tasteLoading &&
+    !recommendations.length;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -1233,6 +1238,16 @@ export default function App() {
                   />
                 ))}
               </ScrollView>
+            </View>
+          ) : showSpotifyEmptyState ? (
+            <View style={styles.recommendationEmptyPanel}>
+              <View style={styles.inlineTitlePadded}>
+                <Music2 color={colors.plum} size={18} />
+                <Text style={styles.sectionTitle}>Spotify picks</Text>
+              </View>
+              <Text style={styles.recommendationEmptyCopy}>
+                No strong Spotify matches in {selectedArea?.name} yet. More local inventory will make this smarter.
+              </Text>
             </View>
           ) : null}
 
@@ -3173,6 +3188,17 @@ const styles = StyleSheet.create({
   },
   recommendationPanel: {
     marginTop: spacing.sm
+  },
+  recommendationEmptyPanel: {
+    marginTop: spacing.sm
+  },
+  recommendationEmptyCopy: {
+    color: colors.mutedInk,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md
   },
   recommendationRail: {
     gap: spacing.md,

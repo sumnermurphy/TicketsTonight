@@ -13,6 +13,7 @@
     "audit:quality": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/discoveryQualityAudit.ts && node .audit-build/scripts/discoveryQualityAudit.js",
     "audit:live-supply": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/liveSupplyAudit.ts && node .audit-build/scripts/liveSupplyAudit.js",
     "audit:providers": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/providerDiagnostics.ts && node .audit-build/scripts/providerDiagnostics.js",
+    "audit:spotify": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/spotifyConfigAudit.ts && node .audit-build/scripts/spotifyConfigAudit.js",
     "test:services": "tsc --ignoreConfig --outDir .test-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict tests/serviceChecks.ts && node .test-build/tests/serviceChecks.js"
   },
   "engines": {

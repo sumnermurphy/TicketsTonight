@@ -1,4 +1,4 @@
-import { shows } from "../data/catalog";
+import { categoryLabels, shows } from "../data/catalog";
 import { normalizedLocalCalendarShows } from "./calendarFeedProvider";
 import { normalizedPartnerFeedShows } from "./feedProvider";
 import type {
@@ -7,6 +7,7 @@ import type {
   InventorySource,
   Recommendation,
   RecommendationContext,
+  RecommendationMatch,
   Show,
   ShowSearchFilters,
   ShowCategory,
@@ -111,37 +112,36 @@ export function getRecommendedShowsFromCatalog(
   return candidates
     .filter((show) => show.areaId === context.areaId)
     .map((show) => {
-      const categoryScore = recentCategories.has(show.category) ? 2 : 0;
       const showText = normalize(
         [show.title, show.artistOrCompany, show.venue, show.category, ...show.vibe].join(" ")
       );
-      const matchedArtist = findContainedSignal(showText, artistSignals);
-      const matchedTrack = findContainedSignal(showText, trackSignals);
-      const genreMatches = getGenreMatchCount(show, genreSignals);
-      const score =
-        (matchedArtist ? 5 : 0) +
-        (matchedTrack ? 3 : 0) +
-        genreMatches * 2 +
-        categoryScore;
+      const matches = getRecommendationMatches({
+        show,
+        showText,
+        artistSignals,
+        trackSignals,
+        genreSignals,
+        recentCategories
+      });
+      const matchScore = getRecommendationMatchScore(matches);
+      const score = matchScore ? matchScore + getMarketRecommendationBoost(show) : 0;
 
-      const reason =
-        matchedArtist
-          ? `Matches ${matchedArtist} from Spotify`
-          : matchedTrack
-            ? "Matches a top Spotify track"
-            : genreMatches > 0
-              ? "Matches your Spotify genres"
-              : categoryScore > 0
-                ? `Because you browse ${show.category}`
-                : "";
-
-      return { show, score, reason };
+      return {
+        show,
+        score,
+        reason: createRecommendationReason(show, matches),
+        matches
+      };
     })
     .filter(({ score }) => score > 0)
     .sort(
       (first, second) =>
         second.score - first.score || first.show.startsAt.localeCompare(second.show.startsAt)
     );
+}
+
+export function getSpotifyMatchableShows(candidates: Show[]): Show[] {
+  return candidates.filter(hasSpotifyRecommendationSignals);
 }
 
 function normalizeSignals(values: string[]): Map<string, string> {
@@ -168,10 +168,106 @@ function findContainedSignal(showText: string, signals: Map<string, string>): st
   return undefined;
 }
 
-function getGenreMatchCount(show: Show, genreSignals: Map<string, string>): number {
+function getRecommendationMatches({
+  show,
+  showText,
+  artistSignals,
+  trackSignals,
+  genreSignals,
+  recentCategories
+}: {
+  show: Show;
+  showText: string;
+  artistSignals: Map<string, string>;
+  trackSignals: Map<string, string>;
+  genreSignals: Map<string, string>;
+  recentCategories: Set<ShowCategory>;
+}): RecommendationMatch[] {
+  const matches: RecommendationMatch[] = [];
+  const matchedArtist = findContainedSignal(showText, artistSignals);
+  const matchedTrack = findContainedSignal(showText, trackSignals);
+
+  if (matchedArtist) {
+    matches.push({ kind: "artist", value: matchedArtist });
+  }
+
+  if (matchedTrack) {
+    matches.push({ kind: "track", value: matchedTrack });
+  }
+
+  for (const genre of getGenreMatches(show, genreSignals)) {
+    matches.push({ kind: "genre", value: genre });
+  }
+
+  if (recentCategories.has(show.category)) {
+    matches.push({ kind: "category", value: categoryLabels[show.category] });
+  }
+
+  return matches;
+}
+
+function getRecommendationMatchScore(matches: RecommendationMatch[]): number {
+  const weights: Record<RecommendationMatch["kind"], number> = {
+    artist: 8,
+    track: 5,
+    genre: 3,
+    category: 2
+  };
+
+  return matches.reduce((score, match) => score + weights[match.kind], 0);
+}
+
+function createRecommendationReason(show: Show, matches: RecommendationMatch[]): string {
+  const artistMatch = matches.find((match) => match.kind === "artist");
+  const trackMatch = matches.find((match) => match.kind === "track");
+  const genreMatches = matches.filter((match) => match.kind === "genre");
+  const categoryMatch = matches.find((match) => match.kind === "category");
+
+  if (artistMatch) {
+    return `Because you listen to ${artistMatch.value}`;
+  }
+
+  if (trackMatch) {
+    return `Because "${trackMatch.value}" is in your Spotify top tracks`;
+  }
+
+  if (genreMatches.length) {
+    const [firstGenre] = genreMatches;
+    const extraCount = genreMatches.length - 1;
+
+    return extraCount > 0
+      ? `Matches ${firstGenre!.value} and ${extraCount} more Spotify tastes`
+      : `Matches your ${firstGenre!.value} Spotify taste`;
+  }
+
+  if (categoryMatch) {
+    return `Because your Spotify taste points to ${categoryMatch.value.toLowerCase()}`;
+  }
+
+  return show.neighborhood;
+}
+
+function getMarketRecommendationBoost(show: Show): number {
+  return (
+    Math.round((sourceDisplayPriority[show.source] ?? 0) / 20) +
+    Math.max(0, 3 - Math.floor(show.distanceMiles / 3))
+  );
+}
+
+function getGenreMatches(show: Show, genreSignals: Map<string, string>): string[] {
   const signalValues = [...show.vibe, ...(show.recommendationSignals ?? []).map(getSignalValue)];
 
-  return signalValues.filter((signal) => genreSignals.has(normalize(signal))).length;
+  return uniqueValues(
+    signalValues
+      .map((signal) => genreSignals.get(normalize(signal)))
+      .filter((genre): genre is string => Boolean(genre))
+  );
+}
+
+function hasSpotifyRecommendationSignals(show: Show): boolean {
+  return (show.recommendationSignals ?? []).some((signal) =>
+    ["spotify:", "category:"].some((prefix) => signal.startsWith(prefix))
+  );
 }
 
 function getSignalValue(signal: string): string {

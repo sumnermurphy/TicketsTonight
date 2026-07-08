@@ -17,6 +17,8 @@ export type LiveSupplyAuditSummary = {
   ticketLinkCount: number;
   ticketLinkCoveragePercent: number;
   targetTicketLinkCoveragePercent: number;
+  activeCategoryCount: number;
+  spotifyMatchableCount: number;
   pricedOfferCount: number;
   linkOnlyOfferCount: number;
   status: LiveSupplyAuditStatus;
@@ -36,7 +38,7 @@ export function createLiveSupplyAudit(
   options: LiveSupplyAuditOptions
 ): LiveSupplyAuditSummary {
   const defaultTarget = getDefaultCoverageAuditTarget(options.areaId);
-  const targetEventCount = options.targetEventCount ?? 50;
+  const targetEventCount = options.targetEventCount ?? Math.min(50, defaultTarget.eventCount);
   const targetTicketLinkCoveragePercent =
     options.targetTicketLinkCoveragePercent ?? defaultTarget.ticketLinkCoveragePercent;
   const coverageAudit = createCoverageAudit(shows, {
@@ -65,6 +67,8 @@ export function createLiveSupplyAudit(
     ticketLinkCount: coverageAudit.ticketLinkCount,
     ticketLinkCoveragePercent: coverageAudit.ticketLinkCoveragePercent,
     targetTicketLinkCoveragePercent,
+    activeCategoryCount: coverageAudit.activeCategoryCount,
+    spotifyMatchableCount: coverageAudit.spotifyMatchableCount,
     pricedOfferCount: coverageAudit.pricedOfferCount,
     linkOnlyOfferCount: coverageAudit.linkOnlyOfferCount,
     status: getLiveSupplyAuditStatus(
@@ -90,14 +94,14 @@ export function getLiveSupplyAuditStatusCopy(summary: LiveSupplyAuditSummary): s
 
 export function getLiveSupplyAuditActionCopy(summary: LiveSupplyAuditSummary): string {
   if (summary.status === "ready") {
-    return `${summary.eventCount} NYC events with ${summary.ticketLinkCoveragePercent}% ticket-link coverage`;
+    return `${summary.eventCount} ${summary.areaId.toUpperCase()} events with ${summary.ticketLinkCoveragePercent}% ticket-link coverage`;
   }
 
   if (summary.status === "needs-links") {
     return `${summary.ticketLinkCoveragePercent}% ticket-link coverage; target ${summary.targetTicketLinkCoveragePercent}%`;
   }
 
-  return `${summary.eventGapCount} more NYC events needed to reach ${summary.targetEventCount}`;
+  return `${summary.eventGapCount} more ${summary.areaId.toUpperCase()} events needed to reach ${summary.targetEventCount}`;
 }
 
 function getLiveSupplyAuditStatus(

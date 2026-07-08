@@ -259,10 +259,18 @@ export type RecommendationContext = {
   recentCategories?: ShowCategory[];
 };
 
+export type RecommendationMatchKind = "artist" | "track" | "genre" | "category";
+
+export type RecommendationMatch = {
+  kind: RecommendationMatchKind;
+  value: string;
+};
+
 export type Recommendation = {
   show: Show;
   score: number;
   reason: string;
+  matches?: RecommendationMatch[];
 };
 
 export type EventProvider = {

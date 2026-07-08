@@ -8,6 +8,7 @@ const DEFAULT_SPOTIFY_AUTHORIZATION_ENDPOINT = "https://accounts.spotify.com/aut
 const DEFAULT_SPOTIFY_TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
 const DEFAULT_SPOTIFY_API_BASE_URL = "https://api.spotify.com/v1";
 
+export const defaultSpotifyRedirectUri = "ticketstonight://spotify-auth";
 export const spotifyScopes = ["user-top-read"];
 
 type PublicSpotifyEnv = {
@@ -257,7 +258,7 @@ export class SpotifyTasteProfileProvider implements TasteProfileProvider {
 export class ExpoSpotifyAuthAdapter implements SpotifyAuthAdapter {
   async authorize(request: SpotifyAuthorizationRequest): Promise<SpotifyAuthorizationResult> {
     const AuthSession = await loadAuthSession();
-    const redirectUri = request.redirectUri ?? createSpotifyRedirectUri(AuthSession);
+    const redirectUri = request.redirectUri ?? defaultSpotifyRedirectUri;
     const authRequest = new AuthSession.AuthRequest({
       clientId: request.clientId,
       redirectUri,
@@ -459,14 +460,6 @@ function normalizeTokenResponse(tokenResponse: {
 
 async function loadAuthSession(): Promise<ExpoAuthSessionModule> {
   return import("expo-auth-session");
-}
-
-function createSpotifyRedirectUri(authSession: Pick<ExpoAuthSessionModule, "makeRedirectUri">) {
-  return authSession.makeRedirectUri({
-    scheme: "ticketstonight",
-    path: "spotify-auth",
-    preferLocalhost: true
-  });
 }
 
 function uniqueStrings(values: Array<string | undefined>): string[] {

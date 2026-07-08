@@ -1,6 +1,6 @@
 import { categoryLabels } from "../data/catalog";
 import type { InventorySource, Show, ShowCategory } from "../types";
-import { isWithinDateWindow } from "./eventCatalog";
+import { getSpotifyMatchableShows, isWithinDateWindow } from "./eventCatalog";
 import { getSafeTicketUrl } from "./ticketLinks";
 
 export type CoverageAuditStatus =
@@ -48,6 +48,8 @@ export type CoverageAuditSummary = {
   ticketLinkCount: number;
   ticketLinkCoveragePercent: number;
   targetTicketLinkCoveragePercent: number;
+  activeCategoryCount: number;
+  spotifyMatchableCount: number;
   pricedOfferCount: number;
   linkOnlyOfferCount: number;
   status: CoverageAuditStatus;
@@ -151,6 +153,7 @@ export function createCoverageAudit(
   const linkOnlyOfferCount = getLinkOnlyOfferCount(auditedShows);
   const ticketLinkCoveragePercent = getPercent(ticketLinkCount, auditedShows.length);
   const categoryCounts = createCategoryCounts(auditedShows);
+  const activeCategoryCount = categoryCounts.filter((categoryCount) => categoryCount.count > 0).length;
   const categoryCountsByCategory = new Map(
     categoryCounts.map((categoryCount) => [categoryCount.category, categoryCount.count])
   );
@@ -183,6 +186,8 @@ export function createCoverageAudit(
     ticketLinkCount,
     ticketLinkCoveragePercent,
     targetTicketLinkCoveragePercent: target.ticketLinkCoveragePercent,
+    activeCategoryCount,
+    spotifyMatchableCount: getSpotifyMatchableShows(auditedShows).length,
     pricedOfferCount,
     linkOnlyOfferCount,
     status,

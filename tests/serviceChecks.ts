@@ -56,6 +56,7 @@ import {
   getRecommendedShows,
   getRecommendedShowsFromCatalog,
   getShowById,
+  getSpotifyMatchableShows,
   LocalCatalogProvider,
   searchShows
 } from "../src/services/eventCatalog";
@@ -89,6 +90,7 @@ import {
   type SpotifyAuthorizationRequest,
   type SpotifyCodeExchangeRequest
 } from "../src/services/personalization";
+import { createSpotifyConfigAudit } from "../src/services/spotifyConfigAudit";
 import { AppRepository, MemoryStorageAdapter } from "../src/services/storage";
 import { authProvider } from "../src/services/auth";
 import { mockCardPaymentMethod, paymentProvider } from "../src/services/payments";
@@ -318,10 +320,40 @@ async function main() {
     referenceNow,
     windowDays: 30
   });
+  const laAreaInventory = searchShows({
+    areaId: "la",
+    categories: [],
+    query: "",
+    onlyDeals: false,
+    dateWindow: "all",
+    referenceNow
+  });
+  const hudsonAreaInventory = searchShows({
+    areaId: "hudson",
+    categories: [],
+    query: "",
+    onlyDeals: false,
+    dateWindow: "all",
+    referenceNow
+  });
+  const laCoverageAudit = createCoverageAudit(laAreaInventory, {
+    areaId: "la",
+    referenceNow,
+    windowDays: 30
+  });
+  const hudsonCoverageAudit = createCoverageAudit(hudsonAreaInventory, {
+    areaId: "hudson",
+    referenceNow,
+    windowDays: 30
+  });
   const nycLiveSupplyAudit = createLiveSupplyAudit(nycAreaInventory, {
     areaId: "nyc",
     referenceNow,
     targetEventCount: 50
+  });
+  const hudsonLiveSupplyAudit = createLiveSupplyAudit(hudsonAreaInventory, {
+    areaId: "hudson",
+    referenceNow
   });
   const nycNeighborhoodFacets = getNeighborhoodFacets(nycAreaInventory);
   const lowerEastSideFacet = nycNeighborhoodFacets.find(
@@ -430,6 +462,24 @@ async function main() {
     "Coverage audit should report source breadth for provider expansion checks."
   );
   assert(
+    nycCoverageAudit.activeCategoryCount === nycMarketSummary.activeCategoryCount &&
+      nycCoverageAudit.spotifyMatchableCount === getSpotifyMatchableShows(nycAreaInventory).length,
+    "Coverage audit should report active categories and Spotify-matchable inventory."
+  );
+  assert(
+    laCoverageAudit.targetEventCount === 100 &&
+      laCoverageAudit.activeCategoryCount >= 3 &&
+      laCoverageAudit.spotifyMatchableCount > 0,
+    "Los Angeles coverage audit should expose secondary-market readiness and Spotify-matchable supply."
+  );
+  assert(
+    hudsonCoverageAudit.targetEventCount === 30 &&
+      hudsonCoverageAudit.targetTicketLinkCoveragePercent === 60 &&
+      hudsonCoverageAudit.activeCategoryCount >= 4 &&
+      hudsonCoverageAudit.spotifyMatchableCount > 0,
+    "Hudson coverage audit should expose smaller-market readiness targets and Spotify-matchable supply."
+  );
+  assert(
     nycLiveSupplyAudit.eventCount === nycAreaInventory.length &&
       nycLiveSupplyAudit.targetEventCount === 50 &&
       nycLiveSupplyAudit.eventGapCount === 42 &&
@@ -440,6 +490,11 @@ async function main() {
     getLiveSupplyAuditStatusCopy(nycLiveSupplyAudit) === "Needs more live events" &&
       getLiveSupplyAuditActionCopy(nycLiveSupplyAudit).includes("42 more NYC events"),
     "Live supply audit copy should make the next NYC event gap explicit."
+  );
+  assert(
+    hudsonLiveSupplyAudit.targetEventCount === 30 &&
+      getLiveSupplyAuditActionCopy(hudsonLiveSupplyAudit).includes("HUDSON events"),
+    "Live supply audit should use the smaller Hudson market target by default."
   );
   assert(
     nycMarketSummary.activeCategoryCount ===
@@ -1567,11 +1622,15 @@ async function main() {
   });
 
   assert(recommendations.length > 0, "Taste profile should produce recommendations.");
-  assert(recommendations[0]?.reason, "Recommendations should explain why they were selected.");
+  assert(
+    recommendations[0]?.reason && (recommendations[0].matches?.length ?? 0) > 0,
+    "Recommendations should explain why they were selected and expose structured match signals."
+  );
 
   const demoTasteProfileProvider = new DemoSpotifyTasteProvider();
   const musicConnection = await demoTasteProfileProvider.connectAccount();
   const musicContext = await demoTasteProfileProvider.getRecommendationContext("nyc", musicConnection);
+  const laMusicContext = await demoTasteProfileProvider.getRecommendationContext("la", musicConnection);
 
   assert(musicConnection.status === "connected", "Music provider should create a connected account.");
   assert(
@@ -1580,9 +1639,38 @@ async function main() {
   );
 
   const musicRecommendations = getRecommendedShows(musicContext);
+  const laMusicRecommendations = getRecommendedShowsFromCatalog(laAreaInventory, laMusicContext);
+  const hudsonClassicalRecommendations = getRecommendedShowsFromCatalog(hudsonAreaInventory, {
+    areaId: "hudson",
+    spotifyTopGenres: ["classical"],
+    recentCategories: ["opera", "ballet"]
+  });
+  const alinaRecommendation = musicRecommendations.find(
+    (recommendation) => recommendation.show.id === "show-alina-ives"
+  );
+
   assert(
-    musicRecommendations.some((recommendation) => recommendation.show.id === "show-alina-ives"),
+    alinaRecommendation?.reason === "Because you listen to Alina Ives" &&
+      alinaRecommendation.matches?.some((match) => match.kind === "artist"),
+    "Spotify artist matches should produce stronger explainable recommendation reasons."
+  );
+  assert(
+    musicRecommendations.some((recommendation) =>
+      recommendation.matches?.some((match) => match.kind === "genre" && match.value === "indie pop")
+    ),
     "Spotify genres with spaces should match catalog signals with hyphens."
+  );
+  assert(
+    laMusicRecommendations.length > 0 &&
+      laMusicRecommendations.every((recommendation) => recommendation.show.areaId === "la"),
+    "Spotify recommendations should stay scoped to the active Los Angeles market."
+  );
+  assert(
+    hudsonClassicalRecommendations.some(
+      (recommendation) => recommendation.show.id === "show-hudson-opera-lab"
+    ) &&
+      hudsonClassicalRecommendations.every((recommendation) => recommendation.show.areaId === "hudson"),
+    "Spotify recommendations should stay scoped to Hudson and lift classical/performing-arts matches."
   );
 
   const disconnectedMusicConnection = await demoTasteProfileProvider.disconnectAccount(musicConnection);
@@ -1594,6 +1682,36 @@ async function main() {
   assert(
     disconnectedContext.spotifyTopGenres?.length === 0,
     "Disconnected music account should stop contributing Spotify genres."
+  );
+  const missingSpotifyConfigAudit = createSpotifyConfigAudit({});
+  const readySpotifyConfigAudit = createSpotifyConfigAudit({
+    clientId: "spotify-public-client-id",
+    redirectUri: "ticketstonight://spotify-auth"
+  });
+  const secretSpotifyConfigAudit = createSpotifyConfigAudit(
+    {
+      clientId: "spotify-public-client-id"
+    },
+    {
+      clientSecret: "do-not-commit"
+    }
+  );
+
+  assert(
+    missingSpotifyConfigAudit.status === "missing-client-id" &&
+      missingSpotifyConfigAudit.redirectUri === "ticketstonight://spotify-auth",
+    "Spotify config audit should report a missing public client id and the default native redirect."
+  );
+  assert(
+    readySpotifyConfigAudit.status === "ready" &&
+      readySpotifyConfigAudit.redirectUriConfigured &&
+      readySpotifyConfigAudit.scopes.includes("user-top-read"),
+    "Spotify config audit should report public-client readiness without requiring a secret."
+  );
+  assert(
+    secretSpotifyConfigAudit.status === "client-secret-present" &&
+      secretSpotifyConfigAudit.action.includes("Remove Spotify client secrets"),
+    "Spotify config audit should flag client secrets as unsafe for app env."
   );
   const spotifyAuthorizationRequests: SpotifyAuthorizationRequest[] = [];
   const spotifyCodeExchangeRequests: SpotifyCodeExchangeRequest[] = [];

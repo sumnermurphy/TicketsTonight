@@ -12,7 +12,7 @@ Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ball
 - Discount discovery ranking that prioritizes stronger savings and urgent deal windows before checkout is active.
 - Deal alerts can track the current area/category/date filters with optional under-$35, under-$50, or under-$75 price thresholds.
 - External ticket links can be opened from provider-backed offers while in-app checkout remains deferred, including link-only provider listings when live sources do not expose prices.
-- NYC coverage audit targets 200 events over 30 days with 70% ticket-link coverage, exposed through a service, CLI script, and compact app summary with priced-vs-link-only counts.
+- Market coverage audits target New York, Los Angeles, and Hudson with ticket-link, category-lane, and Spotify-matchable inventory counts.
 - Checkout groundwork remains behind services, but purchase UI, account sign-in, and wallet are out of the active MVP for now.
 - Saved shows, deal alerts, in-app deal notifications, and persisted discovery preferences through a replaceable repository layer.
 - Spotify PKCE auth can connect a listener with `user-top-read`, pull top artists, tracks, and genres, and rank provider-backed recommendations in-app.
@@ -62,7 +62,7 @@ Optional Spotify recommendations can be enabled with a public Spotify app client
 EXPO_PUBLIC_SPOTIFY_CLIENT_ID=your_spotify_client_id npm run web
 ```
 
-Register the exact redirect URI in Spotify. Native builds use `ticketstonight://spotify-auth`; web builds can set `EXPO_PUBLIC_SPOTIFY_REDIRECT_URI` to the allowed local or production callback.
+Register the exact redirect URI in Spotify. Native builds default to `ticketstonight://spotify-auth`; web/local Expo testing should set `EXPO_PUBLIC_SPOTIFY_REDIRECT_URI` to the allowed callback registered in Spotify. Do not put a Spotify client secret in Expo public env or commit it to this repo.
 
 Run focused service checks:
 
@@ -70,22 +70,28 @@ Run focused service checks:
 npm run test:services
 ```
 
-Run the NYC coverage audit:
+Run the market coverage audit for New York, Los Angeles, and Hudson:
 
 ```bash
 npm run audit:coverage
 ```
 
-Run the NYC live supply audit against the current 50-event discovery target:
+Run the live supply audit for New York, Los Angeles, and Hudson:
 
 ```bash
 npm run audit:live-supply
 ```
 
-Run the default discovery quality audit for the app-facing shaped result list:
+Run the default discovery quality audit for the app-facing shaped result lists:
 
 ```bash
 npm run audit:quality
+```
+
+Run the non-secret Spotify readiness audit:
+
+```bash
+npm run audit:spotify
 ```
 
 Run live Ticketmaster provider diagnostics:
