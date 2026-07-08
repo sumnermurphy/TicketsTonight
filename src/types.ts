@@ -86,6 +86,7 @@ export type ShowSearchFilters = {
   neighborhoods?: string[];
   query: string;
   onlyDeals: boolean;
+  maxPriceCents?: number;
   dateWindow: DateWindow;
   referenceNow?: string;
 };
@@ -183,6 +184,7 @@ export type UserPreferences = {
   selectedNeighborhoods: string[];
   dateWindow: DateWindow;
   onlyDeals: boolean;
+  maxPriceCents?: number;
   dealAlertMaxPriceCents?: number;
   tasteEnabled: boolean;
   savedShowIds: string[];

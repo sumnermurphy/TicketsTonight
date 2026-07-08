@@ -46,12 +46,18 @@ export function getCatalogShows(): Show[] {
 export function filterShows(candidates: Show[], filters: ShowSearchFilters): Show[] {
   const query = normalize(filters.query);
   const neighborhoods = new Set((filters.neighborhoods ?? []).map(normalize));
+  const maxPriceCents = filters.maxPriceCents;
 
   return candidates
     .filter((show) => show.areaId === filters.areaId)
     .filter((show) => isWithinDateWindow(show.startsAt, filters.dateWindow, filters.referenceNow))
     .filter((show) =>
       filters.onlyDeals ? show.ticketOffers.some((offer) => Boolean(offer.deal)) : true
+    )
+    .filter((show) =>
+      maxPriceCents === undefined
+        ? true
+        : show.ticketOffers.some((offer) => offer.priceCents <= maxPriceCents)
     )
     .filter((show) =>
       filters.categories.length === 0 ? true : filters.categories.includes(show.category)

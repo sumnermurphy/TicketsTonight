@@ -5,7 +5,7 @@ Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ball
 ## What is built
 
 - Expo React Native app with provider-backed local-area event discovery.
-- City selector, near-me area resolution, search, category filters, neighborhood filters, date windows, deal-only filtering, event cards, and a show-detail sheet.
+- City selector, near-me area resolution, search, category filters, neighborhood filters, budget filters, date windows, deal-only filtering, event cards, and a show-detail sheet.
 - First-class category coverage for concerts, DJ sets, dance, ballet, opera, plays, theater, comedy, and variety/adjacent live events.
 - Deal-aware ticket inventory with list prices, savings, access method, inventory source, and max quantities.
 - Best-bets ranking that lifts urgent deals, local-source picks, nearby shows, and weekend options above the full chronological list.

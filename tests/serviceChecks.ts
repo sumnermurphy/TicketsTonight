@@ -259,6 +259,15 @@ async function main() {
     dateWindow: "all",
     referenceNow
   });
+  const under35Shows = searchShows({
+    areaId: "nyc",
+    categories: [],
+    query: "",
+    onlyDeals: false,
+    maxPriceCents: 3500,
+    dateWindow: "all",
+    referenceNow
+  });
   const nycDiscoveryPicks = getDiscoveryPicks(nycAreaInventory, referenceNow, 4);
   const comedyFacet = nycCategoryFacets.find((facet) => facet.category === "comedy");
   const danceFacet = nycCategoryFacets.find((facet) => facet.category === "dance");
@@ -308,6 +317,15 @@ async function main() {
     lowerEastSideShows.length === 2 &&
       lowerEastSideShows.every((show) => show.neighborhood === "Lower East Side"),
     "Neighborhood filters should narrow discovery within the selected market."
+  );
+  assert(
+    under35Shows.length > 0 &&
+      under35Shows.every((show) => show.ticketOffers.some((offer) => offer.priceCents <= 3500)),
+    "Max-price filters should only return shows with an offer under the selected budget."
+  );
+  assert(
+    !under35Shows.some((show) => show.id === "show-midtown-revue"),
+    "Max-price filters should exclude shows whose cheapest offer is above the selected budget."
   );
   assert(nycDiscoveryPicks.length === 4, "Discovery picks should return a bounded best-bets rail.");
   assert(
@@ -1141,6 +1159,7 @@ async function main() {
     selectedNeighborhoods: ["Lower East Side"],
     dateWindow: "tonight",
     onlyDeals: true,
+    maxPriceCents: 5000,
     dealAlertMaxPriceCents: 3500,
     tasteEnabled: true,
     savedShowIds: ["show-alina-ives"],
@@ -1160,6 +1179,7 @@ async function main() {
     "Repository should persist deal alert max-price preference."
   );
   assert(storedPreferences.dateWindow === "tonight", "Repository should persist date window preference.");
+  assert(storedPreferences.maxPriceCents === 5000, "Repository should persist discovery max-price preference.");
   assert(
     storedPreferences.savedShowIds.includes("show-alina-ives"),
     "Repository should persist saved shows."
