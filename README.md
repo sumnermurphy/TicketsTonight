@@ -18,7 +18,7 @@ Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ball
 - Source planning separates broad event APIs from reusable local pipelines, so small venues can fill gaps without turning every venue into a bespoke integration.
 - Category-level coverage planning flags where broad APIs are enough for baseline discovery and where local pipelines add meaningful depth.
 - Ticketmaster Discovery-shaped adapter for normalizing real provider events, classifications, venues, price ranges, and cached detail lookup.
-- Async event-provider pipeline powering visible results, area inventory, deal rails, alerts, saved shows, and provider-fed future checkout groundwork.
+- Async event-provider pipeline with cross-source dedupe powering visible results, area inventory, deal rails, alerts, saved shows, and provider-fed future checkout groundwork.
 - Typed service boundaries for replacing seed data with real event feeds, taste providers, and ticket providers.
 
 ## Alpha Markets
@@ -73,7 +73,7 @@ npm run android
 - `src/services/discoveryPlanning.ts`: helper layer for broad-API/local-pipeline lanes, category coverage, source readiness, category gaps, primary-market ordering, and discount levers.
 - `src/services/discoveryRanking.ts`: best-bets scoring for urgent deals, local-source inventory, timing, and distance.
 - `src/services/feedProvider.ts`: feed normalization from provider taxonomy/inventory into the app `Show` model.
-- `src/services/eventCatalog.ts`: discovery search, date-window filtering, deal search, recommendation scoring, composite event providers, calendar-feed inventory, and runtime caching for provider-fed shows.
+- `src/services/eventCatalog.ts`: discovery search, date-window filtering, deal search, recommendation scoring, composite event providers, cross-source event dedupe, calendar-feed inventory, and runtime caching for provider-fed shows.
 - `src/services/eventProviderFactory.ts`: default provider stack that keeps fixtures active and adds Ticketmaster Discovery when public Expo config is present.
 - `src/services/location.ts`: location provider interface, demo location provider, distance calculation, and nearest-area resolution.
 - `src/services/notifications.ts`: in-app notification provider for deal-alert matches, with read-state merge helpers for future push/email channels.

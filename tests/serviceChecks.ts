@@ -70,7 +70,7 @@ import {
   TicketmasterDiscoveryProvider,
   type TicketmasterDiscoveryClient
 } from "../src/services/ticketmasterProvider";
-import type { EventProvider } from "../src/types";
+import type { EventProvider, Show } from "../src/types";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -728,6 +728,66 @@ async function main() {
   assert(
     externalRecommendations.some((recommendation) => recommendation.show.id === "tm-tm-nyc-900"),
     "Provider-fed shows should be rankable by the recommendation engine."
+  );
+  const alinaSeedShow = getShowById("show-alina-ives");
+  assert(alinaSeedShow, "Seed catalog should include the Alina Ives show.");
+
+  const duplicateMarketplaceShow: Show = {
+    ...alinaSeedShow,
+    id: "tm-duplicate-alina-ives",
+    description: "Primary-marketplace duplicate with an extra ticket source.",
+    source: "primary-marketplace",
+    ticketOffers: [
+      {
+        id: "marketplace-standard",
+        label: "Marketplace standard",
+        priceCents: 3600,
+        currency: "USD",
+        remaining: 80,
+        maxQuantity: 8,
+        access: "external-transfer",
+        source: "primary-marketplace",
+        externalUrl: "https://example.com/marketplace/alina-ives"
+      }
+    ]
+  };
+  const duplicateMarketplaceProvider: EventProvider = {
+    id: "duplicate-marketplace",
+    label: "Duplicate marketplace",
+    async listShows() {
+      return [duplicateMarketplaceShow];
+    },
+    async getShow(showId: string) {
+      return showId === duplicateMarketplaceShow.id ? duplicateMarketplaceShow : undefined;
+    }
+  };
+  const mergedCompositeShows = await new CompositeEventProvider([
+    new LocalCatalogProvider(),
+    duplicateMarketplaceProvider
+  ]).listShows({
+    areaId: "nyc",
+    categories: ["concert"],
+    query: "Alina",
+    onlyDeals: false,
+    dateWindow: "all",
+    referenceNow
+  });
+  const mergedAlinaShows = mergedCompositeShows.filter((show) => show.title === alinaSeedShow.title);
+  const mergedAlinaShow = mergedAlinaShows[0];
+
+  assert(mergedAlinaShows.length === 1, "Composite discovery should collapse duplicate cross-source events.");
+  assert(
+    mergedAlinaShow?.id === "show-alina-ives",
+    "Duplicate merging should keep the richer local/deal-backed show as the display record."
+  );
+  assert(
+    mergedAlinaShow.ticketOffers.some((offer) => offer.id === "ga") &&
+      mergedAlinaShow.ticketOffers.some((offer) => offer.id === "marketplace-standard"),
+    "Duplicate merging should preserve ticket offers from each source."
+  );
+  assert(
+    getShowById("tm-duplicate-alina-ives")?.id === "show-alina-ives",
+    "Duplicate provider ids should resolve to the merged show after composite discovery."
   );
 
   const failingExternalProvider: EventProvider = {

@@ -4,22 +4,39 @@ import { normalizedPartnerFeedShows } from "./feedProvider";
 import type {
   DateWindow,
   EventProvider,
+  InventorySource,
   Recommendation,
   RecommendationContext,
   Show,
-  ShowSearchFilters
+  ShowSearchFilters,
+  TicketOffer
 } from "../types";
 
 const normalize = (value: string) => value.trim().toLowerCase().replace(/[-_]+/g, " ");
 const baseShows = [...shows, ...normalizedPartnerFeedShows, ...normalizedLocalCalendarShows];
 const runtimeShows = new Map<string, Show>();
+const sourceDisplayPriority: Record<InventorySource, number> = {
+  "venue-direct": 60,
+  "calendar-feed": 55,
+  "partner-feed": 50,
+  promoter: 45,
+  "primary-marketplace": 35,
+  "verified-resale": 20
+};
 
 export function rememberShows(candidates: Show[]): Show[] {
-  for (const show of candidates) {
+  const mergedShows = dedupeShows(candidates);
+  const mergedByKey = new Map(mergedShows.map((show) => [getShowDedupeKey(show), show]));
+
+  for (const candidate of candidates) {
+    runtimeShows.set(candidate.id, mergedByKey.get(getShowDedupeKey(candidate)) ?? candidate);
+  }
+
+  for (const show of mergedShows) {
     runtimeShows.set(show.id, show);
   }
 
-  return candidates;
+  return mergedShows;
 }
 
 export function getCatalogShows(): Show[] {
@@ -227,9 +244,7 @@ export class CompositeEventProvider implements EventProvider {
         : new Error("Unable to load event inventory.");
     }
 
-    const uniqueShows = dedupeShows(successfulResults.flat());
-
-    rememberShows(uniqueShows);
+    const uniqueShows = rememberShows(successfulResults.flat());
 
     return filterShows(uniqueShows, filters);
   }
@@ -249,5 +264,121 @@ export class CompositeEventProvider implements EventProvider {
 }
 
 function dedupeShows(candidates: Show[]): Show[] {
-  return Array.from(new Map(candidates.map((show) => [show.id, show])).values());
+  const dedupedShows = new Map<string, Show>();
+
+  for (const show of candidates) {
+    const key = getShowDedupeKey(show);
+    const existingShow = dedupedShows.get(key);
+
+    dedupedShows.set(key, existingShow ? mergeDuplicateShows(existingShow, show) : show);
+  }
+
+  return Array.from(dedupedShows.values());
+}
+
+function mergeDuplicateShows(first: Show, second: Show): Show {
+  const displayShow =
+    getShowDisplayScore(second) > getShowDisplayScore(first) ? second : first;
+  const otherShow = displayShow.id === first.id ? second : first;
+
+  return {
+    ...displayShow,
+    description: getRicherText(displayShow.description, otherShow.description),
+    distanceMiles: Math.min(displayShow.distanceMiles, otherShow.distanceMiles),
+    vibe: uniqueValues([...displayShow.vibe, ...otherShow.vibe]),
+    ticketOffers: mergeTicketOffers(displayShow.ticketOffers, otherShow.ticketOffers),
+    recommendationSignals: uniqueValues([
+      ...(displayShow.recommendationSignals ?? []),
+      ...(otherShow.recommendationSignals ?? [])
+    ])
+  };
+}
+
+function mergeTicketOffers(first: TicketOffer[], second: TicketOffer[]): TicketOffer[] {
+  const offers = new Map<string, TicketOffer>();
+
+  for (const offer of [...first, ...second]) {
+    const key = `${offer.source}:${offer.id}`;
+    const existingOffer = offers.get(key);
+
+    if (!existingOffer || getOfferDisplayScore(offer) > getOfferDisplayScore(existingOffer)) {
+      offers.set(key, offer);
+    }
+  }
+
+  return Array.from(offers.values()).sort(
+    (firstOffer, secondOffer) =>
+      getOfferDisplayScore(secondOffer) - getOfferDisplayScore(firstOffer) ||
+      firstOffer.priceCents - secondOffer.priceCents
+  );
+}
+
+function getShowDedupeKey(show: Show): string {
+  return [
+    show.areaId,
+    normalizeForDedupe(show.title),
+    normalizeForDedupe(show.venue),
+    getCanonicalStartMinute(show.startsAt)
+  ].join("|");
+}
+
+function getShowDisplayScore(show: Show): number {
+  const hasDeal = show.ticketOffers.some((offer) => Boolean(offer.deal));
+
+  return (
+    sourceDisplayPriority[show.source] +
+    (hasDeal ? 100 : 0) +
+    show.ticketOffers.length * 4 +
+    Math.min(12, Math.round(show.description.length / 60))
+  );
+}
+
+function getOfferDisplayScore(offer: TicketOffer): number {
+  const discountScore = offer.deal ? 100 : 0;
+  const priceScore = Math.max(0, 50 - Math.round(offer.priceCents / 1000));
+
+  return sourceDisplayPriority[offer.source] + discountScore + priceScore;
+}
+
+function getRicherText(first: string, second: string): string {
+  return second.length > first.length ? second : first;
+}
+
+function normalizeForDedupe(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function getCanonicalStartMinute(startsAt: string): string {
+  const parsedTime = new Date(startsAt).getTime();
+
+  if (!Number.isFinite(parsedTime)) {
+    return startsAt.slice(0, 16);
+  }
+
+  return new Date(parsedTime).toISOString().slice(0, 16);
+}
+
+function uniqueValues(values: string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+
+  for (const value of values) {
+    const normalizedValue = value.trim();
+    const key = normalizedValue.toLowerCase();
+
+    if (!normalizedValue || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    unique.push(normalizedValue);
+  }
+
+  return unique;
 }
