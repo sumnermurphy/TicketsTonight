@@ -14,6 +14,11 @@ import {
   getDealAlertMatches,
   toggleDealAlertStatus
 } from "../src/services/dealAlerts";
+import {
+  createCoverageAudit,
+  getCoverageAuditActionCopy,
+  getCoverageAuditStatusCopy
+} from "../src/services/coverageAudit";
 import { checkoutBackend } from "../src/services/checkoutBackend";
 import {
   getCategoryFacets,
@@ -292,6 +297,11 @@ async function main() {
     nycAreaInventory,
     Object.keys(categoryLabels) as Array<keyof typeof categoryLabels>
   );
+  const nycCoverageAudit = createCoverageAudit(nycAreaInventory, {
+    areaId: "nyc",
+    referenceNow,
+    windowDays: 30
+  });
   const nycNeighborhoodFacets = getNeighborhoodFacets(nycAreaInventory);
   const lowerEastSideFacet = nycNeighborhoodFacets.find(
     (facet) => facet.neighborhood === "Lower East Side"
@@ -363,6 +373,30 @@ async function main() {
   assert(
     nycMarketSummary.ticketLinkCount === 1,
     "Market summary should expose link-ready shows in the selected-area inventory."
+  );
+  assert(
+    nycCoverageAudit.targetEventCount === 200 &&
+      nycCoverageAudit.targetTicketLinkCoveragePercent === 70,
+    "New York coverage audit should encode the 200-event and 70-percent link targets."
+  );
+  assert(
+    nycCoverageAudit.eventCount === nycAreaInventory.length &&
+      nycCoverageAudit.ticketLinkCount === nycMarketSummary.ticketLinkCount,
+    "Coverage audit should measure the same selected-area inventory and ticket-link readiness."
+  );
+  assert(
+    nycCoverageAudit.status === "needs-events" &&
+      getCoverageAuditStatusCopy(nycCoverageAudit) === "Needs supply",
+    "Fixture-backed New York coverage should clearly show the current supply gap."
+  );
+  assert(
+    getCoverageAuditActionCopy(nycCoverageAudit).includes("more events needed") &&
+      nycCoverageAudit.weakCategoryGroups.some((group) => group.id === "performing-arts"),
+    "Coverage audit should expose actionable event and category-depth gaps."
+  );
+  assert(
+    nycCoverageAudit.sourceCounts.length === nycMarketSummary.sourceCount,
+    "Coverage audit should report source breadth for provider expansion checks."
   );
   assert(
     nycMarketSummary.activeCategoryCount ===
@@ -750,9 +784,37 @@ async function main() {
   assert(ticketmasterUrl.searchParams.get("city") === "New York", "Ticketmaster requests should target city.");
   assert(ticketmasterUrl.searchParams.get("stateCode") === "NY", "Ticketmaster requests should target state.");
   assert(ticketmasterUrl.searchParams.get("keyword") === "Hadestown", "Ticketmaster requests should pass query.");
+  assert(ticketmasterUrl.searchParams.get("size") === "100", "Ticketmaster requests should request full pages.");
+  assert(ticketmasterUrl.searchParams.get("page") === "0", "Ticketmaster requests should start on page zero.");
   assert(
     ticketmasterUrl.searchParams.get("classificationName") === "theatre",
     "Ticketmaster requests should map app categories into provider classifications."
+  );
+  const ticketmasterDefaultUrl = new URL(
+    buildTicketmasterDiscoveryUrl(
+      {
+        areaId: "nyc",
+        categories: [],
+        query: "",
+        onlyDeals: false,
+        dateWindow: "week",
+        referenceNow
+      },
+      {
+        apiKey: "test-key",
+        now: () => new Date(referenceNow)
+      }
+    )
+  );
+  const defaultTicketmasterClassifications =
+    ticketmasterDefaultUrl.searchParams.get("classificationName")?.split(",") ?? [];
+
+  assert(
+    defaultTicketmasterClassifications.includes("music") &&
+      defaultTicketmasterClassifications.includes("theatre") &&
+      defaultTicketmasterClassifications.includes("opera") &&
+      !defaultTicketmasterClassifications.includes("sports"),
+    "Unfiltered Ticketmaster requests should still stay scoped to app discovery classifications."
   );
   const ticketmasterPlayUrl = new URL(
     buildTicketmasterDiscoveryUrl(
@@ -867,6 +929,56 @@ async function main() {
   assert(
     ticketmasterDjShows.some((show) => show.id === "tm-tm-nyc-901" && show.areaId === "nyc"),
     "Ticketmaster provider should resolve nearby borough venues into the selected area."
+  );
+  const pagedTicketmasterEvents = ticketmasterDiscoveryFixture._embedded?.events?.slice(0, 2) ?? [];
+
+  assert(pagedTicketmasterEvents.length === 2, "Ticketmaster fixture should include paged NYC events.");
+
+  const pagedTicketmasterClient: TicketmasterDiscoveryClient & { requestedUrls: string[] } = {
+    requestedUrls: [],
+    async listEvents(url: string) {
+      this.requestedUrls.push(url);
+      const page = Number(new URL(url).searchParams.get("page") ?? "0");
+      const event = pagedTicketmasterEvents[page];
+
+      return {
+        _embedded: {
+          events: event ? [event] : []
+        },
+        page: {
+          number: page,
+          size: 1,
+          totalElements: pagedTicketmasterEvents.length
+        }
+      };
+    }
+  };
+  const pagedTicketmasterProvider = new TicketmasterDiscoveryProvider({
+    apiKey: "test-key",
+    client: pagedTicketmasterClient,
+    pageSize: 1,
+    maxPages: 3,
+    now: () => new Date(referenceNow)
+  });
+  const pagedTicketmasterShows = await pagedTicketmasterProvider.listShows({
+    areaId: "nyc",
+    categories: [],
+    query: "",
+    onlyDeals: false,
+    dateWindow: "week",
+    referenceNow
+  });
+
+  assert(
+    pagedTicketmasterClient.requestedUrls.length === 2 &&
+      new URL(pagedTicketmasterClient.requestedUrls[0]!).searchParams.get("page") === "0" &&
+      new URL(pagedTicketmasterClient.requestedUrls[1]!).searchParams.get("page") === "1",
+    "Ticketmaster provider should page through live inventory until the reported result total is reached."
+  );
+  assert(
+    pagedTicketmasterShows.some((show) => show.id === "tm-tm-nyc-900") &&
+      pagedTicketmasterShows.some((show) => show.id === "tm-tm-nyc-901"),
+    "Ticketmaster pagination should merge normalized shows from multiple pages."
   );
 
   const factoryTicketmasterClient: TicketmasterDiscoveryClient & { requestedUrls: string[] } = {

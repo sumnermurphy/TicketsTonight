@@ -14,6 +14,20 @@ import { getDistanceBetweenCoordinates } from "./location";
 const DEFAULT_ENDPOINT = "https://app.ticketmaster.com/discovery/v2/events.json";
 const DEFAULT_RADIUS_MILES = 35;
 const DEFAULT_WINDOW_DAYS = 90;
+const DEFAULT_PAGE_SIZE = 100;
+const DEFAULT_MAX_PAGES = 3;
+const TICKETMASTER_DEEP_PAGE_LIMIT = 1000;
+const supportedTicketmasterCategories: ShowCategory[] = [
+  "concert",
+  "dj",
+  "dance",
+  "ballet",
+  "opera",
+  "play",
+  "theater",
+  "comedy",
+  "variety"
+];
 
 type TicketmasterNamedValue = {
   name?: string;
@@ -68,6 +82,8 @@ export type TicketmasterDiscoveryResponse = {
     events?: TicketmasterDiscoveryEvent[];
   };
   page?: {
+    number?: number;
+    size?: number;
     totalElements?: number;
   };
 };
@@ -86,7 +102,16 @@ export type TicketmasterDiscoveryProviderOptions = {
   client: TicketmasterDiscoveryClient;
   endpoint?: string;
   radiusMiles?: number;
+  pageSize?: number;
+  maxPages?: number;
   now?: () => Date;
+};
+
+type TicketmasterDiscoveryUrlOptions = Pick<
+  TicketmasterDiscoveryProviderOptions,
+  "apiKey" | "endpoint" | "radiusMiles" | "now" | "pageSize"
+> & {
+  page?: number;
 };
 
 export class FetchTicketmasterDiscoveryClient implements TicketmasterDiscoveryClient {
@@ -108,9 +133,34 @@ export class TicketmasterDiscoveryProvider implements EventProvider {
   constructor(private readonly options: TicketmasterDiscoveryProviderOptions) {}
 
   async listShows(filters: ShowSearchFilters): Promise<Show[]> {
-    const url = buildTicketmasterDiscoveryUrl(filters, this.options);
-    const response = await this.options.client.listEvents(url);
-    const shows = (response._embedded?.events ?? [])
+    const pageSize = normalizePositiveInteger(this.options.pageSize, DEFAULT_PAGE_SIZE);
+    const maxPages = normalizePositiveInteger(this.options.maxPages, DEFAULT_MAX_PAGES);
+    const events: TicketmasterDiscoveryEvent[] = [];
+    let expectedTotal: number | undefined;
+
+    for (let page = 0; page < maxPages; page += 1) {
+      const url = buildTicketmasterDiscoveryUrl(filters, {
+        ...this.options,
+        page,
+        pageSize
+      });
+      const response = await this.options.client.listEvents(url);
+      const pageEvents = response._embedded?.events ?? [];
+
+      events.push(...pageEvents);
+      expectedTotal = response.page?.totalElements ?? expectedTotal;
+
+      if (
+        pageEvents.length === 0 ||
+        pageEvents.length < pageSize ||
+        (expectedTotal !== undefined && events.length >= expectedTotal) ||
+        (page + 1) * pageSize >= TICKETMASTER_DEEP_PAGE_LIMIT
+      ) {
+        break;
+      }
+    }
+
+    const shows = events
       .map((event) => normalizeTicketmasterEvent(event, filters.areaId))
       .filter((show): show is Show => Boolean(show));
 
@@ -144,13 +194,15 @@ export class TicketmasterDiscoveryProvider implements EventProvider {
 
 export function buildTicketmasterDiscoveryUrl(
   filters: ShowSearchFilters,
-  options: Pick<TicketmasterDiscoveryProviderOptions, "apiKey" | "endpoint" | "radiusMiles" | "now">
+  options: TicketmasterDiscoveryUrlOptions
 ): string {
   const area = findArea(filters.areaId);
   const now = options.now?.() ?? new Date(filters.referenceNow ?? Date.now());
   const url = new URL(options.endpoint ?? DEFAULT_ENDPOINT);
   const endDate = getDiscoveryEndDate(now, filters.dateWindow);
-  const classificationNames = getClassificationNames(filters.categories);
+  const classificationNames = getClassificationNames(
+    filters.categories.length ? filters.categories : supportedTicketmasterCategories
+  );
 
   url.searchParams.set("apikey", options.apiKey);
   url.searchParams.set("countryCode", "US");
@@ -161,6 +213,11 @@ export function buildTicketmasterDiscoveryUrl(
   url.searchParams.set("sort", "date,asc");
   url.searchParams.set("startDateTime", formatDiscoveryDate(now));
   url.searchParams.set("endDateTime", formatDiscoveryDate(endDate));
+  url.searchParams.set(
+    "size",
+    String(normalizePositiveInteger(options.pageSize, DEFAULT_PAGE_SIZE))
+  );
+  url.searchParams.set("page", String(options.page ?? 0));
 
   if (filters.query.trim()) {
     url.searchParams.set("keyword", filters.query.trim());
@@ -416,4 +473,12 @@ function uniqueStrings(values: Array<string | undefined>): string[] {
   }
 
   return uniqueValues;
+}
+
+function normalizePositiveInteger(value: number | undefined, fallback: number): number {
+  if (!Number.isFinite(value) || value === undefined) {
+    return fallback;
+  }
+
+  return Math.max(1, Math.floor(value));
 }

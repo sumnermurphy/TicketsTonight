@@ -15,6 +15,8 @@ type PublicDiscoveryEnv = {
   EXPO_PUBLIC_TICKETMASTER_API_KEY?: string;
   EXPO_PUBLIC_TICKETMASTER_DISCOVERY_ENDPOINT?: string;
   EXPO_PUBLIC_TICKETMASTER_RADIUS_MILES?: string;
+  EXPO_PUBLIC_TICKETMASTER_PAGE_SIZE?: string;
+  EXPO_PUBLIC_TICKETMASTER_MAX_PAGES?: string;
 };
 
 declare const process:
@@ -27,6 +29,8 @@ export type DiscoveryProviderConfig = {
   ticketmasterApiKey?: string;
   ticketmasterEndpoint?: string;
   ticketmasterRadiusMiles?: number;
+  ticketmasterPageSize?: number;
+  ticketmasterMaxPages?: number;
   ticketmasterClient?: TicketmasterDiscoveryClient;
   now?: () => Date;
 };
@@ -41,7 +45,9 @@ export function readPublicDiscoveryConfig(): DiscoveryProviderConfig {
     ticketmasterEndpoint: process.env?.EXPO_PUBLIC_TICKETMASTER_DISCOVERY_ENDPOINT,
     ticketmasterRadiusMiles: parseOptionalNumber(
       process.env?.EXPO_PUBLIC_TICKETMASTER_RADIUS_MILES
-    )
+    ),
+    ticketmasterPageSize: parseOptionalNumber(process.env?.EXPO_PUBLIC_TICKETMASTER_PAGE_SIZE),
+    ticketmasterMaxPages: parseOptionalNumber(process.env?.EXPO_PUBLIC_TICKETMASTER_MAX_PAGES)
   };
 }
 
@@ -60,6 +66,8 @@ export function createEventProviders(config: DiscoveryProviderConfig = {}): Even
         client: config.ticketmasterClient ?? new FetchTicketmasterDiscoveryClient(),
         endpoint: config.ticketmasterEndpoint,
         radiusMiles: config.ticketmasterRadiusMiles,
+        pageSize: config.ticketmasterPageSize,
+        maxPages: config.ticketmasterMaxPages,
         now: config.now
       })
     );

@@ -37,6 +37,11 @@ import {
   toggleDealAlertStatus
 } from "./services/dealAlerts";
 import {
+  createCoverageAudit,
+  getCoverageAuditActionCopy,
+  getCoverageAuditStatusCopy
+} from "./services/coverageAudit";
+import {
   getDateWindowFacets,
   getCategoryFacets,
   getMarketDiscoverySummary,
@@ -354,6 +359,15 @@ export default function App() {
   const marketSummary = useMemo(
     () => getMarketDiscoverySummary(areaInventory, categories),
     [areaInventory]
+  );
+  const coverageAudit = useMemo(
+    () =>
+      createCoverageAudit(areaInventory, {
+        areaId: selectedAreaId,
+        referenceNow: new Date().toISOString(),
+        windowDays: 30
+      }),
+    [areaInventory, selectedAreaId]
   );
   const categoryFacetsByCategory = useMemo(
     () => new Map(categoryFacets.map((facet) => [facet.category, facet])),
@@ -709,6 +723,35 @@ export default function App() {
                 value={String(marketSummary.sourceCount)}
               />
             </View>
+          </View>
+
+          <View style={styles.coverageAuditPanel}>
+            <View style={styles.coverageAuditHeader}>
+              <Text style={styles.coverageAuditTitle}>Coverage audit</Text>
+              <Text style={styles.coverageAuditStatus}>
+                {inventoryLoading ? "Measuring" : getCoverageAuditStatusCopy(coverageAudit)}
+              </Text>
+            </View>
+            <View style={styles.marketSnapshotStats}>
+              <MarketSnapshotStat
+                label="30 days"
+                loading={inventoryLoading}
+                value={`${coverageAudit.eventCount}/${coverageAudit.targetEventCount}`}
+              />
+              <MarketSnapshotStat
+                label="Links"
+                loading={inventoryLoading}
+                value={`${coverageAudit.ticketLinkCoveragePercent}%`}
+              />
+              <MarketSnapshotStat
+                label="Weak lanes"
+                loading={inventoryLoading}
+                value={String(coverageAudit.weakCategoryGroups.length)}
+              />
+            </View>
+            <Text numberOfLines={2} style={styles.coverageAuditCopy}>
+              {inventoryLoading ? "Checking provider inventory" : getCoverageAuditActionCopy(coverageAudit)}
+            </Text>
           </View>
 
           {savedShows.length ? (
@@ -2033,6 +2076,38 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginTop: 2,
     textTransform: "uppercase"
+  },
+  coverageAuditPanel: {
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.sm,
+    borderBottomWidth: 1,
+    borderColor: colors.line,
+    paddingBottom: spacing.md
+  },
+  coverageAuditHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md
+  },
+  coverageAuditTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  coverageAuditStatus: {
+    flexShrink: 1,
+    color: colors.teal,
+    fontSize: 12,
+    fontWeight: "900",
+    textAlign: "right"
+  },
+  coverageAuditCopy: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17,
+    marginTop: spacing.sm
   },
   accountPanel: {
     alignItems: "center",
