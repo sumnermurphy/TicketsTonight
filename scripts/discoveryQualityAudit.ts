@@ -46,6 +46,12 @@ async function main() {
     console.log(`Active categories: ${summary.activeCategoryCount}`);
     console.log(`Weak lanes: ${coverage.weakCategoryGroups.map((group) => group.label).join(", ") || "none"}`);
     console.log(`Spotify-matchable inventory: ${getSpotifyMatchableShows(shows).length}/${shows.length}`);
+    console.log("Source mix:");
+
+    for (const sourceCount of coverage.sourceCounts) {
+      console.log(`- ${sourceCount.source}: ${sourceCount.count}`);
+    }
+
     console.log("Category mix:");
 
     for (const category of categories) {

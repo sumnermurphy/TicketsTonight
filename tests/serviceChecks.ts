@@ -1,6 +1,9 @@
 import { areas, categoryLabels } from "../src/data/catalog";
 import { discoveryMarketPlans } from "../src/data/discoveryPlans";
-import { localCalendarEvents } from "../src/data/localCalendarFeeds";
+import {
+  localCalendarEvents,
+  localCalendarSources
+} from "../src/data/localCalendarFeeds";
 import { partnerFeedEvents } from "../src/data/partnerFeeds";
 import { ticketmasterDiscoveryFixture } from "../src/data/ticketmasterFixtures";
 import { parseEnvFile } from "../scripts/env";
@@ -125,6 +128,17 @@ async function assertRejects(action: () => Promise<unknown>, message: string) {
   throw new Error(message);
 }
 
+function getRollingWindowShows(candidates: Show[], referenceNow: string, windowDays: number): Show[] {
+  const now = new Date(referenceNow).getTime();
+  const cutoff = now + windowDays * 24 * 60 * 60 * 1000;
+
+  return candidates.filter((show) => {
+    const startsAt = new Date(show.startsAt).getTime();
+
+    return startsAt >= now && startsAt <= cutoff;
+  });
+}
+
 async function main() {
   const referenceNow = "2026-07-08T12:00:00-04:00";
   const areaIds = areas.map((area) => area.id);
@@ -183,18 +197,22 @@ async function main() {
     "New York plays should already have ready local pipeline coverage."
   );
   assert(
-    nycDanceCoverage?.coverageLevel === "broad-api-ready" &&
-      nycDanceCoverage.needsLocalPipeline &&
-      nycDanceCoverage.partnerNeededLocalPipelineSourceIds.includes("nyc-venue-direct"),
-    "New York dance should be broad-API covered while still needing a local pipeline partner."
+    nycDanceCoverage?.coverageLevel === "ready-local" &&
+      nycDanceCoverage.readyLocalPipelineSourceIds.includes("nyc-performing-arts-calendar") &&
+      !nycDanceCoverage.needsLocalPipeline,
+    "New York dance should now have reusable local calendar-feed depth before venue-direct work."
   );
   assert(
-    getLocalPipelinePriorityCategories("nyc").includes("dance"),
-    "Local pipeline priorities should identify broad-API-covered categories that still need local depth."
+    !getLocalPipelinePriorityCategories("nyc").includes("dance"),
+    "Local pipeline priorities should stop flagging NYC dance once the reusable calendar path covers it."
   );
   assert(
     (getDiscoverySourceStrategy("nyc")?.localPipelineSourceCount ?? 0) >= 3,
     "New York source strategy should keep selective local pipelines available after broad APIs."
+  );
+  assert(
+    getNextLocalDiscoverySources("nyc")[0]?.id === "nyc-performing-arts-calendar",
+    "New York's next local pipeline should be the reusable performing-arts calendar before bespoke venue work."
   );
   assert(
     getReadyDiscoverySources("la").some((source) => source.id === "la-partner-feed"),
@@ -264,9 +282,9 @@ async function main() {
   assert(
     nycAcquisitionPlan?.firstBroadApiCandidateId === "ticketmaster-discovery" &&
       nycAcquisitionPlan.broadApiCoverageGapCategories.length === 0 &&
-      nycAcquisitionPlan.localPipelineTriggerCategories.includes("dance") &&
+      nycAcquisitionPlan.nextLocalPipelineSourceIds[0] === "nyc-performing-arts-calendar" &&
       nycAcquisitionPlan.shouldDelayBespokeVenueWork,
-    "New York acquisition planning should start with broad APIs and defer bespoke local work until depth gaps are measured."
+    "New York acquisition planning should start with broad APIs, then use reusable local feeds before bespoke venue work."
   );
   assert(
     hudsonAcquisitionPlan?.firstBroadApiCandidateId === "ticketmaster-discovery" &&
@@ -313,6 +331,11 @@ async function main() {
   );
   const nycMarketSummary = getMarketDiscoverySummary(
     nycAreaInventory,
+    Object.keys(categoryLabels) as Array<keyof typeof categoryLabels>
+  );
+  const nycCoverageInventory = getRollingWindowShows(nycAreaInventory, referenceNow, 30);
+  const nycCoverageMarketSummary = getMarketDiscoverySummary(
+    nycCoverageInventory,
     Object.keys(categoryLabels) as Array<keyof typeof categoryLabels>
   );
   const nycCoverageAudit = createCoverageAudit(nycAreaInventory, {
@@ -434,8 +457,8 @@ async function main() {
     "Market summary should expose selected-area deal count."
   );
   assert(
-    nycMarketSummary.ticketLinkCount === 1,
-    "Market summary should expose link-ready shows in the selected-area inventory."
+    nycMarketSummary.ticketLinkCount >= 5,
+    "Market summary should expose improved link-ready NYC inventory after calendar-feed expansion."
   );
   assert(
     nycCoverageAudit.targetEventCount === 200 &&
@@ -443,9 +466,9 @@ async function main() {
     "New York coverage audit should encode the 200-event and 70-percent link targets."
   );
   assert(
-    nycCoverageAudit.eventCount === nycAreaInventory.length &&
-      nycCoverageAudit.ticketLinkCount === nycMarketSummary.ticketLinkCount,
-    "Coverage audit should measure the same selected-area inventory and ticket-link readiness."
+    nycCoverageAudit.eventCount === nycCoverageInventory.length &&
+      nycCoverageAudit.ticketLinkCount === nycCoverageMarketSummary.ticketLinkCount,
+    "Coverage audit should measure the selected-area 30-day inventory and ticket-link readiness."
   );
   assert(
     nycCoverageAudit.status === "needs-events" &&
@@ -458,12 +481,12 @@ async function main() {
     "Coverage audit should expose actionable event and category-depth gaps."
   );
   assert(
-    nycCoverageAudit.sourceCounts.length === nycMarketSummary.sourceCount,
+    nycCoverageAudit.sourceCounts.length === nycCoverageMarketSummary.sourceCount,
     "Coverage audit should report source breadth for provider expansion checks."
   );
   assert(
-    nycCoverageAudit.activeCategoryCount === nycMarketSummary.activeCategoryCount &&
-      nycCoverageAudit.spotifyMatchableCount === getSpotifyMatchableShows(nycAreaInventory).length,
+    nycCoverageAudit.activeCategoryCount === nycCoverageMarketSummary.activeCategoryCount &&
+      nycCoverageAudit.spotifyMatchableCount === getSpotifyMatchableShows(nycCoverageInventory).length,
     "Coverage audit should report active categories and Spotify-matchable inventory."
   );
   assert(
@@ -480,15 +503,18 @@ async function main() {
     "Hudson coverage audit should expose smaller-market readiness targets and Spotify-matchable supply."
   );
   assert(
-    nycLiveSupplyAudit.eventCount === nycAreaInventory.length &&
+    nycLiveSupplyAudit.eventCount === nycCoverageInventory.length &&
       nycLiveSupplyAudit.targetEventCount === 50 &&
-      nycLiveSupplyAudit.eventGapCount === 42 &&
+      nycLiveSupplyAudit.eventGapCount ===
+        Math.max(0, nycLiveSupplyAudit.targetEventCount - nycCoverageInventory.length) &&
       nycLiveSupplyAudit.status === "needs-events",
     "Live supply audit should track the 50-event NYC target separately from the broader coverage target."
   );
   assert(
     getLiveSupplyAuditStatusCopy(nycLiveSupplyAudit) === "Needs more live events" &&
-      getLiveSupplyAuditActionCopy(nycLiveSupplyAudit).includes("42 more NYC events"),
+      getLiveSupplyAuditActionCopy(nycLiveSupplyAudit).includes(
+        `${nycLiveSupplyAudit.eventGapCount} more NYC events`
+      ),
     "Live supply audit copy should make the next NYC event gap explicit."
   );
   assert(
@@ -546,6 +572,10 @@ async function main() {
     limitedDefaultNycShows.length === 4 &&
       new Set(limitedDefaultNycShows.map((show) => show.category)).size >= 3,
     "Default discovery result shaping should limit visible inventory while keeping category variety."
+  );
+  assert(
+    new Set(limitedDefaultNycShows.map((show) => show.source)).size >= 2,
+    "Default discovery result shaping should keep visible inventory source-diverse when multiple sources are available."
   );
   const soonestResultSections = getDiscoveryResultSections(nycAreaInventory, {
     sortMode: "soonest",
@@ -631,8 +661,8 @@ async function main() {
     "Category facets should expose show and deal counts for discounted comedy."
   );
   assert(
-    danceFacet?.showCount === 0 && danceFacet.dealCount === 0,
-    "Category facets should preserve zero-count categories so users can see availability gaps."
+    danceFacet?.showCount && danceFacet.showCount > 0 && danceFacet.dealCount === 0,
+    "Category facets should show NYC dance availability after the performing-arts calendar feed expansion."
   );
   assert(
     tonightFacet?.showCount === 2 && tonightFacet.dealCount === 2,
@@ -677,7 +707,35 @@ async function main() {
       getBestTicketLinkIntent(normalizedPlay)?.offerId === "standard",
     "Partner feed ticket URLs should map into link-ready offers."
   );
-  const normalizedCalendarShow = normalizeCalendarEvent(localCalendarEvents[0]!);
+  const nycCalendarSource = localCalendarSources.find(
+    (source) => source.id === "nyc-performing-arts-calendar"
+  );
+  const hudsonCalendarSource = localCalendarSources.find(
+    (source) => source.id === "hudson-arts-calendar"
+  );
+  const hudsonConcertCalendarEvent = localCalendarEvents.find(
+    (event) => event.calendarId === "hudson-arts-calendar" && event.externalId === "hac-101"
+  );
+  const linkOnlyCalendarEvent = localCalendarEvents.find(
+    (event) => event.calendarId === "nyc-performing-arts-calendar" && event.externalId === "nyc-pa-104"
+  );
+
+  assert(
+    nycCalendarSource?.status === "fixture-backed" &&
+      nycCalendarSource.categories.includes("dance") &&
+      nycCalendarSource.categories.includes("ballet") &&
+      nycCalendarSource.categories.includes("opera"),
+    "NYC should define a reusable performing-arts calendar source for dance, ballet, and opera depth."
+  );
+  assert(
+    hudsonCalendarSource?.categories.join("|") === "concert|dance|opera|play|theater|variety",
+    "Hudson should define a category-complete reusable regional calendar source."
+  );
+  assert(hudsonConcertCalendarEvent, "Hudson calendar fixtures should include a concert listing.");
+  assert(linkOnlyCalendarEvent, "NYC calendar fixtures should include a link-only listing.");
+
+  const normalizedCalendarShow = normalizeCalendarEvent(hudsonConcertCalendarEvent);
+  const normalizedLinkOnlyCalendarShow = normalizeCalendarEvent(linkOnlyCalendarEvent);
 
   assert(
     normalizedCalendarShow.id === "calendar-hudson-arts-calendar-hac-101",
@@ -690,19 +748,26 @@ async function main() {
   );
   assert(
     normalizedCalendarShow.ticketOffers[0]?.externalUrl ===
-      "https://example.com/hudson-arts-calendar/hac-101",
+      "https://hudsonhall.org/event/ruckus/",
     "Calendar ticket links should be preserved as offer metadata without adding checkout UI."
   );
   assert(
-    normalizedCalendarShow.ticketOffers[0]?.deal?.label === "Calendar preview",
+    normalizedCalendarShow.ticketOffers[0]?.deal?.label === "Free concert",
     "Calendar feed deal metadata should map onto ticket offers."
   );
   const calendarTicketLink = getBestTicketLinkIntent(normalizedCalendarShow);
+  const linkOnlyCalendarTicketLink = getBestTicketLinkIntent(normalizedLinkOnlyCalendarShow);
 
   assert(
-    calendarTicketLink?.url === "https://example.com/hudson-arts-calendar/hac-101" &&
+    calendarTicketLink?.url === "https://hudsonhall.org/event/ruckus/" &&
       calendarTicketLink.offerId === "calendar-listing",
     "Calendar ticket URLs should become safe external ticket-link intents."
+  );
+  assert(
+    normalizedLinkOnlyCalendarShow.ticketOffers[0]?.priceCents === undefined &&
+      linkOnlyCalendarTicketLink?.url ===
+        "https://www.nycballet.com/season-and-tickets/fall-2026/jewels",
+    "Calendar feed events with ticket URLs but no price should still expose link-only external offers."
   );
   assert(
     getSafeTicketUrl("javascript:alert(1)") === undefined &&
@@ -821,9 +886,9 @@ async function main() {
   const hudsonCalendarResults = await eventProvider.listShows({
     areaId: "hudson",
     categories: ["concert"],
-    query: "Riverside",
+    query: "Ruckus",
     onlyDeals: true,
-    dateWindow: "weekend",
+    dateWindow: "all",
     referenceNow
   });
 
@@ -845,7 +910,7 @@ async function main() {
       referenceNow
     }),
     referenceNow,
-    5
+    10
   );
   const hudsonCalendarPick = hudsonDiscoveryPicks.find(
     (pick) => pick.show.id === "calendar-hudson-arts-calendar-hac-101"
@@ -855,6 +920,25 @@ async function main() {
     hudsonCalendarPick?.signal === "calendar-deal" &&
       hudsonCalendarPick.reason.includes("Local calendar"),
     "Hudson discovery picks should recognize reusable calendar-feed deals."
+  );
+  const hudsonCalendarCategories = new Set(
+    searchShows({
+      areaId: "hudson",
+      categories: [],
+      query: "",
+      onlyDeals: false,
+      dateWindow: "all",
+      referenceNow
+    })
+      .filter((show) => show.source === "calendar-feed")
+      .map((show) => show.category)
+  );
+
+  assert(
+    ["concert", "dance", "opera", "play", "theater", "variety"].every((category) =>
+      hudsonCalendarCategories.has(category as keyof typeof categoryLabels)
+    ),
+    "Hudson calendar-feed inventory should cover concerts, dance, opera, plays, theater, and variety."
   );
 
   const hudsonVarietyShows = searchShows({
@@ -1944,13 +2028,22 @@ async function main() {
   assert(feedHold.subtotalCents === 3800, "Ticketing should accept normalized partner feed inventory.");
   assert(feedHold.discountCents === 1000, "Feed-originated deals should apply to ticket holds.");
   const calendarHold = await ticketingProvider.createHold({
-    showId: "calendar-hudson-arts-calendar-hac-101",
+    showId: "calendar-hudson-arts-calendar-hac-102",
     offerId: "calendar-listing",
     quantity: 1
   });
 
-  assert(calendarHold.subtotalCents === 2800, "Ticketing should accept normalized calendar feed inventory.");
-  assert(calendarHold.discountCents === 700, "Calendar-originated deals should apply to ticket holds.");
+  assert(calendarHold.subtotalCents === 4200, "Ticketing should accept priced normalized calendar feed inventory.");
+  assert(calendarHold.discountCents === 0, "Calendar holds should not invent discounts when the feed only has price data.");
+  await assertRejects(
+    () =>
+      ticketingProvider.createHold({
+        showId: "calendar-nyc-performing-arts-calendar-nyc-pa-104",
+        offerId: "calendar-listing",
+        quantity: 1
+      }),
+    "Link-only calendar offers should stay outside the mocked in-app checkout path."
+  );
 
   const repository = new AppRepository(new MemoryStorageAdapter());
 

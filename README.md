@@ -114,7 +114,7 @@ npm run android
 - `src/data/catalog.ts`: alpha-market areas, categories, and seed event inventory.
 - `src/data/broadApiCandidates.ts`: ranked broad API candidates for baseline event coverage, ticket links, price inventory, and coverage-gap auditing.
 - `src/data/discoveryPlans.ts`: market-by-market discovery source strategy for New York, Los Angeles, and Hudson.
-- `src/data/localCalendarFeeds.ts`: reusable small-market calendar fixtures for local gap filling without venue-specific adapters.
+- `src/data/localCalendarFeeds.ts`: reusable calendar source metadata and fixture-backed/parser-ready local calendar examples for NYC performing arts and Hudson regional arts.
 - `src/data/partnerFeeds.ts`: raw partner feed fixtures that mimic external inventory in the supported alpha markets.
 - `src/data/ticketmasterFixtures.ts`: Ticketmaster Discovery-shaped fixture payload for adapter tests.
 - `src/services/auth.ts`: dormant auth provider groundwork for future checkout/account features.
@@ -162,10 +162,10 @@ npm run android
 ## Next integrations
 
 - Event inventory: follow the checked-in discovery source plans: New York first, Los Angeles second, Hudson as the smaller-market arts-town test.
-- Data strategy: use broad APIs for baseline coverage, validate Eventbrite/SeatGeek-style ticket-link breadth next, use event-intelligence sources for coverage audits, then add reusable local calendar/feed/direct-source pipelines only where measured gaps matter.
+- Data strategy: keep Ticketmaster as the broad ticketed baseline, add reusable local calendar/feed pipelines next for measured arts-depth gaps, then evaluate Eventbrite for community/ticket-link breadth, SeatGeek for price-marketplace validation, and PredictHQ-style event intelligence for coverage-gap auditing.
 - Local-source prioritization: use category coverage to pick local pipeline work only when it adds depth beyond broad API coverage.
-- New York performing arts: Ticketmaster now clears overall live supply but still leaves dance/ballet/opera below target; prioritize a reusable local calendar/feed pipeline for performing arts before adding another broad marketplace.
-- Hudson local pipeline: start with the generic calendar-feed path before bespoke venue adapters.
+- New York performing arts: Ticketmaster remains the broad baseline, while the reusable calendar-feed path now supplies parser-ready dance, ballet, and opera depth before any venue-specific adapter work.
+- Hudson local pipeline: start with the generic regional calendar-feed path, keep it category-complete for concerts, dance, opera, plays, theater, and variety, and only add bespoke venue adapters after audits show durable gaps.
 - Discounts: partner-funded promo codes, unsold inventory drops, preview allocations, early-arrival prices, matinee value, and simple last-minute deals.
 - Later checkout: Stripe Payment Sheet or provider-native checkout once seller-of-record and payout flow are decided.
 - Recommendations: deepen Spotify ranking with saved shows, clicked events, followed venues, and artist follow alerts.

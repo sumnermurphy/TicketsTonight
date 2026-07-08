@@ -26,7 +26,7 @@ export function normalizeCalendarEvent(event: LocalCalendarEvent): Show {
 }
 
 function createCalendarOffers(event: LocalCalendarEvent): TicketOffer[] {
-  if (event.priceCents === undefined) {
+  if (event.priceCents === undefined && !event.ticketUrl) {
     return [];
   }
 

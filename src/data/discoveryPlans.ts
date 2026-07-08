@@ -41,6 +41,16 @@ export const discoveryMarketPlans: DiscoveryMarketPlan[] = [
         notes: "Exercises normalized feed inventory, preview pricing, and deal alerts."
       },
       {
+        id: "nyc-performing-arts-calendar",
+        label: "NYC performing arts calendar",
+        sourceType: "calendar-feed",
+        lane: "local-pipeline",
+        status: "integration-ready",
+        categories: ["dance", "ballet", "opera"],
+        notes:
+          "Reusable HTML-calendar path for performing-arts depth before building one-off venue adapters."
+      },
+      {
         id: "ticketmaster-discovery",
         label: "Ticketmaster Discovery",
         sourceType: "marketplace-api",

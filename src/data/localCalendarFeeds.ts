@@ -1,4 +1,20 @@
+import type { ShowCategory } from "../types";
+
 export type LocalCalendarSourceKind = "ics" | "rss" | "html-calendar" | "manual-import";
+
+export type LocalCalendarPipelineStatus = "fixture-backed" | "parser-ready";
+
+export type LocalCalendarSource = {
+  id: string;
+  label: string;
+  areaId: string;
+  sourceKind: LocalCalendarSourceKind;
+  sourceUrl: string;
+  categories: ShowCategory[];
+  status: LocalCalendarPipelineStatus;
+  parserNotes: string;
+  exampleExternalIds: string[];
+};
 
 export type LocalCalendarEvent = {
   calendarId: string;
@@ -28,54 +44,260 @@ export type LocalCalendarEvent = {
   recommendationSignals?: string[];
 };
 
+export const localCalendarSources: LocalCalendarSource[] = [
+  {
+    id: "nyc-performing-arts-calendar",
+    label: "NYC performing arts calendar",
+    areaId: "nyc",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://www.joyce.org/performances",
+    categories: ["dance", "ballet", "opera"],
+    status: "fixture-backed",
+    parserNotes:
+      "Use the shared HTML-calendar normalizer for event pages with date rows, buy-link anchors, venue names, and category hints before adding venue-specific adapters.",
+    exampleExternalIds: ["nyc-pa-101", "nyc-pa-102", "nyc-pa-103", "nyc-pa-104"]
+  },
+  {
+    id: "hudson-arts-calendar",
+    label: "Hudson regional arts calendar",
+    areaId: "hudson",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://hudsonhall.org/events/",
+    categories: ["concert", "dance", "opera", "play", "theater", "variety"],
+    status: "fixture-backed",
+    parserNotes:
+      "Start with one regional calendar parser for list pages, event detail URLs, category filters, and price/free-ticket copy; only add venue-specific adapters after measured gaps remain.",
+    exampleExternalIds: ["hac-101", "hac-102", "hac-103", "hac-104", "hac-105", "hac-106"]
+  }
+];
+
 export const localCalendarEvents: LocalCalendarEvent[] = [
   {
-    calendarId: "hudson-arts-calendar",
+    calendarId: "nyc-performing-arts-calendar",
     sourceKind: "html-calendar",
-    sourceUrl: "https://example.com/hudson-arts-calendar",
-    externalId: "hac-101",
-    title: "Riverside Listening Room",
-    presenter: "Hudson Valley Song Circle",
-    taxonomy: ["music", "concert", "folk"],
-    startsAt: "2026-07-10T20:00:00-04:00",
-    venueName: "River Hall",
-    neighborhood: "Warren Street",
-    areaId: "hudson",
-    distanceMiles: 0.4,
-    description: "A small-room singer-songwriter night pulled from a regional arts calendar.",
-    tags: ["listening room", "regional artists", "weekend"],
-    imageTone: "#4A6B5F",
-    ticketUrl: "https://example.com/hudson-arts-calendar/hac-101",
-    priceCents: 2800,
-    listPriceCents: 3500,
-    remainingEstimate: 18,
-    maxQuantity: 6,
-    dealLabel: "Calendar preview",
-    dealDescription: "Small-market preview allocation surfaced from a reusable local calendar feed.",
-    dealExpiresAt: "2026-07-10T18:30:00-04:00",
-    amountOffCents: 700,
-    recommendationSignals: ["category:concert", "category:folk"]
+    sourceUrl: "https://www.joyce.org/performances",
+    externalId: "nyc-pa-101",
+    title: "Pilobolus: Trips",
+    presenter: "Pilobolus",
+    taxonomy: ["dance", "contemporary dance"],
+    startsAt: "2026-07-10T19:30:00-04:00",
+    venueName: "The Joyce Theater",
+    neighborhood: "Chelsea",
+    areaId: "nyc",
+    distanceMiles: 1.8,
+    description:
+      "A Joyce Theater calendar listing for Pilobolus, useful for exercising date-row parsing and ticket-link preservation.",
+    tags: ["contemporary dance", "physical theater", "kinetic"],
+    imageTone: "#246A73",
+    ticketUrl: "https://www.joyce.org/performances/pilobolus-n86f",
+    remainingEstimate: 16,
+    maxQuantity: 4,
+    recommendationSignals: ["category:dance", "spotify:contemporary-dance"]
+  },
+  {
+    calendarId: "nyc-performing-arts-calendar",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://www.joyce.org/performances",
+    externalId: "nyc-pa-102",
+    title: "Ballet Festival",
+    presenter: "The Joyce Theater",
+    taxonomy: ["ballet", "dance"],
+    startsAt: "2026-08-04T19:30:00-04:00",
+    venueName: "The Joyce Theater",
+    neighborhood: "Chelsea",
+    areaId: "nyc",
+    distanceMiles: 1.8,
+    description:
+      "A ballet calendar fixture that keeps NYC performing-arts discovery populated from a reusable calendar source.",
+    tags: ["ballet", "festival", "dance"],
+    imageTone: "#67597A",
+    ticketUrl: "https://www.joyce.org/performances/ballet-festival-rg17",
+    priceCents: 5800,
+    remainingEstimate: 22,
+    maxQuantity: 4,
+    recommendationSignals: ["category:ballet", "spotify:ballet"]
+  },
+  {
+    calendarId: "nyc-performing-arts-calendar",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://www.metopera.org/",
+    externalId: "nyc-pa-103",
+    title: "Macbeth",
+    presenter: "The Metropolitan Opera",
+    taxonomy: ["opera", "classical", "verdi"],
+    startsAt: "2026-09-22T18:30:00-04:00",
+    venueName: "Metropolitan Opera House",
+    neighborhood: "Lincoln Center",
+    areaId: "nyc",
+    distanceMiles: 3.2,
+    description:
+      "A Met Opera event page fixture that proves the calendar path can carry opera listings and public ticket links.",
+    tags: ["opera", "verdi", "lincoln center"],
+    imageTone: "#8A3FFC",
+    ticketUrl: "https://www.metopera.org/season/2026-27-season/macbeth/",
+    priceCents: 3500,
+    remainingEstimate: 40,
+    maxQuantity: 4,
+    recommendationSignals: ["category:opera", "spotify:opera", "spotify:classical"]
+  },
+  {
+    calendarId: "nyc-performing-arts-calendar",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://www.nycballet.com/season-and-tickets/seasons",
+    externalId: "nyc-pa-104",
+    title: "Jewels",
+    presenter: "New York City Ballet",
+    taxonomy: ["ballet", "dance"],
+    startsAt: "2026-09-22T19:30:00-04:00",
+    venueName: "David H. Koch Theater",
+    neighborhood: "Lincoln Center",
+    areaId: "nyc",
+    distanceMiles: 3.1,
+    description:
+      "A New York City Ballet season listing that exercises on-sale metadata and a reusable ballet calendar source.",
+    tags: ["ballet", "balanchine", "lincoln center"],
+    imageTone: "#C65D2E",
+    ticketUrl: "https://www.nycballet.com/season-and-tickets/fall-2026/jewels",
+    remainingEstimate: 32,
+    maxQuantity: 4,
+    recommendationSignals: ["category:ballet", "spotify:ballet", "spotify:classical"]
   },
   {
     calendarId: "hudson-arts-calendar",
     sourceKind: "html-calendar",
-    sourceUrl: "https://example.com/hudson-arts-calendar",
+    sourceUrl: "https://hudsonhall.org/events/",
+    externalId: "hac-101",
+    title: "Ruckus: The Edinburgh Rollick",
+    presenter: "Ruckus",
+    taxonomy: ["music", "concert", "folk baroque"],
+    startsAt: "2026-07-29T18:00:00-04:00",
+    venueName: "Hudson Hall",
+    neighborhood: "Warren Street",
+    areaId: "hudson",
+    distanceMiles: 0.4,
+    description:
+      "A regional calendar listing for Ruckus at Hudson Hall, including a real event page.",
+    tags: ["folk baroque", "waterfront", "regional artists"],
+    imageTone: "#4A6B5F",
+    ticketUrl: "https://hudsonhall.org/event/ruckus/",
+    priceCents: 0,
+    remainingEstimate: 18,
+    maxQuantity: 6,
+    dealLabel: "Free concert",
+    dealDescription: "Free concert surfaced from a reusable local calendar feed.",
+    dealExpiresAt: "2026-07-29T12:00:00-04:00",
+    recommendationSignals: ["category:concert", "spotify:folk", "spotify:baroque"]
+  },
+  {
+    calendarId: "hudson-arts-calendar",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://hudsonhall.org/events/",
     externalId: "hac-102",
-    title: "Warehouse Movement Studies",
-    presenter: "North River Dance Lab",
-    taxonomy: ["dance", "performance"],
-    startsAt: "2026-07-12T16:00:00-04:00",
-    venueName: "Foundry Studio",
+    title: "Midsummer Swing!",
+    presenter: "Hudson Hall",
+    taxonomy: ["dance", "live music", "swing"],
+    startsAt: "2026-07-25T18:30:00-04:00",
+    venueName: "Hudson Hall",
+    neighborhood: "Warren Street",
+    areaId: "hudson",
+    distanceMiles: 0.4,
+    description:
+      "A Hudson Hall dance-and-live-music listing used to test dance category parsing from a regional calendar.",
+    tags: ["swing dance", "live music", "lesson"],
+    imageTone: "#0D7C75",
+    ticketUrl: "https://hudsonhall.org/event/midsummer-swing/",
+    priceCents: 4200,
+    remainingEstimate: 24,
+    maxQuantity: 4,
+    recommendationSignals: ["category:dance", "spotify:swing"]
+  },
+  {
+    calendarId: "hudson-arts-calendar",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://hudsonhall.org/events/",
+    externalId: "hac-103",
+    title: "Handel Sets Sail",
+    presenter: "Hudson Hall",
+    taxonomy: ["opera", "classical", "handel"],
+    startsAt: "2026-07-11T18:00:00-04:00",
+    venueName: "Schooner Apollonia",
     neighborhood: "Waterfront",
     areaId: "hudson",
     distanceMiles: 0.8,
-    description: "An afternoon dance showing discovered through a reusable regional calendar source.",
-    tags: ["contemporary dance", "studio showing", "matinee"],
-    imageTone: "#0D7C75",
-    ticketUrl: "https://example.com/hudson-arts-calendar/hac-102",
-    priceCents: 2200,
-    remainingEstimate: 24,
+    description:
+      "An opera-series calendar listing that proves the small-market feed path can carry classical and opera inventory.",
+    tags: ["opera", "handel", "waterfront"],
+    imageTone: "#36558F",
+    ticketUrl: "https://hudsonhall.org/event/handel-sets-sail-3/",
+    priceCents: 6500,
+    remainingEstimate: 12,
+    maxQuantity: 2,
+    recommendationSignals: ["category:opera", "spotify:opera", "spotify:classical"]
+  },
+  {
+    calendarId: "hudson-arts-calendar",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://hudsonhall.org/events?_sfm_event_category=theater",
+    externalId: "hac-104",
+    title: "Regional Play Calendar Slot",
+    presenter: "Hudson Valley Theater Calendar",
+    taxonomy: ["play", "theater"],
+    startsAt: "2026-07-18T19:30:00-04:00",
+    venueName: "Regional Black Box",
+    neighborhood: "Warren Street",
+    areaId: "hudson",
+    distanceMiles: 0.6,
+    description:
+      "A parser-ready play fixture for a regional theater calendar filter, kept generic until a venue feed is measured as worth a bespoke adapter.",
+    tags: ["new play", "regional theater", "black box"],
+    imageTone: "#6C4F3D",
+    ticketUrl: "https://hudsonhall.org/events?_sfm_event_category=theater",
+    remainingEstimate: 20,
     maxQuantity: 4,
-    recommendationSignals: ["category:dance"]
+    recommendationSignals: ["category:play", "spotify:theater"]
+  },
+  {
+    calendarId: "hudson-arts-calendar",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://hudsonhall.org/events?_sfm_event_category=theater",
+    externalId: "hac-105",
+    title: "Regional Theater Calendar Slot",
+    presenter: "Hudson Valley Theater Calendar",
+    taxonomy: ["theater", "performance"],
+    startsAt: "2026-07-19T15:00:00-04:00",
+    venueName: "Regional Black Box",
+    neighborhood: "Warren Street",
+    areaId: "hudson",
+    distanceMiles: 0.6,
+    description:
+      "A parser-ready theater fixture that keeps Hudson's calendar lane category-complete without adding one-off venue code.",
+    tags: ["theater", "performance", "regional arts"],
+    imageTone: "#7A4057",
+    ticketUrl: "https://hudsonhall.org/events?_sfm_event_category=theater",
+    remainingEstimate: 18,
+    maxQuantity: 4,
+    recommendationSignals: ["category:theater", "spotify:theater"]
+  },
+  {
+    calendarId: "hudson-arts-calendar",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://hudsonhall.org/events?_sfm_event_category=special-events",
+    externalId: "hac-106",
+    title: "Surface, Structure, String",
+    presenter: "Hudson Hall",
+    taxonomy: ["variety", "exhibition", "special event"],
+    startsAt: "2026-07-12T12:00:00-04:00",
+    venueName: "Hudson Hall",
+    neighborhood: "Warren Street",
+    areaId: "hudson",
+    distanceMiles: 0.4,
+    description:
+      "A Hudson Hall exhibition listing that exercises adjacent-live discovery for the regional arts calendar.",
+    tags: ["exhibition", "textile art", "special event"],
+    imageTone: "#8A6F2A",
+    ticketUrl: "https://hudsonhall.org/event/surface-structure-string/",
+    remainingEstimate: 40,
+    maxQuantity: 4,
+    recommendationSignals: ["category:variety"]
   }
 ];

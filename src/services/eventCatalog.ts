@@ -354,17 +354,37 @@ function selectBalancedDefaultShows(shows: Show[], limit: number): Show[] {
   const selectedIds = new Set<string>();
   const originalIndexById = new Map(shows.map((show, index) => [show.id, index]));
   const showsByCategory = new Map<ShowCategory, Show[]>();
+  const showsBySource = new Map<InventorySource, Show[]>();
   const activeCategories = new Set<ShowCategory>();
+  const activeSources = new Set<InventorySource>();
   const selectedCountsByCategory = new Map<ShowCategory, number>();
 
   for (const show of shows) {
     activeCategories.add(show.category);
+    activeSources.add(show.source);
     showsByCategory.set(show.category, [...(showsByCategory.get(show.category) ?? []), show]);
+    showsBySource.set(show.source, [...(showsBySource.get(show.source) ?? []), show]);
   }
 
   const minimumPerCategory =
     activeCategories.size >= limit ? 1 : Math.max(2, Math.min(8, Math.floor(limit / 12)));
   const maximumPerCategory = Math.max(minimumPerCategory, Math.ceil(limit * 0.35));
+  const selectShow = (show: Show, enforceCategoryMaximum: boolean) => {
+    if (selectedIds.size >= limit || selectedIds.has(show.id)) {
+      return false;
+    }
+
+    const selectedCategoryCount = selectedCountsByCategory.get(show.category) ?? 0;
+
+    if (enforceCategoryMaximum && selectedCategoryCount >= maximumPerCategory) {
+      return false;
+    }
+
+    selectedIds.add(show.id);
+    selectedCountsByCategory.set(show.category, selectedCategoryCount + 1);
+
+    return true;
+  };
 
   for (const category of activeCategories) {
     const rankedCategoryShows = [...(showsByCategory.get(category) ?? [])].sort(
@@ -374,16 +394,35 @@ function selectBalancedDefaultShows(shows: Show[], limit: number): Show[] {
     );
 
     for (const show of rankedCategoryShows.slice(0, minimumPerCategory)) {
-      if (selectedIds.size >= limit) {
-        break;
-      }
-
-      selectedIds.add(show.id);
-      selectedCountsByCategory.set(category, (selectedCountsByCategory.get(category) ?? 0) + 1);
+      selectShow(show, true);
     }
 
     if (selectedIds.size >= limit) {
       break;
+    }
+  }
+
+  const prioritizedSources = [...activeSources].sort(
+    (first, second) =>
+      (sourceDisplayPriority[second] ?? 0) - (sourceDisplayPriority[first] ?? 0) ||
+      first.localeCompare(second)
+  );
+
+  for (const source of prioritizedSources) {
+    if (selectedIds.size >= limit) {
+      break;
+    }
+
+    const rankedSourceShows = [...(showsBySource.get(source) ?? [])].sort(
+      (first, second) =>
+        getDefaultDiscoveryQualityScore(second) - getDefaultDiscoveryQualityScore(first) ||
+        getStartTime(first) - getStartTime(second)
+    );
+
+    for (const show of rankedSourceShows) {
+      if (selectShow(show, true)) {
+        break;
+      }
     }
   }
 
@@ -392,18 +431,7 @@ function selectBalancedDefaultShows(shows: Show[], limit: number): Show[] {
       break;
     }
 
-    if (selectedIds.has(show.id)) {
-      continue;
-    }
-
-    const selectedCategoryCount = selectedCountsByCategory.get(show.category) ?? 0;
-
-    if (selectedCategoryCount >= maximumPerCategory) {
-      continue;
-    }
-
-    selectedIds.add(show.id);
-    selectedCountsByCategory.set(show.category, selectedCategoryCount + 1);
+    selectShow(show, true);
   }
 
   if (selectedIds.size < limit) {
@@ -412,7 +440,7 @@ function selectBalancedDefaultShows(shows: Show[], limit: number): Show[] {
         break;
       }
 
-      selectedIds.add(show.id);
+      selectShow(show, false);
     }
   }
 
