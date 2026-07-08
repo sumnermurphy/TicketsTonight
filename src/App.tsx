@@ -57,6 +57,7 @@ import {
   getDiscoveryPicks,
   type DiscoveryPick
 } from "./services/discoveryRanking";
+import { getDiscoveryResultSections } from "./services/discoveryResultSections";
 import {
   filterShows,
   getBestOffer,
@@ -340,6 +341,10 @@ export default function App() {
   const discoveryPicks = useMemo(
     () => getDiscoveryPicks(visibleShows, new Date().toISOString(), 4),
     [visibleShows]
+  );
+  const resultSections = useMemo(
+    () => getDiscoveryResultSections(visibleShows, { sortMode: discoverySortMode }),
+    [discoverySortMode, visibleShows]
   );
   const dealSummary = useMemo(() => getDealSummary(dealAlertInventory), [dealAlertInventory]);
   const categoryFacets = useMemo(
@@ -1105,14 +1110,26 @@ export default function App() {
               </View>
             ) : null}
 
-            {visibleShows.map((show) => (
-              <ShowCard
-                key={show.id}
-                onOpenDetails={() => openShowDetails(show)}
-                onToggleSaved={() => toggleSavedShow(show.id)}
-                saved={savedShowIds.includes(show.id)}
-                show={show}
-              />
+            {resultSections.map((section) => (
+              <View key={section.id} style={styles.resultSection}>
+                <View style={styles.resultSectionHeader}>
+                  <Text style={styles.resultSectionTitle}>{section.title}</Text>
+                  <Text style={styles.resultSectionCount}>
+                    {section.showCount} {section.showCount === 1 ? "show" : "shows"}
+                  </Text>
+                </View>
+                <View style={styles.resultSectionList}>
+                  {section.shows.map((show) => (
+                    <ShowCard
+                      key={show.id}
+                      onOpenDetails={() => openShowDetails(show)}
+                      onToggleSaved={() => toggleSavedShow(show.id)}
+                      saved={savedShowIds.includes(show.id)}
+                      show={show}
+                    />
+                  ))}
+                </View>
+              </View>
             ))}
 
             {!discoveryLoading && !visibleShows.length ? (
@@ -2952,8 +2969,30 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm
   },
   showList: {
-    gap: spacing.md,
+    gap: spacing.lg,
     paddingHorizontal: spacing.xl
+  },
+  resultSection: {
+    gap: spacing.sm
+  },
+  resultSectionHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md
+  },
+  resultSectionTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  resultSectionCount: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  resultSectionList: {
+    gap: spacing.md
   },
   loadingState: {
     alignItems: "center",

@@ -29,6 +29,7 @@ import {
   getSavingsPercent
 } from "../src/services/dealDiscovery";
 import { getDiscoveryPicks } from "../src/services/discoveryRanking";
+import { getDiscoveryResultSections } from "../src/services/discoveryResultSections";
 import {
   getDiscoveryCategoryCoverage,
   getDiscoveryMarketPlan,
@@ -404,6 +405,34 @@ async function main() {
       (show, index, shows) => index === 0 || shows[index - 1]!.distanceMiles <= show.distanceMiles
     ),
     "Nearby sort should order shows by distance."
+  );
+  const soonestResultSections = getDiscoveryResultSections(nycAreaInventory, {
+    sortMode: "soonest",
+    referenceNow
+  });
+  const cheapestResultSections = getDiscoveryResultSections(cheapestNycShows, {
+    sortMode: "cheapest",
+    referenceNow
+  });
+
+  assert(
+    soonestResultSections[0]?.title === "Tonight" &&
+      soonestResultSections[0].showCount === 2 &&
+      soonestResultSections[1]?.title === "Tomorrow",
+    "Soonest discovery results should be grouped into scan-friendly date sections."
+  );
+  assert(
+    soonestResultSections.some(
+      (section) => section.title === "Sun, Jul 12" && section.showCount === 2
+    ),
+    "Date sections should group multiple shows that share the same event date."
+  );
+  assert(
+    cheapestResultSections.length === 1 &&
+      cheapestResultSections[0]?.title === "Cheapest first" &&
+      cheapestResultSections[0].shows.map((show) => show.id).join("|") ===
+        cheapestNycShows.map((show) => show.id).join("|"),
+    "Non-date sort modes should keep one sorted result section in the requested order."
   );
   const defaultFilterSummary = getDiscoveryFilterSummary({
     categories: [],
