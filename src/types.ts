@@ -179,6 +179,7 @@ export type UserPreferences = {
   selectedCategories: ShowCategory[];
   dateWindow: DateWindow;
   onlyDeals: boolean;
+  dealAlertMaxPriceCents?: number;
   tasteEnabled: boolean;
   savedShowIds: string[];
   dealAlerts: DealAlert[];

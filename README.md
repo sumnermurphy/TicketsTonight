@@ -9,6 +9,7 @@ Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ball
 - First-class category coverage for concerts, DJ sets, dance, ballet, opera, plays, theater, comedy, and variety/adjacent live events.
 - Deal-aware ticket inventory with list prices, savings, access method, inventory source, and max quantities.
 - Discount discovery ranking that prioritizes stronger savings and urgent deal windows before checkout is active.
+- Deal alerts can track the current area/category/date filters with optional under-$35, under-$50, or under-$75 price thresholds.
 - Checkout groundwork remains behind services, but purchase UI, account sign-in, and wallet are out of the active MVP for now.
 - Saved shows, deal alerts, in-app deal notifications, and persisted discovery preferences through a replaceable repository layer.
 - Spotify-shaped taste-provider groundwork remains in services, but Spotify connection and taste-pick UI are out of the active MVP for now.

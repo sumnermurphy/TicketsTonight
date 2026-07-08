@@ -10,9 +10,10 @@ export type DealAlertInput = {
 
 export function createDealAlert(input: DealAlertInput, now = new Date().toISOString()): DealAlert {
   const normalizedCategories = [...new Set(input.categories)].sort();
+  const maxPriceKey = input.maxPriceCents ? `under-${input.maxPriceCents}` : "any-price";
 
   return {
-    id: `deal-alert-${input.areaId}-${input.dateWindow}-${normalizedCategories.join("-") || "all"}`,
+    id: `deal-alert-${input.areaId}-${input.dateWindow}-${normalizedCategories.join("-") || "all"}-${maxPriceKey}`,
     areaId: input.areaId,
     categories: normalizedCategories,
     dateWindow: input.dateWindow,

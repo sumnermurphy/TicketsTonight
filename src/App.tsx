@@ -77,6 +77,12 @@ const dateWindowLabels: Record<DateWindow, string> = {
   weekend: "Weekend"
 };
 const dateWindows = Object.keys(dateWindowLabels) as DateWindow[];
+const dealAlertPriceOptions: Array<{ label: string; value?: number }> = [
+  { label: "Any price" },
+  { label: "Under $35", value: 3500 },
+  { label: "Under $50", value: 5000 },
+  { label: "Under $75", value: 7500 }
+];
 
 const sourceLabels: Record<InventorySource, string> = {
   "venue-direct": "Venue direct",
@@ -98,6 +104,7 @@ export default function App() {
   const [selectedCategories, setSelectedCategories] = useState<ShowCategory[]>([]);
   const [dateWindow, setDateWindow] = useState<DateWindow>("all");
   const [onlyDeals, setOnlyDeals] = useState(false);
+  const [dealAlertMaxPriceCents, setDealAlertMaxPriceCents] = useState<number | undefined>();
   const [locationStatus, setLocationStatus] = useState("Manual area");
   const [locating, setLocating] = useState(false);
   const [areaMenuOpen, setAreaMenuOpen] = useState(false);
@@ -129,6 +136,7 @@ export default function App() {
           setSelectedCategories(preferences.selectedCategories);
           setDateWindow(preferences.dateWindow ?? "all");
           setOnlyDeals(preferences.onlyDeals);
+          setDealAlertMaxPriceCents(preferences.dealAlertMaxPriceCents);
           setSavedShowIds(preferences.savedShowIds);
           setDealAlerts(preferences.dealAlerts ?? []);
           setNotifications(preferences.notifications ?? []);
@@ -156,6 +164,7 @@ export default function App() {
       selectedCategories,
       dateWindow,
       onlyDeals,
+      dealAlertMaxPriceCents,
       tasteEnabled: false,
       savedShowIds,
       dealAlerts,
@@ -168,6 +177,7 @@ export default function App() {
   }, [
     hydrated,
     dateWindow,
+    dealAlertMaxPriceCents,
     dealAlerts,
     locationStatus,
     notifications,
@@ -298,9 +308,10 @@ export default function App() {
       (alert) =>
         alert.areaId === selectedAreaId &&
         alert.dateWindow === dateWindow &&
-        alert.categories.join("|") === currentCategories
+        alert.categories.join("|") === currentCategories &&
+        (alert.maxPriceCents ?? null) === (dealAlertMaxPriceCents ?? null)
     );
-  }, [dateWindow, dealAlerts, selectedAreaId, selectedCategories]);
+  }, [dateWindow, dealAlertMaxPriceCents, dealAlerts, selectedAreaId, selectedCategories]);
   const savedShows = useMemo(
     () =>
       savedShowIds
@@ -364,7 +375,8 @@ export default function App() {
         {
           areaId: selectedAreaId,
           categories: selectedCategories,
-          dateWindow
+          dateWindow,
+          maxPriceCents: dealAlertMaxPriceCents
         },
         now
       ),
@@ -626,10 +638,12 @@ export default function App() {
                 {currentDealAlert?.status === "active"
                   ? inventoryLoading
                     ? "Checking discounts"
-                    : `${dealAlertMatches.length} matching discounted shows`
+                    : `${dealAlertMatches.length} matching ${getDealAlertPriceLabel(
+                        dealAlertMaxPriceCents
+                      ).toLowerCase()} deals`
                   : currentDealAlert?.status === "paused"
                     ? "Paused for current filters"
-                    : "Track discounts for current filters"}
+                    : `Track ${getDealAlertPriceLabel(dealAlertMaxPriceCents).toLowerCase()} deals`}
               </Text>
             </View>
             <Text
@@ -641,6 +655,26 @@ export default function App() {
               {currentDealAlert ? (currentDealAlert.status === "active" ? "Pause" : "Resume") : "Create"}
             </Text>
           </Pressable>
+
+          <View style={styles.dealAlertRuleHeader}>
+            <Text style={styles.dealAlertRuleTitle}>Alert price</Text>
+            <Text style={styles.dealAlertRuleMeta}>{getDealAlertPriceLabel(dealAlertMaxPriceCents)}</Text>
+          </View>
+
+          <ScrollView
+            contentContainerStyle={styles.dealAlertPriceRail}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          >
+            {dealAlertPriceOptions.map((option) => (
+              <DealAlertPriceChip
+                active={(option.value ?? null) === (dealAlertMaxPriceCents ?? null)}
+                key={option.label}
+                label={option.label}
+                onPress={() => setDealAlertMaxPriceCents(option.value)}
+              />
+            ))}
+          </ScrollView>
 
           {dealAlertMatches.length ? (
             <View style={styles.alertMatchPanel}>
@@ -855,6 +889,33 @@ function DateWindowChip({
   );
 }
 
+function DealAlertPriceChip({
+  active,
+  label,
+  onPress
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={[styles.dealAlertPriceChip, active ? styles.dealAlertPriceChipActive : undefined]}
+    >
+      <Text
+        style={[
+          styles.dealAlertPriceChipText,
+          active ? styles.dealAlertPriceChipTextActive : undefined
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 function DealAlertMatchCard({ match, onBuy }: { match: DealAlertMatch; onBuy: () => void }) {
   return (
     <Pressable onPress={onBuy} style={styles.alertMatchCard}>
@@ -921,6 +982,10 @@ function getDealSummaryCopy(dealSummary: ReturnType<typeof getDealSummary>, area
   }
 
   return `${dealSummary.dealCount} active in ${areaName}`;
+}
+
+function getDealAlertPriceLabel(maxPriceCents: number | undefined): string {
+  return maxPriceCents ? `Under ${formatMoney(maxPriceCents)}` : "Any price";
 }
 
 function DealCard({ insight, onPress }: { insight: DealInsight; onPress: () => void }) {
@@ -1730,6 +1795,50 @@ const styles = StyleSheet.create({
   },
   dealAlertActionActive: {
     color: colors.paper
+  },
+  dealAlertRuleHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.xl
+  },
+  dealAlertRuleTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  dealAlertRuleMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  dealAlertPriceRail: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md
+  },
+  dealAlertPriceChip: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 34,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    paddingHorizontal: spacing.md
+  },
+  dealAlertPriceChipActive: {
+    borderColor: colors.coral,
+    backgroundColor: "#F8E6DC"
+  },
+  dealAlertPriceChipText: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  dealAlertPriceChipTextActive: {
+    color: colors.coralDark
   },
   alertMatchPanel: {
     marginTop: spacing.xs

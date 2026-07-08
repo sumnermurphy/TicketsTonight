@@ -599,6 +599,30 @@ async function main() {
     alertMatches.some((match) => match.show.id === "show-alina-ives"),
     "Deal alerts should match discounted events in the selected area/category/window."
   );
+  const maxPriceDealAlert = createDealAlert(
+    {
+      areaId: "nyc",
+      categories: [],
+      dateWindow: "weekend",
+      maxPriceCents: 3500
+    },
+    "2026-07-08T12:00:00.000Z"
+  );
+  const maxPriceAlertMatches = getDealAlertMatches([maxPriceDealAlert], dealShows, referenceNow);
+
+  assert(
+    maxPriceDealAlert.id.endsWith("under-3500"),
+    "Max-price deal alerts should carry the price rule in their id."
+  );
+  assert(
+    maxPriceAlertMatches.length > 0 &&
+      maxPriceAlertMatches.every((match) => match.offer.priceCents <= 3500),
+    "Max-price deal alerts should only match offers under the selected price."
+  );
+  assert(
+    !maxPriceAlertMatches.some((match) => match.show.id === "show-midtown-revue"),
+    "Max-price deal alerts should exclude higher-priced discounted shows."
+  );
 
   const pausedAlert = toggleDealAlertStatus(dealAlert, "2026-07-08T12:01:00.000Z");
   assert(pausedAlert.status === "paused", "Deal alert toggle should pause active alerts.");
@@ -789,6 +813,7 @@ async function main() {
     selectedCategories: ["concert"],
     dateWindow: "tonight",
     onlyDeals: true,
+    dealAlertMaxPriceCents: 3500,
     tasteEnabled: true,
     savedShowIds: ["show-alina-ives"],
     dealAlerts: [dealAlert],
@@ -802,6 +827,10 @@ async function main() {
   const storedPreferences = await repository.loadPreferences();
 
   assert(storedPreferences?.onlyDeals === true, "Repository should persist deal preference.");
+  assert(
+    storedPreferences.dealAlertMaxPriceCents === 3500,
+    "Repository should persist deal alert max-price preference."
+  );
   assert(storedPreferences.dateWindow === "tonight", "Repository should persist date window preference.");
   assert(
     storedPreferences.savedShowIds.includes("show-alina-ives"),
