@@ -68,6 +68,38 @@ export const localCalendarSources: LocalCalendarSource[] = [
     parserNotes:
       "Start with one regional calendar parser for list pages, event detail URLs, category filters, and price/free-ticket copy; only add venue-specific adapters after measured gaps remain.",
     exampleExternalIds: ["hac-101", "hac-102", "hac-103", "hac-104", "hac-105", "hac-106"]
+  },
+  {
+    id: "hudson-fisher-center-calendar",
+    label: "Fisher Center / Bard SummerScape calendar",
+    areaId: "hudson",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://fishercenter.bard.edu/whats-on/",
+    categories: ["concert", "opera", "theater", "variety"],
+    status: "fixture-backed",
+    parserNotes:
+      "Public event pages expose titles, date blocks, venue/location, ticketing copy, and Buy Tickets links; use as a regional performing-arts parser candidate after legal review.",
+    exampleExternalIds: [
+      "fisher-2026-egyptian-helen",
+      "fisher-2026-mozart-program-one",
+      "fisher-2026-abduction-seraglio"
+    ]
+  },
+  {
+    id: "hudson-basilica-calendar",
+    label: "Basilica Hudson events calendar",
+    areaId: "hudson",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://basilicahudson.org/events/",
+    categories: ["concert", "dj", "variety"],
+    status: "fixture-backed",
+    parserNotes:
+      "Public event index exposes upcoming event dates and detail links; use as a Hudson music and electronic-adjacent calendar candidate before bespoke venue adapters.",
+    exampleExternalIds: [
+      "basilica-2026-wednesday",
+      "basilica-2026-houndmouth",
+      "basilica-2026-boy-harsher"
+    ]
   }
 ];
 
@@ -299,5 +331,140 @@ export const localCalendarEvents: LocalCalendarEvent[] = [
     remainingEstimate: 40,
     maxQuantity: 4,
     recommendationSignals: ["category:variety"]
+  },
+  {
+    calendarId: "hudson-fisher-center-calendar",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://fishercenter.bard.edu/whats-on/",
+    externalId: "fisher-2026-egyptian-helen",
+    title: "The Egyptian Helen",
+    presenter: "Bard SummerScape",
+    taxonomy: ["opera", "richard strauss", "summerscape"],
+    startsAt: "2026-07-24T18:30:00-04:00",
+    venueName: "Fisher Center, Sosnoff Theater",
+    neighborhood: "Annandale-on-Hudson",
+    areaId: "hudson",
+    distanceMiles: 8.8,
+    description:
+      "A Fisher Center SummerScape opera listing with ticketing copy, event detail dates, and a public Buy Tickets path.",
+    tags: ["opera", "summerscape", "regional performing arts"],
+    imageTone: "#514066",
+    ticketUrl: "https://fishercenter.bard.edu/series/the-egyptian-helen/",
+    priceCents: 2500,
+    remainingEstimate: 28,
+    maxQuantity: 4,
+    recommendationSignals: ["category:opera", "spotify:opera", "spotify:classical"]
+  },
+  {
+    calendarId: "hudson-fisher-center-calendar",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://fishercenter.bard.edu/whats-on/",
+    externalId: "fisher-2026-mozart-program-one",
+    title: "Program One: The Many Facets of Mozart",
+    presenter: "Bard Music Festival",
+    taxonomy: ["concert", "bard music festival", "mozart"],
+    startsAt: "2026-08-07T19:00:00-04:00",
+    venueName: "Fisher Center, Sosnoff Theater",
+    neighborhood: "Annandale-on-Hudson",
+    areaId: "hudson",
+    distanceMiles: 8.8,
+    description:
+      "A Bard Music Festival concert listing with commentary, ticketing copy, and a public Buy Tickets path.",
+    tags: ["mozart", "festival", "classical"],
+    imageTone: "#2F5D62",
+    ticketUrl: "https://fishercenter.bard.edu/events/bmf26-p1/",
+    priceCents: 2500,
+    remainingEstimate: 30,
+    maxQuantity: 4,
+    recommendationSignals: ["category:concert", "spotify:classical", "spotify:mozart"]
+  },
+  {
+    calendarId: "hudson-fisher-center-calendar",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://fishercenter.bard.edu/whats-on/",
+    externalId: "fisher-2026-abduction-seraglio",
+    title: "Mozart's Abduction from the Seraglio",
+    presenter: "Bard Music Festival",
+    taxonomy: ["opera", "mozart", "bard music festival"],
+    startsAt: "2026-08-16T15:00:00-04:00",
+    venueName: "Fisher Center, Sosnoff Theater",
+    neighborhood: "Annandale-on-Hudson",
+    areaId: "hudson",
+    distanceMiles: 8.8,
+    description:
+      "A Bard Music Festival opera program with public event details, ticketing copy, and a Buy Tickets path.",
+    tags: ["mozart", "opera", "festival"],
+    imageTone: "#755C1B",
+    ticketUrl: "https://fishercenter.bard.edu/events/bmf26-p11/",
+    priceCents: 2500,
+    remainingEstimate: 26,
+    maxQuantity: 4,
+    recommendationSignals: ["category:opera", "spotify:opera", "spotify:classical"]
+  },
+  {
+    calendarId: "hudson-basilica-calendar",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://basilicahudson.org/events/",
+    externalId: "basilica-2026-wednesday",
+    title: "WEDNESDAY",
+    presenter: "Basilica Hudson",
+    taxonomy: ["concert", "rock"],
+    startsAt: "2026-07-22T20:00:00-04:00",
+    venueName: "Basilica Hudson",
+    neighborhood: "South Front Street",
+    areaId: "hudson",
+    distanceMiles: 0.9,
+    description:
+      "A Basilica Hudson upcoming-event listing for July 22, preserved as a link-ready local calendar fixture.",
+    tags: ["indie rock", "basilica hudson", "regional music"],
+    imageTone: "#334E4B",
+    ticketUrl: "https://basilicahudson.org/events/wednesday/",
+    remainingEstimate: 24,
+    maxQuantity: 4,
+    recommendationSignals: ["category:concert", "spotify:indie-rock"]
+  },
+  {
+    calendarId: "hudson-basilica-calendar",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://basilicahudson.org/events/",
+    externalId: "basilica-2026-houndmouth",
+    title: "HOUNDMOUTH",
+    presenter: "Basilica Hudson",
+    taxonomy: ["concert", "rock"],
+    startsAt: "2026-08-04T20:00:00-04:00",
+    venueName: "Basilica Hudson",
+    neighborhood: "South Front Street",
+    areaId: "hudson",
+    distanceMiles: 0.9,
+    description:
+      "A Basilica Hudson upcoming-event listing for August 4, preserved as a link-ready local calendar fixture.",
+    tags: ["rock", "basilica hudson", "regional music"],
+    imageTone: "#7A3F38",
+    ticketUrl: "https://basilicahudson.org/events/houndmouth/",
+    remainingEstimate: 28,
+    maxQuantity: 4,
+    recommendationSignals: ["category:concert", "spotify:rock"]
+  },
+  {
+    calendarId: "hudson-basilica-calendar",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://basilicahudson.org/events/",
+    externalId: "basilica-2026-boy-harsher",
+    title: "Soundscape Presents: Boy Harsher",
+    presenter: "Basilica Hudson",
+    taxonomy: ["electronic", "concert", "darkwave"],
+    startsAt: "2026-09-25T20:00:00-04:00",
+    venueName: "Basilica Hudson",
+    neighborhood: "South Front Street",
+    areaId: "hudson",
+    distanceMiles: 0.9,
+    description:
+      "A Basilica Hudson upcoming-event listing for September 25 that adds electronic-adjacent music to Hudson discovery.",
+    tags: ["electronic", "darkwave", "basilica hudson"],
+    imageTone: "#4A355A",
+    ticketUrl: "https://basilicahudson.org/events/soundscape-presents-boy-harsher/",
+    remainingEstimate: 26,
+    maxQuantity: 4,
+    recommendationSignals: ["category:dj", "spotify:electronic", "spotify:darkwave"]
   }
 ];

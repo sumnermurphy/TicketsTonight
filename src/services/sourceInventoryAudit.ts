@@ -2,7 +2,7 @@ import { shows } from "../data/catalog";
 import { localCalendarEvents } from "../data/localCalendarFeeds";
 import { partnerFeedEvents } from "../data/partnerFeeds";
 import type { LocalCalendarEvent } from "../data/localCalendarFeeds";
-import type { InventorySource, Show } from "../types";
+import type { InventorySource, Show, ShowCategory } from "../types";
 import { normalizeCalendarEvent } from "./calendarFeedProvider";
 import { normalizeFeedEvent } from "./feedProvider";
 import { getSafeTicketUrl } from "./ticketLinks";
@@ -30,6 +30,7 @@ export type SourceInventorySummary = {
   freshnessLabel: string;
   eventCount: number;
   ticketLinkCount: number;
+  activeCategories: ShowCategory[];
   activeCategoryCount: number;
   lastImportedAt?: string;
   inventorySource?: InventorySource;
@@ -137,6 +138,8 @@ function createShowSourceSummary({
   notes: string;
   lastImportedAt?: string;
 }): SourceInventorySummary {
+  const activeCategories = getActiveCategories(shows);
+
   return {
     id,
     label,
@@ -146,7 +149,8 @@ function createShowSourceSummary({
     freshnessLabel,
     eventCount: shows.length,
     ticketLinkCount: shows.filter(hasTicketLink).length,
-    activeCategoryCount: new Set(shows.map((show) => show.category)).size,
+    activeCategories,
+    activeCategoryCount: activeCategories.length,
     lastImportedAt,
     notes
   };
@@ -173,6 +177,7 @@ function createTicketmasterSourceSummary({
       freshnessLabel: "not configured",
       eventCount: 0,
       ticketLinkCount: 0,
+      activeCategories: [],
       activeCategoryCount: 0,
       lastImportedAt: referenceNow,
       inventorySource: "primary-marketplace",
@@ -189,6 +194,7 @@ function createTicketmasterSourceSummary({
     freshnessLabel: "runtime live fetch",
     eventCount: diagnostics.filteredShowCount,
     ticketLinkCount: diagnostics.ticketLinkCount,
+    activeCategories: diagnostics.categoryCounts.map((count) => count.id as ShowCategory),
     activeCategoryCount: diagnostics.categoryCounts.length,
     lastImportedAt: diagnostics.requestedAt,
     inventorySource: "primary-marketplace",
@@ -201,4 +207,8 @@ function createTicketmasterSourceSummary({
 
 function hasTicketLink(show: Show): boolean {
   return show.ticketOffers.some((offer) => Boolean(getSafeTicketUrl(offer.externalUrl)));
+}
+
+function getActiveCategories(shows: Show[]): ShowCategory[] {
+  return Array.from(new Set(shows.map((show) => show.category)));
 }

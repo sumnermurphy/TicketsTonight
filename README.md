@@ -94,6 +94,12 @@ Run the live inventory audit for fixture, parser, and Ticketmaster source readin
 npm run audit:live-inventory
 ```
 
+Run the source-readiness audit for ranked next-source decisions, including RA partner/API posture and Hudson local-calendar lift:
+
+```bash
+npm run audit:sources
+```
+
 Run the default discovery quality audit for the app-facing shaped result lists:
 
 ```bash
@@ -127,7 +133,7 @@ npm run android
 - `src/data/broadApiCandidates.ts`: ranked broad API candidates for baseline event coverage, ticket links, price inventory, and coverage-gap auditing.
 - `src/data/discoveryPlans.ts`: market-by-market discovery source strategy for New York, Los Angeles, and Hudson.
 - `src/data/htmlCalendarFixtures.ts`: sample HTML calendar payloads with JSON-LD event blocks for parser-backed local import tests.
-- `src/data/localCalendarFeeds.ts`: reusable calendar source metadata and fixture-backed/parser-ready local calendar examples for NYC performing arts and Hudson regional arts.
+- `src/data/localCalendarFeeds.ts`: reusable calendar source metadata and fixture-backed/parser-ready local calendar examples for NYC performing arts, Hudson Hall, Fisher Center, and Basilica Hudson.
 - `src/data/partnerFeeds.ts`: raw partner feed fixtures that mimic external inventory in the supported alpha markets.
 - `src/data/ticketmasterFixtures.ts`: Ticketmaster Discovery-shaped fixture payload for adapter tests.
 - `src/services/auth.ts`: dormant auth provider groundwork for future checkout/account features.
@@ -155,12 +161,14 @@ npm run android
 - `src/services/ticketLinks.ts`: safe external ticket-link intent selection for provider-backed offers while checkout is deferred.
 - `src/services/providerDiagnostics.ts`: live provider diagnostics for Ticketmaster fan-out, duplicate events, category mix, priced offers, link-only ticket pages, and redacted request URLs.
 - `src/services/sourceInventoryAudit.ts`: source-level freshness/import summaries for fixture, parsed calendar, and live API inventory.
+- `src/services/sourceReadinessAudit.ts`: ranked source-readiness decisions by market, category lift, ticket-link coverage, duplicate rate, legal/terms posture, and integration effort.
 - `src/services/ticketmasterProvider.ts`: Ticketmaster Discovery request builder, lane fan-out fetcher, fetch client, event normalizer, and `EventProvider` implementation.
 - `src/services/ticketing.ts`: ticketing provider interface plus a mock provider.
 - `src/types.ts`: shared app, ticketing, and recommendation types.
 - `src/App.tsx`: provider-backed mobile discovery, detail, saved-show, discount alert, inbox, and preference UI.
 - `scripts/env.ts`: local `.env.local` loader for audit scripts without committing provider keys.
 - `scripts/liveInventoryAudit.ts`: multi-market live inventory audit for fixture fallback, parsed calendar imports, and Ticketmaster no-key/keyed readiness.
+- `scripts/sourceReadinessAudit.ts`: multi-market source-readiness report for broad APIs, local calendars, planned pipelines, and Resident Advisor partner/API feasibility.
 - `tests/serviceChecks.ts`: discovery, market scope, feed normalization, provider adapters, deal filtering, discount alerts, and dormant checkout groundwork checks.
 
 ## Provider seams
@@ -182,6 +190,7 @@ npm run android
 - Local-source prioritization: use category coverage to pick local pipeline work only when it adds depth beyond broad API coverage.
 - New York performing arts: Ticketmaster remains the broad baseline, while the reusable calendar-feed path now supplies parser-ready dance, ballet, and opera depth before any venue-specific adapter work.
 - Hudson local pipeline: start with the generic regional calendar-feed path, keep it category-complete for concerts, dance, opera, plays, theater, and variety, and only add bespoke venue adapters after audits show durable gaps.
+- Resident Advisor: treat as a high-fit nightlife candidate for NYC/LA only through a permitted partner/API path; do not scrape or ingest RA without authorization.
 - Discounts: partner-funded promo codes, unsold inventory drops, preview allocations, early-arrival prices, matinee value, and simple last-minute deals.
 - Later checkout: Stripe Payment Sheet or provider-native checkout once seller-of-record and payout flow are decided.
 - Recommendations: deepen Spotify ranking with saved shows, clicked events, followed venues, and artist follow alerts.

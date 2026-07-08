@@ -186,6 +186,26 @@ export const discoveryMarketPlans: DiscoveryMarketPlan[] = [
         notes: "Best next source pattern for small-market calendars and weekend arts discovery."
       },
       {
+        id: "hudson-fisher-center-calendar",
+        label: "Fisher Center / Bard SummerScape calendar",
+        sourceType: "calendar-feed",
+        lane: "local-pipeline",
+        status: "integration-ready",
+        categories: ["concert", "opera", "theater", "variety"],
+        notes:
+          "Reusable regional performing-arts source for Bard SummerScape, classical, opera, and ticket-linked destination events."
+      },
+      {
+        id: "hudson-basilica-calendar",
+        label: "Basilica Hudson events calendar",
+        sourceType: "calendar-feed",
+        lane: "local-pipeline",
+        status: "integration-ready",
+        categories: ["concert", "dj", "variety"],
+        notes:
+          "Reusable Hudson music calendar for concerts and electronic-adjacent events before any venue-specific adapter work."
+      },
+      {
         id: "hudson-venue-direct",
         label: "Venue-direct regional arts",
         sourceType: "venue-direct",

@@ -112,6 +112,7 @@ import {
 } from "../src/services/personalization";
 import { createSpotifyConfigAudit } from "../src/services/spotifyConfigAudit";
 import { createSourceInventorySummaries } from "../src/services/sourceInventoryAudit";
+import { createSourceReadinessAudit } from "../src/services/sourceReadinessAudit";
 import { AppRepository, MemoryStorageAdapter } from "../src/services/storage";
 import { authProvider } from "../src/services/auth";
 import { mockCardPaymentMethod, paymentProvider } from "../src/services/payments";
@@ -409,6 +410,15 @@ async function main() {
   assert(
     getNextLocalDiscoverySources("hudson")[0]?.id === "hudson-calendar-feed",
     "Hudson's next local pipeline should be the reusable regional calendar source before bespoke venue work."
+  );
+  assert(
+    getNextLocalDiscoverySources("hudson").some(
+      (source) => source.id === "hudson-fisher-center-calendar"
+    ) &&
+      getNextLocalDiscoverySources("hudson").some(
+        (source) => source.id === "hudson-basilica-calendar"
+      ),
+    "Hudson source planning should include Fisher Center and Basilica as reusable calendar candidates."
   );
   assert(
     getDiscountLeversForMarket("hudson").includes("regional preview allocations"),
@@ -1005,8 +1015,24 @@ async function main() {
   const hudsonCalendarSource = localCalendarSources.find(
     (source) => source.id === "hudson-arts-calendar"
   );
+  const hudsonFisherCalendarSource = localCalendarSources.find(
+    (source) => source.id === "hudson-fisher-center-calendar"
+  );
+  const hudsonBasilicaCalendarSource = localCalendarSources.find(
+    (source) => source.id === "hudson-basilica-calendar"
+  );
   const hudsonConcertCalendarEvent = localCalendarEvents.find(
     (event) => event.calendarId === "hudson-arts-calendar" && event.externalId === "hac-101"
+  );
+  const hudsonFisherOperaEvent = localCalendarEvents.find(
+    (event) =>
+      event.calendarId === "hudson-fisher-center-calendar" &&
+      event.externalId === "fisher-2026-egyptian-helen"
+  );
+  const hudsonBasilicaElectronicEvent = localCalendarEvents.find(
+    (event) =>
+      event.calendarId === "hudson-basilica-calendar" &&
+      event.externalId === "basilica-2026-boy-harsher"
   );
   const linkOnlyCalendarEvent = localCalendarEvents.find(
     (event) => event.calendarId === "nyc-performing-arts-calendar" && event.externalId === "nyc-pa-104"
@@ -1023,11 +1049,30 @@ async function main() {
     hudsonCalendarSource?.categories.join("|") === "concert|dance|opera|play|theater|variety",
     "Hudson should define a category-complete reusable regional calendar source."
   );
+  assert(
+    hudsonFisherCalendarSource?.categories.includes("opera") &&
+      hudsonFisherCalendarSource.categories.includes("concert") &&
+      hudsonFisherCalendarSource.sourceUrl === "https://fishercenter.bard.edu/whats-on/",
+    "Hudson should add Fisher Center as a reusable performing-arts calendar source."
+  );
+  assert(
+    hudsonBasilicaCalendarSource?.categories.includes("concert") &&
+      hudsonBasilicaCalendarSource.categories.includes("dj") &&
+      hudsonBasilicaCalendarSource.sourceUrl === "https://basilicahudson.org/events/",
+    "Hudson should add Basilica Hudson as a reusable music and electronic-adjacent calendar source."
+  );
   assert(hudsonConcertCalendarEvent, "Hudson calendar fixtures should include a concert listing.");
+  assert(hudsonFisherOperaEvent, "Hudson Fisher Center fixtures should include an opera listing.");
+  assert(
+    hudsonBasilicaElectronicEvent,
+    "Hudson Basilica fixtures should include an electronic-adjacent listing."
+  );
   assert(linkOnlyCalendarEvent, "NYC calendar fixtures should include a link-only listing.");
   assert(hudsonCalendarSource, "Hudson calendar source should be available for importer tests.");
 
   const normalizedCalendarShow = normalizeCalendarEvent(hudsonConcertCalendarEvent);
+  const normalizedFisherOperaShow = normalizeCalendarEvent(hudsonFisherOperaEvent);
+  const normalizedBasilicaElectronicShow = normalizeCalendarEvent(hudsonBasilicaElectronicEvent);
   const normalizedLinkOnlyCalendarShow = normalizeCalendarEvent(linkOnlyCalendarEvent);
   const hudsonHtmlCalendarImport = importHtmlCalendarEvents(
     hudsonHallHtmlCalendarFixture,
@@ -1066,6 +1111,18 @@ async function main() {
   assert(
     normalizedCalendarShow.ticketOffers[0]?.deal?.label === "Free concert",
     "Calendar feed deal metadata should map onto ticket offers."
+  );
+  assert(
+    normalizedFisherOperaShow.category === "opera" &&
+      normalizedFisherOperaShow.ticketOffers[0]?.externalUrl ===
+        "https://fishercenter.bard.edu/series/the-egyptian-helen/",
+    "Fisher Center fixtures should preserve opera taxonomy and real event links."
+  );
+  assert(
+    normalizedBasilicaElectronicShow.category === "dj" &&
+      normalizedBasilicaElectronicShow.ticketOffers[0]?.externalUrl ===
+        "https://basilicahudson.org/events/soundscape-presents-boy-harsher/",
+    "Basilica fixtures should add electronic-adjacent Hudson inventory with a real event link."
   );
   const calendarTicketLink = getBestTicketLinkIntent(normalizedCalendarShow);
   const linkOnlyCalendarTicketLink = getBestTicketLinkIntent(normalizedLinkOnlyCalendarShow);
@@ -1118,6 +1175,69 @@ async function main() {
       hudsonTicketmasterNoKeySummary.importMode === "live-api" &&
       hudsonTicketmasterNoKeySummary.eventCount === 0,
     "Source inventory summaries should report Ticketmaster live API readiness in no-key mode without fetching."
+  );
+  const hudsonSourceReadinessAudit = createSourceReadinessAudit({
+    areaId: "hudson",
+    referenceNow,
+    sourceSummaries: hudsonNoKeySourceSummaries,
+    parsedCalendarEvents: hudsonHtmlCalendarImport.events,
+    ticketmasterConfigured: false
+  });
+  const hudsonFisherReadiness = hudsonSourceReadinessAudit.rankedCandidates.find(
+    (candidate) => candidate.id === "hudson-fisher-center-calendar"
+  );
+  const hudsonBasilicaReadiness = hudsonSourceReadinessAudit.rankedCandidates.find(
+    (candidate) => candidate.id === "hudson-basilica-calendar"
+  );
+  const hudsonResidentAdvisorReadiness = hudsonSourceReadinessAudit.rankedCandidates.find(
+    (candidate) => candidate.id === "resident-advisor"
+  );
+  const losAngelesSourceReadinessAudit = createSourceReadinessAudit({
+    areaId: "la",
+    referenceNow,
+    ticketmasterConfigured: false
+  });
+  const losAngelesResidentAdvisorReadiness =
+    losAngelesSourceReadinessAudit.rankedCandidates.find(
+      (candidate) => candidate.id === "resident-advisor"
+    );
+
+  assert(
+    hudsonFisherReadiness?.eventCountAdded === 3 &&
+      hudsonFisherReadiness.ticketLinkCoveragePercent === 100 &&
+      hudsonFisherReadiness.legalStatus === "public-calendar-review" &&
+      hudsonFisherReadiness.categoryLift.includes("opera"),
+    "Source readiness should measure Fisher Center event lift, ticket links, legal review state, and category lift."
+  );
+  assert(
+    hudsonBasilicaReadiness?.eventCountAdded === 3 &&
+      hudsonBasilicaReadiness.ticketLinkCoveragePercent === 100 &&
+      hudsonBasilicaReadiness.categoryLift.includes("dj") &&
+      hudsonBasilicaReadiness.recommendedNextAction.includes("Hudson"),
+    "Source readiness should measure Basilica's Hudson music and electronic-adjacent lift."
+  );
+  assert(
+    hudsonResidentAdvisorReadiness?.eventCountAdded === 0 &&
+      hudsonResidentAdvisorReadiness.legalStatus === "partner-or-api-required" &&
+      hudsonResidentAdvisorReadiness.marketLift === "none" &&
+      hudsonResidentAdvisorReadiness.recommendedNextAction.includes("Do not use RA"),
+    "Hudson RA readiness should stay low-fit and should not ingest unauthorized RA events."
+  );
+  assert(
+    losAngelesResidentAdvisorReadiness?.eventCountAdded === 0 &&
+      losAngelesResidentAdvisorReadiness.legalStatus === "partner-or-api-required" &&
+      losAngelesResidentAdvisorReadiness.marketLift === "medium" &&
+      losAngelesResidentAdvisorReadiness.recommendedNextAction.includes("partner/API"),
+    "LA RA readiness should capture meaningful nightlife fit while requiring partner/API access."
+  );
+  assert(
+    hudsonSourceReadinessAudit.sourceInventoryEventCount >= 14 &&
+      hudsonSourceReadinessAudit.sourceInventoryTicketLinkCoveragePercent >= 80,
+    "Source readiness should report source-level event counts and ticket-link coverage for Hudson."
+  );
+  assert(
+    hudsonSourceReadinessAudit.recommendedNextAction.includes("regional calendars"),
+    "Hudson source readiness should recommend reusable local calendars rather than treating fixtures as the next product move."
   );
   assert(
     getSafeTicketUrl("javascript:alert(1)") === undefined &&
