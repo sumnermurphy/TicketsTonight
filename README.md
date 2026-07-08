@@ -63,6 +63,7 @@ npm run android
 - `src/services/auth.ts`: dormant auth provider groundwork for future checkout/account features.
 - `src/services/checkoutBackend.ts`: dormant backend-style checkout groundwork for future purchase flow.
 - `src/services/dealAlerts.ts`: alert creation and discounted-ticket matching.
+- `src/services/discoveryFacets.ts`: category availability and discounted-count facets for the selected market.
 - `src/services/dealDiscovery.ts`: discount insight scoring, savings math, urgency labels, and area deal summaries.
 - `src/services/discoveryPlanning.ts`: helper layer for source readiness, category gaps, primary-market ordering, and discount levers.
 - `src/services/feedProvider.ts`: feed normalization from provider taxonomy/inventory into the app `Show` model.

@@ -8,6 +8,7 @@ import {
   toggleDealAlertStatus
 } from "../src/services/dealAlerts";
 import { checkoutBackend } from "../src/services/checkoutBackend";
+import { getCategoryFacets } from "../src/services/discoveryFacets";
 import {
   getDealInsights,
   getDealSummary,
@@ -160,6 +161,32 @@ async function main() {
   assert(
     dealShows.every((show) => show.ticketOffers.some((offer) => offer.deal)),
     "Deal search should only return shows with deal-backed offers."
+  );
+  const nycCategoryFacets = getCategoryFacets(
+    searchShows({
+      areaId: "nyc",
+      categories: [],
+      query: "",
+      onlyDeals: false,
+      dateWindow: "all",
+      referenceNow
+    }),
+    Object.keys(categoryLabels) as Array<keyof typeof categoryLabels>
+  );
+  const comedyFacet = nycCategoryFacets.find((facet) => facet.category === "comedy");
+  const danceFacet = nycCategoryFacets.find((facet) => facet.category === "dance");
+
+  assert(
+    nycCategoryFacets.length === Object.keys(categoryLabels).length,
+    "Category facets should cover every browse category."
+  );
+  assert(
+    comedyFacet?.showCount === 1 && comedyFacet.dealCount === 1,
+    "Category facets should expose show and deal counts for discounted comedy."
+  );
+  assert(
+    danceFacet?.showCount === 0 && danceFacet.dealCount === 0,
+    "Category facets should preserve zero-count categories so users can see availability gaps."
   );
   const dealInsights = getDealInsights(dealShows, referenceNow);
   const dealSummary = getDealSummary(dealShows, referenceNow);

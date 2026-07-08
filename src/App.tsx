@@ -36,6 +36,10 @@ import {
   toggleDealAlertStatus
 } from "./services/dealAlerts";
 import {
+  getCategoryFacets,
+  type CategoryFacet
+} from "./services/discoveryFacets";
+import {
   getDealInsights,
   getDealSummary,
   getOfferSavings,
@@ -284,6 +288,14 @@ export default function App() {
     [dealAlertInventory]
   );
   const dealSummary = useMemo(() => getDealSummary(dealAlertInventory), [dealAlertInventory]);
+  const categoryFacets = useMemo(
+    () => getCategoryFacets(areaInventory, categories),
+    [areaInventory]
+  );
+  const categoryFacetsByCategory = useMemo(
+    () => new Map(categoryFacets.map((facet) => [facet.category, facet])),
+    [categoryFacets]
+  );
   const dealAlertMatches = useMemo(
     () => getDealAlertMatches(dealAlerts, dealAlertInventory).slice(0, 4),
     [dealAlertInventory, dealAlerts]
@@ -554,7 +566,9 @@ export default function App() {
               <CategoryChip
                 active={selectedCategories.includes(category)}
                 category={category}
+                facet={categoryFacetsByCategory.get(category)}
                 key={category}
+                loading={inventoryLoading}
                 onPress={() => toggleCategory(category)}
               />
             ))}
@@ -848,10 +862,14 @@ function AreaOption({
 function CategoryChip({
   active,
   category,
+  facet,
+  loading,
   onPress
 }: {
   active: boolean;
   category: ShowCategory;
+  facet: CategoryFacet | undefined;
+  loading: boolean;
   onPress: () => void;
 }) {
   return (
@@ -862,6 +880,12 @@ function CategoryChip({
     >
       <Text style={[styles.categoryChipText, active ? styles.categoryChipTextActive : undefined]}>
         {categoryLabels[category]}
+      </Text>
+      <Text
+        numberOfLines={1}
+        style={[styles.categoryChipMeta, active ? styles.categoryChipMetaActive : undefined]}
+      >
+        {getCategoryFacetCopy(facet, loading)}
       </Text>
     </Pressable>
   );
@@ -986,6 +1010,24 @@ function getDealSummaryCopy(dealSummary: ReturnType<typeof getDealSummary>, area
 
 function getDealAlertPriceLabel(maxPriceCents: number | undefined): string {
   return maxPriceCents ? `Under ${formatMoney(maxPriceCents)}` : "Any price";
+}
+
+function getCategoryFacetCopy(facet: CategoryFacet | undefined, loading: boolean): string {
+  if (loading) {
+    return "Checking";
+  }
+
+  if (!facet || facet.showCount === 0) {
+    return "0 shows";
+  }
+
+  const showCopy = `${facet.showCount} ${facet.showCount === 1 ? "show" : "shows"}`;
+
+  if (!facet.dealCount) {
+    return showCopy;
+  }
+
+  return `${showCopy} · ${facet.dealCount} ${facet.dealCount === 1 ? "deal" : "deals"}`;
 }
 
 function DealCard({ insight, onPress }: { insight: DealInsight; onPress: () => void }) {
@@ -1646,14 +1688,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md
   },
   categoryChip: {
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "center",
-    minHeight: 40,
+    minWidth: 112,
+    minHeight: 54,
     borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.paper,
-    paddingHorizontal: spacing.lg
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm
   },
   categoryChipActive: {
     borderColor: colors.teal,
@@ -1665,6 +1709,15 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   categoryChipTextActive: {
+    color: colors.teal
+  },
+  categoryChipMeta: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 2
+  },
+  categoryChipMetaActive: {
     color: colors.teal
   },
   dateWindowRail: {
