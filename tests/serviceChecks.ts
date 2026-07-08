@@ -22,8 +22,10 @@ import {
 import {
   getDiscoveryMarketPlan,
   getDiscoveryMarketPlans,
+  getDiscoverySourceStrategy,
   getDiscountLeversForMarket,
   getMarketDiscoveryGaps,
+  getNextLocalDiscoverySources,
   getPrimaryDiscoveryMarketPlan,
   getReadyDiscoverySources
 } from "../src/services/discoveryPlanning";
@@ -113,9 +115,20 @@ async function main() {
   );
   assert(
     getDiscoveryMarketPlan("nyc")?.sources.some(
-      (source) => source.id === "ticketmaster-discovery" && source.status === "integration-ready"
+      (source) =>
+        source.id === "ticketmaster-discovery" &&
+        source.lane === "broad-api" &&
+        source.status === "integration-ready"
     ),
     "New York should keep Ticketmaster Discovery marked as the first real provider adapter."
+  );
+  assert(
+    getDiscoverySourceStrategy("nyc")?.readyBroadApiSourceCount === 1,
+    "New York source strategy should start with a ready broad API lane."
+  );
+  assert(
+    (getDiscoverySourceStrategy("nyc")?.localPipelineSourceCount ?? 0) >= 3,
+    "New York source strategy should keep selective local pipelines available after broad APIs."
   );
   assert(
     getReadyDiscoverySources("la").some((source) => source.id === "la-partner-feed"),
@@ -131,9 +144,17 @@ async function main() {
   );
   assert(
     getDiscoveryMarketPlan("hudson")?.sources.some(
-      (source) => source.sourceType === "calendar-feed"
+      (source) => source.sourceType === "calendar-feed" && source.lane === "local-pipeline"
     ),
     "Hudson should include a regional-calendar path for smaller-market discovery."
+  );
+  assert(
+    getDiscoverySourceStrategy("hudson")?.readyBroadApiSourceCount === 1,
+    "Hudson should still run broad marketplace APIs before local gap filling."
+  );
+  assert(
+    getNextLocalDiscoverySources("hudson")[0]?.id === "hudson-calendar-feed",
+    "Hudson's next local pipeline should be the reusable regional calendar source before bespoke venue work."
   );
   assert(
     getDiscountLeversForMarket("hudson").includes("regional preview allocations"),
@@ -213,6 +234,10 @@ async function main() {
     nycMarketSummary.activeCategoryCount ===
       nycCategoryFacets.filter((facet) => facet.showCount > 0).length,
     "Market summary should expose active category breadth."
+  );
+  assert(
+    nycMarketSummary.sourceCount >= 3,
+    "Market summary should expose inventory-source diversity for the selected area."
   );
   assert(
     nycMarketSummary.nextStartsAt === "2026-07-08T20:00:00-04:00",

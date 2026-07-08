@@ -277,6 +277,8 @@ export type DiscoverySourceType =
   | "partner-feed"
   | "calendar-feed";
 
+export type DiscoverySourceLane = "broad-api" | "local-pipeline" | "seed-fixture";
+
 export type DiscoverySourceStatus =
   | "active-fixture"
   | "integration-ready"
@@ -287,6 +289,7 @@ export type DiscoverySourcePlan = {
   id: string;
   label: string;
   sourceType: DiscoverySourceType;
+  lane: DiscoverySourceLane;
   status: DiscoverySourceStatus;
   categories: ShowCategory[];
   notes: string;

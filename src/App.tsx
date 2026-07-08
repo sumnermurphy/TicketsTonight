@@ -568,6 +568,11 @@ export default function App() {
                 loading={inventoryLoading}
                 value={String(marketSummary.activeCategoryCount)}
               />
+              <MarketSnapshotStat
+                label="Sources"
+                loading={inventoryLoading}
+                value={String(marketSummary.sourceCount)}
+              />
             </View>
           </View>
 

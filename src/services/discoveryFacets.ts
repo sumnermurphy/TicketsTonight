@@ -17,6 +17,7 @@ export type MarketDiscoverySummary = {
   showCount: number;
   dealCount: number;
   activeCategoryCount: number;
+  sourceCount: number;
   nextStartsAt?: string;
 };
 
@@ -68,6 +69,7 @@ export function getMarketDiscoverySummary(
     showCount: shows.length,
     dealCount: getDealCount(shows),
     activeCategoryCount: categoryFacets.filter((facet) => facet.showCount > 0).length,
+    sourceCount: new Set(shows.map((show) => show.source)).size,
     nextStartsAt: sortedShows[0]?.startsAt
   };
 }
