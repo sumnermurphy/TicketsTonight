@@ -13,19 +13,21 @@ export const residentAdvisorReadiness: ResidentAdvisorMarketReadiness[] = [
   {
     areaId: "nyc",
     status: "strong-candidate",
-    availability: "Public RA city pages show New York event inventory for electronic music discovery.",
+    availability:
+      "Strong category fit for New York nightlife, but the exact RA market URL/API or partner access path still needs confirmation.",
     eventCategoryFit: "Strong fit for DJ sets, club nights, parties, promoters, and electronic live music.",
     ticketLinkReadiness: "Potentially useful for external ticket links, pending permission or partner/API access.",
     legalPartnerPath:
       "RA terms restrict automated extraction and unauthorised scripts, bots, crawlers, or scrapers.",
     recommendation:
       "Prioritize RA as a partner/API candidate before building any production ingestion.",
-    referenceUrls: ["https://ra.co/events/us/newyork", "https://ra.co/terms"]
+    referenceUrls: ["https://ra.co/events", "https://ra.co/terms"]
   },
   {
     areaId: "la",
     status: "strong-candidate",
-    availability: "Public RA city pages show Los Angeles event inventory with strong nightlife density.",
+    availability:
+      "Public RA Los Angeles event pages show a high-volume nightlife market with hundreds of upcoming events.",
     eventCategoryFit: "Strong fit for DJ sets, warehouse parties, club nights, and electronic promoters.",
     ticketLinkReadiness: "Potentially useful for external ticket links, pending permission or partner/API access.",
     legalPartnerPath:
