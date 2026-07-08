@@ -45,6 +45,7 @@ export function getCatalogShows(): Show[] {
 
 export function filterShows(candidates: Show[], filters: ShowSearchFilters): Show[] {
   const query = normalize(filters.query);
+  const neighborhoods = new Set((filters.neighborhoods ?? []).map(normalize));
 
   return candidates
     .filter((show) => show.areaId === filters.areaId)
@@ -54,6 +55,9 @@ export function filterShows(candidates: Show[], filters: ShowSearchFilters): Sho
     )
     .filter((show) =>
       filters.categories.length === 0 ? true : filters.categories.includes(show.category)
+    )
+    .filter((show) =>
+      neighborhoods.size === 0 ? true : neighborhoods.has(normalize(show.neighborhood))
     )
     .filter((show) => {
       if (!query) {

@@ -5,7 +5,7 @@ Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ball
 ## What is built
 
 - Expo React Native app with provider-backed local-area event discovery.
-- City selector, near-me area resolution, search, category filters, date windows, deal-only filtering, event cards, and a show-detail sheet.
+- City selector, near-me area resolution, search, category filters, neighborhood filters, date windows, deal-only filtering, event cards, and a show-detail sheet.
 - First-class category coverage for concerts, DJ sets, dance, ballet, opera, plays, theater, comedy, and variety/adjacent live events.
 - Deal-aware ticket inventory with list prices, savings, access method, inventory source, and max quantities.
 - Best-bets ranking that lifts urgent deals, local-source picks, nearby shows, and weekend options above the full chronological list.
@@ -68,7 +68,7 @@ npm run android
 - `src/services/checkoutBackend.ts`: dormant backend-style checkout groundwork for future purchase flow.
 - `src/services/calendarFeedProvider.ts`: generic local calendar feed normalizer for ICS/RSS/HTML/manual-import style listings.
 - `src/services/dealAlerts.ts`: alert creation and discounted-ticket matching.
-- `src/services/discoveryFacets.ts`: market summaries, source diversity, category facets, and date-window availability with discounted-count signals for the selected market.
+- `src/services/discoveryFacets.ts`: market summaries, source diversity, neighborhood facets, category facets, and date-window availability with discounted-count signals for the selected market.
 - `src/services/dealDiscovery.ts`: discount insight scoring, savings math, urgency labels, and area deal summaries.
 - `src/services/discoveryPlanning.ts`: helper layer for broad-API/local-pipeline lanes, category coverage, source readiness, category gaps, primary-market ordering, and discount levers.
 - `src/services/discoveryRanking.ts`: best-bets scoring for urgent deals, local-source inventory, timing, and distance.

@@ -13,7 +13,8 @@ import { checkoutBackend } from "../src/services/checkoutBackend";
 import {
   getCategoryFacets,
   getDateWindowFacets,
-  getMarketDiscoverySummary
+  getMarketDiscoverySummary,
+  getNeighborhoodFacets
 } from "../src/services/discoveryFacets";
 import {
   getDealInsights,
@@ -245,6 +246,19 @@ async function main() {
     nycAreaInventory,
     Object.keys(categoryLabels) as Array<keyof typeof categoryLabels>
   );
+  const nycNeighborhoodFacets = getNeighborhoodFacets(nycAreaInventory);
+  const lowerEastSideFacet = nycNeighborhoodFacets.find(
+    (facet) => facet.neighborhood === "Lower East Side"
+  );
+  const lowerEastSideShows = searchShows({
+    areaId: "nyc",
+    categories: [],
+    neighborhoods: ["Lower East Side"],
+    query: "",
+    onlyDeals: false,
+    dateWindow: "all",
+    referenceNow
+  });
   const nycDiscoveryPicks = getDiscoveryPicks(nycAreaInventory, referenceNow, 4);
   const comedyFacet = nycCategoryFacets.find((facet) => facet.category === "comedy");
   const danceFacet = nycCategoryFacets.find((facet) => facet.category === "dance");
@@ -285,6 +299,15 @@ async function main() {
   assert(
     nycMarketSummary.nextStartsAt === "2026-07-08T20:00:00-04:00",
     "Market summary should expose the next upcoming show time."
+  );
+  assert(
+    lowerEastSideFacet?.showCount === 2 && lowerEastSideFacet.dealCount === 2,
+    "Neighborhood facets should expose local show and deal counts."
+  );
+  assert(
+    lowerEastSideShows.length === 2 &&
+      lowerEastSideShows.every((show) => show.neighborhood === "Lower East Side"),
+    "Neighborhood filters should narrow discovery within the selected market."
   );
   assert(nycDiscoveryPicks.length === 4, "Discovery picks should return a bounded best-bets rail.");
   assert(
@@ -1115,6 +1138,7 @@ async function main() {
   await repository.savePreferences({
     selectedAreaId: "nyc",
     selectedCategories: ["concert"],
+    selectedNeighborhoods: ["Lower East Side"],
     dateWindow: "tonight",
     onlyDeals: true,
     dealAlertMaxPriceCents: 3500,
@@ -1139,6 +1163,10 @@ async function main() {
   assert(
     storedPreferences.savedShowIds.includes("show-alina-ives"),
     "Repository should persist saved shows."
+  );
+  assert(
+    storedPreferences.selectedNeighborhoods.includes("Lower East Side"),
+    "Repository should persist selected neighborhoods."
   );
   assert(storedPreferences.dealAlerts.length === 1, "Repository should persist deal alerts.");
   assert(

@@ -39,9 +39,11 @@ import {
   getDateWindowFacets,
   getCategoryFacets,
   getMarketDiscoverySummary,
+  getNeighborhoodFacets,
   type CategoryFacet,
   type DateWindowFacet,
-  type MarketDiscoverySummary
+  type MarketDiscoverySummary,
+  type NeighborhoodFacet
 } from "./services/discoveryFacets";
 import {
   getDealInsights,
@@ -115,6 +117,7 @@ export default function App() {
   const [selectedAreaId, setSelectedAreaId] = useState(areas[0]?.id ?? "nyc");
   const [query, setQuery] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<ShowCategory[]>([]);
+  const [selectedNeighborhoods, setSelectedNeighborhoods] = useState<string[]>([]);
   const [dateWindow, setDateWindow] = useState<DateWindow>("all");
   const [onlyDeals, setOnlyDeals] = useState(false);
   const [dealAlertMaxPriceCents, setDealAlertMaxPriceCents] = useState<number | undefined>();
@@ -147,6 +150,7 @@ export default function App() {
         if (preferences) {
           setSelectedAreaId(preferences.selectedAreaId);
           setSelectedCategories(preferences.selectedCategories);
+          setSelectedNeighborhoods(preferences.selectedNeighborhoods ?? []);
           setDateWindow(preferences.dateWindow ?? "all");
           setOnlyDeals(preferences.onlyDeals);
           setDealAlertMaxPriceCents(preferences.dealAlertMaxPriceCents);
@@ -175,6 +179,7 @@ export default function App() {
     void appRepository.savePreferences({
       selectedAreaId,
       selectedCategories,
+      selectedNeighborhoods,
       dateWindow,
       onlyDeals,
       dealAlertMaxPriceCents,
@@ -197,18 +202,20 @@ export default function App() {
     onlyDeals,
     savedShowIds,
     selectedAreaId,
-    selectedCategories
+    selectedCategories,
+    selectedNeighborhoods
   ]);
 
   const discoveryFilters = useMemo<ShowSearchFilters>(
     () => ({
       areaId: selectedAreaId,
       categories: selectedCategories,
+      neighborhoods: selectedNeighborhoods,
       query,
       onlyDeals,
       dateWindow
     }),
-    [dateWindow, onlyDeals, query, selectedAreaId, selectedCategories]
+    [dateWindow, onlyDeals, query, selectedAreaId, selectedCategories, selectedNeighborhoods]
   );
 
   const areaInventoryFilters = useMemo<ShowSearchFilters>(
@@ -313,12 +320,36 @@ export default function App() {
     () => new Map(categoryFacets.map((facet) => [facet.category, facet])),
     [categoryFacets]
   );
+  const neighborhoodFacetInventory = useMemo(
+    () =>
+      filterShows(areaInventory, {
+        areaId: selectedAreaId,
+        categories: selectedCategories,
+        query,
+        onlyDeals,
+        dateWindow
+      }),
+    [areaInventory, dateWindow, onlyDeals, query, selectedAreaId, selectedCategories]
+  );
+  const neighborhoodFacets = useMemo(
+    () => getNeighborhoodFacets(neighborhoodFacetInventory),
+    [neighborhoodFacetInventory]
+  );
+  const visibleNeighborhoodFacets = useMemo(
+    () => mergeSelectedNeighborhoodFacets(neighborhoodFacets, selectedNeighborhoods),
+    [neighborhoodFacets, selectedNeighborhoods]
+  );
   const dateFacetInventory = useMemo(
     () =>
-      selectedCategories.length
-        ? areaInventory.filter((show) => selectedCategories.includes(show.category))
-        : areaInventory,
-    [areaInventory, selectedCategories]
+      filterShows(areaInventory, {
+        areaId: selectedAreaId,
+        categories: selectedCategories,
+        neighborhoods: selectedNeighborhoods,
+        query,
+        onlyDeals,
+        dateWindow: "all"
+      }),
+    [areaInventory, onlyDeals, query, selectedAreaId, selectedCategories, selectedNeighborhoods]
   );
   const dateWindowFacets = useMemo(
     () => getDateWindowFacets(dateFacetInventory, dateWindows),
@@ -372,6 +403,14 @@ export default function App() {
     );
   };
 
+  const toggleNeighborhood = (neighborhood: string) => {
+    setSelectedNeighborhoods((current) =>
+      current.includes(neighborhood)
+        ? current.filter((candidate) => candidate !== neighborhood)
+        : [...current, neighborhood]
+    );
+  };
+
   const useNearbyArea = async () => {
     setLocating(true);
 
@@ -385,6 +424,7 @@ export default function App() {
       }
 
       setSelectedAreaId(nearest.area.id);
+      setSelectedNeighborhoods([]);
       setAreaMenuOpen(false);
       setLocationStatus(
         `${nearest.area.name} · ${formatDistance(nearest.distanceMiles)} from ${locationProvider.label}`
@@ -508,6 +548,7 @@ export default function App() {
                     selected={area.id === selectedAreaId}
                     onPress={() => {
                       setSelectedAreaId(area.id);
+                      setSelectedNeighborhoods([]);
                       setLocationStatus("Manual area");
                       setAreaMenuOpen(false);
                     }}
@@ -653,6 +694,37 @@ export default function App() {
               />
             ))}
           </ScrollView>
+
+          {visibleNeighborhoodFacets.length ? (
+            <>
+              <View style={styles.neighborhoodHeader}>
+                <View style={styles.inlineTitle}>
+                  <MapPin color={colors.ink} size={18} />
+                  <Text style={styles.sectionTitle}>Neighborhoods</Text>
+                </View>
+                {selectedNeighborhoods.length ? (
+                  <Pressable onPress={() => setSelectedNeighborhoods([])}>
+                    <Text style={styles.clearFilters}>Clear</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+              <ScrollView
+                contentContainerStyle={styles.neighborhoodRail}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+              >
+                {visibleNeighborhoodFacets.map((facet) => (
+                  <NeighborhoodChip
+                    active={selectedNeighborhoods.includes(facet.neighborhood)}
+                    facet={facet}
+                    key={facet.neighborhood}
+                    loading={inventoryLoading}
+                    onPress={() => toggleNeighborhood(facet.neighborhood)}
+                  />
+                ))}
+              </ScrollView>
+            </>
+          ) : null}
 
           <View style={styles.signalPanel}>
             <Pressable
@@ -1010,6 +1082,33 @@ function DateWindowChip({
   );
 }
 
+function NeighborhoodChip({
+  active,
+  facet,
+  loading,
+  onPress
+}: {
+  active: boolean;
+  facet: NeighborhoodFacet;
+  loading: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={[styles.neighborhoodChip, active ? styles.neighborhoodChipActive : undefined]}
+    >
+      <Text style={[styles.neighborhoodText, active ? styles.neighborhoodTextActive : undefined]}>
+        {facet.neighborhood}
+      </Text>
+      <Text style={[styles.neighborhoodMeta, active ? styles.neighborhoodMetaActive : undefined]}>
+        {getNeighborhoodFacetCopy(facet, loading)}
+      </Text>
+    </Pressable>
+  );
+}
+
 function MarketSnapshotStat({
   label,
   loading,
@@ -1158,6 +1257,39 @@ function getDateWindowFacetCopy(facet: DateWindowFacet | undefined, loading: boo
   }
 
   return `${facet.showCount} ${facet.showCount === 1 ? "show" : "shows"}`;
+}
+
+function getNeighborhoodFacetCopy(facet: NeighborhoodFacet, loading: boolean): string {
+  if (loading) {
+    return "Checking";
+  }
+
+  const showCopy = `${facet.showCount} ${facet.showCount === 1 ? "show" : "shows"}`;
+
+  if (!facet.dealCount) {
+    return showCopy;
+  }
+
+  return `${showCopy} · ${facet.dealCount} ${facet.dealCount === 1 ? "deal" : "deals"}`;
+}
+
+function mergeSelectedNeighborhoodFacets(
+  facets: NeighborhoodFacet[],
+  selectedNeighborhoods: string[]
+): NeighborhoodFacet[] {
+  const facetsByNeighborhood = new Map(facets.map((facet) => [facet.neighborhood, facet]));
+
+  for (const neighborhood of selectedNeighborhoods) {
+    if (!facetsByNeighborhood.has(neighborhood)) {
+      facetsByNeighborhood.set(neighborhood, {
+        neighborhood,
+        showCount: 0,
+        dealCount: 0
+      });
+    }
+  }
+
+  return Array.from(facetsByNeighborhood.values());
 }
 
 function getMarketNextCopy(summary: MarketDiscoverySummary): string {
@@ -1979,6 +2111,52 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   dateWindowMetaActive: {
+    color: "#F8F3EA"
+  },
+  neighborhoodHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.xl,
+    marginTop: spacing.xs,
+    marginBottom: spacing.sm
+  },
+  neighborhoodRail: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md
+  },
+  neighborhoodChip: {
+    alignItems: "flex-start",
+    justifyContent: "center",
+    minWidth: 134,
+    minHeight: 52,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm
+  },
+  neighborhoodChipActive: {
+    borderColor: colors.teal,
+    backgroundColor: colors.teal
+  },
+  neighborhoodText: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  neighborhoodTextActive: {
+    color: colors.paper
+  },
+  neighborhoodMeta: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 2
+  },
+  neighborhoodMetaActive: {
     color: "#F8F3EA"
   },
   signalPanel: {

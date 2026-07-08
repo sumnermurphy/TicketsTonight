@@ -83,6 +83,7 @@ export type Show = {
 export type ShowSearchFilters = {
   areaId: string;
   categories: ShowCategory[];
+  neighborhoods?: string[];
   query: string;
   onlyDeals: boolean;
   dateWindow: DateWindow;
@@ -179,6 +180,7 @@ export type TicketOrder = {
 export type UserPreferences = {
   selectedAreaId: string;
   selectedCategories: ShowCategory[];
+  selectedNeighborhoods: string[];
   dateWindow: DateWindow;
   onlyDeals: boolean;
   dealAlertMaxPriceCents?: number;

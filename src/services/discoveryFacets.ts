@@ -13,6 +13,12 @@ export type DateWindowFacet = {
   dealCount: number;
 };
 
+export type NeighborhoodFacet = {
+  neighborhood: string;
+  showCount: number;
+  dealCount: number;
+};
+
 export type MarketDiscoverySummary = {
   showCount: number;
   dealCount: number;
@@ -54,6 +60,26 @@ export function getDateWindowFacets(
       dealCount: getDealCount(dateWindowShows)
     };
   });
+}
+
+export function getNeighborhoodFacets(shows: Show[]): NeighborhoodFacet[] {
+  const facetsByNeighborhood = new Map<string, NeighborhoodFacet>();
+
+  for (const show of shows) {
+    const existingFacet = facetsByNeighborhood.get(show.neighborhood);
+    const hasDeal = show.ticketOffers.some((offer) => Boolean(offer.deal));
+
+    facetsByNeighborhood.set(show.neighborhood, {
+      neighborhood: show.neighborhood,
+      showCount: (existingFacet?.showCount ?? 0) + 1,
+      dealCount: (existingFacet?.dealCount ?? 0) + (hasDeal ? 1 : 0)
+    });
+  }
+
+  return Array.from(facetsByNeighborhood.values()).sort(
+    (first, second) =>
+      second.showCount - first.showCount || first.neighborhood.localeCompare(second.neighborhood)
+  );
 }
 
 export function getMarketDiscoverySummary(
