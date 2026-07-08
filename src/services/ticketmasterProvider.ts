@@ -241,6 +241,7 @@ function createTicketmasterOffer(
     maxQuantity: 6,
     access: "external-transfer",
     source: "primary-marketplace",
+    externalUrl: event.url,
     perks: event.url ? ["Partner checkout available"] : undefined
   };
 }

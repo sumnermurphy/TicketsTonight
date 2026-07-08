@@ -1,4 +1,5 @@
 import { shows } from "../data/catalog";
+import { normalizedLocalCalendarShows } from "./calendarFeedProvider";
 import { normalizedPartnerFeedShows } from "./feedProvider";
 import type {
   DateWindow,
@@ -10,7 +11,7 @@ import type {
 } from "../types";
 
 const normalize = (value: string) => value.trim().toLowerCase().replace(/[-_]+/g, " ");
-const baseShows = [...shows, ...normalizedPartnerFeedShows];
+const baseShows = [...shows, ...normalizedPartnerFeedShows, ...normalizedLocalCalendarShows];
 const runtimeShows = new Map<string, Show>();
 
 export function rememberShows(candidates: Show[]): Show[] {
@@ -186,6 +187,19 @@ export class PartnerFeedProvider implements EventProvider {
 
   async getShow(showId: string): Promise<Show | undefined> {
     return normalizedPartnerFeedShows.find((show) => show.id === showId);
+  }
+}
+
+export class CalendarFeedProvider implements EventProvider {
+  id = "calendar-feed";
+  label = "Normalized local calendar feeds";
+
+  async listShows(filters: ShowSearchFilters): Promise<Show[]> {
+    return filterShows(normalizedLocalCalendarShows, filters);
+  }
+
+  async getShow(showId: string): Promise<Show | undefined> {
+    return normalizedLocalCalendarShows.find((show) => show.id === showId);
   }
 }
 

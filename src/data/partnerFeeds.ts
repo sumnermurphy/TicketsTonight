@@ -9,6 +9,7 @@ export type PartnerFeedOffer = {
   maxQuantity: number;
   access: OfferAccess;
   source: InventorySource;
+  externalUrl?: string;
   dealLabel?: string;
   dealDescription?: string;
   dealExpiresAt?: string;

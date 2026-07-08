@@ -1,7 +1,9 @@
 import { areas, categoryLabels } from "../src/data/catalog";
 import { discoveryMarketPlans } from "../src/data/discoveryPlans";
+import { localCalendarEvents } from "../src/data/localCalendarFeeds";
 import { partnerFeedEvents } from "../src/data/partnerFeeds";
 import { ticketmasterDiscoveryFixture } from "../src/data/ticketmasterFixtures";
+import { normalizeCalendarEvent } from "../src/services/calendarFeedProvider";
 import {
   createDealAlert,
   getDealAlertMatches,
@@ -162,8 +164,8 @@ async function main() {
   );
   assert(
     createEventProviders({ ticketmasterApiKey: "" }).map((provider) => provider.id).join("|") ===
-      "local-catalog|partner-feed",
-    "Default discovery providers should stay fixture-backed until a marketplace key is configured."
+      "local-catalog|partner-feed|calendar-feed",
+    "Default discovery providers should stay fixture and calendar backed until a marketplace key is configured."
   );
 
   const nycShows = searchShows({
@@ -289,6 +291,26 @@ async function main() {
     normalizedPlay.ticketOffers[0]?.deal?.label === "Preview price",
     "Partner feed deal metadata should map onto ticket offers."
   );
+  const normalizedCalendarShow = normalizeCalendarEvent(localCalendarEvents[0]!);
+
+  assert(
+    normalizedCalendarShow.id === "calendar-hudson-arts-calendar-hac-101",
+    "Calendar feed events should receive stable normalized ids."
+  );
+  assert(
+    normalizedCalendarShow.category === "concert" &&
+      normalizedCalendarShow.source === "calendar-feed",
+    "Calendar taxonomy should normalize into the shared discovery model."
+  );
+  assert(
+    normalizedCalendarShow.ticketOffers[0]?.externalUrl ===
+      "https://example.com/hudson-arts-calendar/hac-101",
+    "Calendar ticket links should be preserved as offer metadata without adding checkout UI."
+  );
+  assert(
+    normalizedCalendarShow.ticketOffers[0]?.deal?.label === "Calendar preview",
+    "Calendar feed deal metadata should map onto ticket offers."
+  );
 
   const feedSearch = searchShows({
     areaId: "nyc",
@@ -390,6 +412,23 @@ async function main() {
   assert(
     hudsonFeedResults.some((show) => show.id === "feed-artswire-aw-550"),
     "Composite provider should merge normalized Hudson partner-feed events."
+  );
+  const hudsonCalendarResults = await eventProvider.listShows({
+    areaId: "hudson",
+    categories: ["concert"],
+    query: "Riverside",
+    onlyDeals: true,
+    dateWindow: "weekend",
+    referenceNow
+  });
+
+  assert(
+    hudsonCalendarResults.some(
+      (show) =>
+        show.id === "calendar-hudson-arts-calendar-hac-101" &&
+        show.source === "calendar-feed"
+    ),
+    "Composite provider should merge reusable Hudson calendar-feed events."
   );
 
   const hudsonVarietyShows = searchShows({
@@ -494,6 +533,11 @@ async function main() {
   assert(
     normalizedTicketmasterEvent.ticketOffers[0]?.priceCents === 4950,
     "Ticketmaster price ranges should become cents-based ticket offers."
+  );
+  assert(
+    normalizedTicketmasterEvent.ticketOffers[0]?.externalUrl ===
+      "https://example.com/ticketmaster/hadestown",
+    "Ticketmaster ticket links should be preserved as offer metadata."
   );
 
   const fixtureTicketmasterClient: TicketmasterDiscoveryClient & { requestedUrls: string[] } = {
@@ -901,6 +945,14 @@ async function main() {
 
   assert(feedHold.subtotalCents === 3800, "Ticketing should accept normalized partner feed inventory.");
   assert(feedHold.discountCents === 1000, "Feed-originated deals should apply to ticket holds.");
+  const calendarHold = await ticketingProvider.createHold({
+    showId: "calendar-hudson-arts-calendar-hac-101",
+    offerId: "calendar-listing",
+    quantity: 1
+  });
+
+  assert(calendarHold.subtotalCents === 2800, "Ticketing should accept normalized calendar feed inventory.");
+  assert(calendarHold.discountCents === 700, "Calendar-originated deals should apply to ticket holds.");
 
   const repository = new AppRepository(new MemoryStorageAdapter());
 

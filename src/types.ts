@@ -28,6 +28,7 @@ export type Area = {
 };
 
 export type InventorySource =
+  | "calendar-feed"
   | "venue-direct"
   | "promoter"
   | "partner-feed"
@@ -56,6 +57,7 @@ export type TicketOffer = {
   maxQuantity: number;
   access: OfferAccess;
   source: InventorySource;
+  externalUrl?: string;
   deal?: Deal;
   perks?: string[];
 };

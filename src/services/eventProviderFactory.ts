@@ -1,5 +1,10 @@
 import type { EventProvider } from "../types";
-import { CompositeEventProvider, LocalCatalogProvider, PartnerFeedProvider } from "./eventCatalog";
+import {
+  CalendarFeedProvider,
+  CompositeEventProvider,
+  LocalCatalogProvider,
+  PartnerFeedProvider
+} from "./eventCatalog";
 import {
   FetchTicketmasterDiscoveryClient,
   TicketmasterDiscoveryProvider,
@@ -41,7 +46,11 @@ export function readPublicDiscoveryConfig(): DiscoveryProviderConfig {
 }
 
 export function createEventProviders(config: DiscoveryProviderConfig = {}): EventProvider[] {
-  const providers: EventProvider[] = [new LocalCatalogProvider(), new PartnerFeedProvider()];
+  const providers: EventProvider[] = [
+    new LocalCatalogProvider(),
+    new PartnerFeedProvider(),
+    new CalendarFeedProvider()
+  ];
   const apiKey = config.ticketmasterApiKey?.trim();
 
   if (apiKey) {

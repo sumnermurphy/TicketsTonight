@@ -91,6 +91,7 @@ function normalizeFeedOffer(event: PartnerFeedEvent, offer: PartnerFeedOffer): T
     maxQuantity: offer.maxQuantity,
     access: offer.access,
     source: offer.source,
+    externalUrl: offer.externalUrl,
     deal: offer.dealLabel
       ? {
           id: `deal-${event.providerId}-${event.externalId}-${offer.id}`,

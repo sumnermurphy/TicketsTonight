@@ -93,6 +93,7 @@ const dealAlertPriceOptions: Array<{ label: string; value?: number }> = [
 ];
 
 const sourceLabels: Record<InventorySource, string> = {
+  "calendar-feed": "Calendar",
   "venue-direct": "Venue direct",
   promoter: "Promoter",
   "partner-feed": "Partner feed",
