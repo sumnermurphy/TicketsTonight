@@ -54,10 +54,10 @@ cp .env.example .env.local
 npm run audit:live-inventory
 ```
 
-The adapter defaults to 100 results per page and up to 3 pages. Override the live fetch breadth with:
+The adapter defaults to 100 results per page and up to 3 pages, which is the recommended local audit setting to avoid provider rate limits. Override the live fetch breadth for an intentionally deeper run with:
 
 ```bash
-EXPO_PUBLIC_TICKETMASTER_PAGE_SIZE=100 EXPO_PUBLIC_TICKETMASTER_MAX_PAGES=5 npm run web
+EXPO_PUBLIC_TICKETMASTER_PAGE_SIZE=100 EXPO_PUBLIC_TICKETMASTER_MAX_PAGES=5 npm run audit:providers
 ```
 
 Without that key, the app stays on the checked-in seed catalog, partner-feed fixtures, and reusable local calendar fixtures.

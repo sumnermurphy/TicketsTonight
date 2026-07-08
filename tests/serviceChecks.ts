@@ -1129,6 +1129,25 @@ async function main() {
 
   const normalizedTicketmasterEvent = normalizeTicketmasterEvent(rawTicketmasterEvent, "nyc");
   assert(normalizedTicketmasterEvent?.category === "theater", "Ticketmaster theatre taxonomy should normalize.");
+  const normalizedPhantomTicketmasterEvent = normalizeTicketmasterEvent(
+    {
+      ...rawTicketmasterEvent,
+      id: "tm-nyc-phantom",
+      name: "Phantom Of The Opera",
+      classifications: [
+        {
+          segment: { name: "Arts & Theatre" },
+          genre: { name: "Theatre" },
+          subGenre: { name: "Musical" }
+        }
+      ]
+    },
+    "nyc"
+  );
+  assert(
+    normalizedPhantomTicketmasterEvent?.category === "theater",
+    "Ticketmaster Arts & Theatre taxonomy should beat opera title hints for musicals."
+  );
   assert(
     normalizedTicketmasterEvent.ticketOffers[0]?.priceCents === 4950,
     "Ticketmaster price ranges should become cents-based ticket offers."
@@ -1284,6 +1303,45 @@ async function main() {
     ticketmasterDjShows.some((show) => show.id === "tm-tm-nyc-901" && show.areaId === "nyc"),
     "Ticketmaster provider should resolve nearby borough venues into the selected area."
   );
+  const cachedTicketmasterClient: TicketmasterDiscoveryClient & { requestedUrls: string[] } = {
+    requestedUrls: [],
+    async listEvents(url: string) {
+      this.requestedUrls.push(url);
+      return ticketmasterDiscoveryFixture;
+    }
+  };
+  const cachedTicketmasterProvider = new TicketmasterDiscoveryProvider({
+    apiKey: "test-key",
+    client: cachedTicketmasterClient,
+    now: () => new Date(referenceNow)
+  });
+
+  await Promise.all([
+    cachedTicketmasterProvider.listShows({
+      areaId: "nyc",
+      categories: [],
+      query: "",
+      onlyDeals: false,
+      dateWindow: "week",
+      sortMode: "soonest",
+      resultLimit: 1,
+      referenceNow
+    }),
+    cachedTicketmasterProvider.listShows({
+      areaId: "nyc",
+      categories: [],
+      query: "",
+      onlyDeals: false,
+      dateWindow: "week",
+      sortMode: "soonest",
+      referenceNow
+    })
+  ]);
+
+  assert(
+    cachedTicketmasterClient.requestedUrls.length === 4,
+    "Ticketmaster provider should share in-flight live inventory across equivalent visible and market-summary loads."
+  );
   const fanoutTicketmasterClient: TicketmasterDiscoveryClient & { requestedUrls: string[] } = {
     requestedUrls: [],
     async listEvents(url: string) {
@@ -1419,6 +1477,7 @@ async function main() {
     ticketmasterDiagnostics.requestCount === 4 &&
       ticketmasterDiagnostics.rawEventCount === 8 &&
       ticketmasterDiagnostics.filteredShowCount === 2 &&
+      ticketmasterDiagnostics.filteredShows.length === 2 &&
       ticketmasterDiagnostics.duplicateShowCount === 6 &&
       ticketmasterDiagnostics.duplicateRatePercent === 75 &&
       ticketmasterDiagnostics.discardedEventCount === 0,

@@ -40,6 +40,7 @@ export type TicketmasterProviderDiagnosticsSummary = {
   ticketLinkCoveragePercent: number;
   pricedOfferCount: number;
   linkOnlyOfferCount: number;
+  filteredShows: Show[];
   requests: TicketmasterProviderDiagnosticRequest[];
   categoryCounts: TicketmasterProviderDiagnosticCount[];
   discardReasons: TicketmasterProviderDiagnosticCount[];
@@ -82,6 +83,7 @@ export async function createTicketmasterProviderDiagnostics(
       filteredShows,
       (offer) => offer.priceCents === undefined && Boolean(getSafeTicketUrl(offer.externalUrl))
     ),
+    filteredShows,
     requests: fetchResult.requests.map((request) => ({
       ...request,
       url: redactTicketmasterApiKey(request.url)

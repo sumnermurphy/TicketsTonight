@@ -1,14 +1,17 @@
-import { areas, categoryLabels } from "../src/data/catalog";
+import { areas, categoryLabels, shows as seedShows } from "../src/data/catalog";
 import { hudsonHallHtmlCalendarFixture } from "../src/data/htmlCalendarFixtures";
 import { localCalendarSources } from "../src/data/localCalendarFeeds";
+import {
+  normalizeCalendarEvent,
+  normalizedLocalCalendarShows
+} from "../src/services/calendarFeedProvider";
 import {
   createCoverageAudit,
   getCoverageAuditActionCopy
 } from "../src/services/coverageAudit";
-import {
-  createDefaultEventProvider,
-  readPublicDiscoveryConfig
-} from "../src/services/eventProviderFactory";
+import { filterShows, rememberShows } from "../src/services/eventCatalog";
+import { readPublicDiscoveryConfig } from "../src/services/eventProviderFactory";
+import { normalizedPartnerFeedShows } from "../src/services/feedProvider";
 import { importHtmlCalendarEvents } from "../src/services/htmlCalendarImporter";
 import {
   createLiveSupplyAudit,
@@ -18,7 +21,7 @@ import {
 import { createTicketmasterProviderDiagnostics } from "../src/services/providerDiagnostics";
 import { createSourceInventorySummaries } from "../src/services/sourceInventoryAudit";
 import { FetchTicketmasterDiscoveryClient } from "../src/services/ticketmasterProvider";
-import type { ShowSearchFilters } from "../src/types";
+import type { Show, ShowSearchFilters } from "../src/types";
 import { loadLocalEnv } from "./env";
 
 async function main() {
@@ -28,7 +31,6 @@ async function main() {
   const config = readPublicDiscoveryConfig();
   const apiKey = config.ticketmasterApiKey?.trim();
   const liveTicketmasterEnabled = Boolean(apiKey);
-  const provider = createDefaultEventProvider(config);
   const hudsonCalendarSource = localCalendarSources.find(
     (source) => source.id === "hudson-arts-calendar"
   );
@@ -76,18 +78,22 @@ async function main() {
             now: config.now
           })
         : undefined;
-    const shows = await provider.listShows(filters);
-    const audit = createLiveSupplyAudit(shows, {
+    const parsedCalendarEvents =
+      area.id === "hudson" && parsedHudsonCalendar ? parsedHudsonCalendar.events : [];
+    const appFacingShows = createAppFacingAuditShows(
+      filters,
+      parsedCalendarEvents.map(normalizeCalendarEvent),
+      ticketmasterDiagnostics?.filteredShows ?? []
+    );
+    const audit = createLiveSupplyAudit(appFacingShows, {
       areaId: area.id,
       referenceNow
     });
-    const coverageAudit = createCoverageAudit(shows, {
+    const coverageAudit = createCoverageAudit(appFacingShows, {
       areaId: area.id,
       referenceNow,
       windowDays: 30
     });
-    const parsedCalendarEvents =
-      area.id === "hudson" && parsedHudsonCalendar ? parsedHudsonCalendar.events : [];
     const sourceSummaries = createSourceInventorySummaries({
       areaId: area.id,
       referenceNow,
@@ -98,11 +104,12 @@ async function main() {
     });
 
     console.log(`${area.name}, ${area.region} live inventory`);
-    console.log(`App-facing events: ${shows.length}`);
+    console.log(`App-facing events: ${appFacingShows.length}`);
     console.log(`30-day live target: ${audit.eventCount}/${audit.targetEventCount}`);
     console.log(
       `Ticket links: ${audit.ticketLinkCount}/${audit.eventCount} (${audit.ticketLinkCoveragePercent}%, target ${audit.targetTicketLinkCoveragePercent}%)`
     );
+    console.log(`Readiness thresholds: ${getReadinessThresholdCopy(audit)}`);
     console.log(`Status: ${getLiveSupplyAuditStatusCopy(audit)}`);
     console.log(`Next action: ${getLiveSupplyAuditActionCopy(audit)}`);
     console.log("Provider/source inventory:");
@@ -116,7 +123,7 @@ async function main() {
     console.log("Category mix:");
 
     for (const [category, label] of Object.entries(categoryLabels)) {
-      const count = shows.filter((show) => show.category === category).length;
+      const count = appFacingShows.filter((show) => show.category === category).length;
 
       if (count > 0) {
         console.log(`- ${label}: ${count}`);
@@ -155,3 +162,28 @@ main().catch((error: unknown) => {
   console.error(error);
   throw error;
 });
+
+function createAppFacingAuditShows(
+  filters: ShowSearchFilters,
+  parsedCalendarShows: Show[],
+  ticketmasterShows: Show[]
+): Show[] {
+  return filterShows(
+    rememberShows([
+      ...seedShows,
+      ...normalizedPartnerFeedShows,
+      ...normalizedLocalCalendarShows,
+      ...parsedCalendarShows,
+      ...ticketmasterShows
+    ]),
+    filters
+  );
+}
+
+function getReadinessThresholdCopy(summary: ReturnType<typeof createLiveSupplyAudit>): string {
+  const eventStatus = summary.eventCount >= summary.targetEventCount ? "pass" : "gap";
+  const linkStatus =
+    summary.ticketLinkCoveragePercent >= summary.targetTicketLinkCoveragePercent ? "pass" : "gap";
+
+  return `${eventStatus} ${summary.eventCount}/${summary.targetEventCount} events, ${linkStatus} ${summary.ticketLinkCoveragePercent}/${summary.targetTicketLinkCoveragePercent}% link coverage`;
+}

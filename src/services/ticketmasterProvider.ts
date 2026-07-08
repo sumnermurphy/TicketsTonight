@@ -217,21 +217,40 @@ export class TicketmasterDiscoveryProvider implements EventProvider {
   label = "Ticketmaster Discovery";
 
   private readonly cache = new Map<string, Show>();
+  private readonly listCache = new Map<string, Promise<Show[]>>();
 
   constructor(private readonly options: TicketmasterDiscoveryProviderOptions) {}
 
   async listShows(filters: ShowSearchFilters): Promise<Show[]> {
-    const { events } = await fetchTicketmasterDiscoveryEvents(filters, this.options);
-
-    const shows = events
-      .map((event) => normalizeTicketmasterEvent(event, filters.areaId))
-      .filter((show): show is Show => Boolean(show));
-
-    for (const show of shows) {
-      this.cache.set(show.id, show);
-    }
+    const cacheKey = createTicketmasterListCacheKey(filters);
+    const cachedShows = this.listCache.get(cacheKey);
+    const showsPromise = cachedShows ?? this.fetchNormalizedShows(filters, cacheKey);
+    const shows = await showsPromise;
 
     return filterShows(shows, filters);
+  }
+
+  private fetchNormalizedShows(filters: ShowSearchFilters, cacheKey: string): Promise<Show[]> {
+    const showsPromise = fetchTicketmasterDiscoveryEvents(filters, this.options)
+      .then(({ events }) => {
+        const shows = events
+          .map((event) => normalizeTicketmasterEvent(event, filters.areaId))
+          .filter((show): show is Show => Boolean(show));
+
+        for (const show of shows) {
+          this.cache.set(show.id, show);
+        }
+
+        return shows;
+      })
+      .catch((error: unknown) => {
+        this.listCache.delete(cacheKey);
+        throw error;
+      });
+
+    this.listCache.set(cacheKey, showsPromise);
+
+    return showsPromise;
   }
 
   async getShow(showId: string): Promise<Show | undefined> {
@@ -253,6 +272,16 @@ export class TicketmasterDiscoveryProvider implements EventProvider {
 
     return show;
   }
+}
+
+function createTicketmasterListCacheKey(filters: ShowSearchFilters): string {
+  return [
+    filters.areaId,
+    filters.dateWindow,
+    filters.query.trim().toLowerCase(),
+    [...filters.categories].sort().join(","),
+    filters.referenceNow ?? "runtime"
+  ].join("|");
 }
 
 export function buildTicketmasterDiscoveryUrl(
@@ -548,16 +577,16 @@ function getStartDate(event: TicketmasterDiscoveryEvent): string | undefined {
 function normalizeTicketmasterCategory(event: TicketmasterDiscoveryEvent): ShowCategory {
   const titleHint = getTitleCategoryHint(event.name);
 
-  if (titleHint) {
-    return titleHint;
-  }
-
   for (const classification of event.classifications ?? []) {
     const segment = normalizeTicketmasterTerm(classification.segment?.name);
     const genre = normalizeTicketmasterTerm(classification.genre?.name);
     const subGenre = normalizeTicketmasterTerm(classification.subGenre?.name);
 
     if (segment === "music") {
+      if (titleHint) {
+        return titleHint;
+      }
+
       return genre === "dance/electronic" || subGenre === "club dance" ? "dj" : "concert";
     }
 
@@ -597,6 +626,10 @@ function normalizeTicketmasterCategory(event: TicketmasterDiscoveryEvent): ShowC
         return "theater";
       }
     }
+  }
+
+  if (titleHint) {
+    return titleHint;
   }
 
   return normalizeCategory(getTicketmasterTaxonomyTerms(event));
