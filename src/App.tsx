@@ -1,0 +1,2590 @@
+import { StatusBar } from "expo-status-bar";
+import {
+  BadgePercent,
+  Bell,
+  CalendarDays,
+  Check,
+  ChevronDown,
+  Heart,
+  MapPin,
+  Music2,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+  Ticket,
+  X
+} from "lucide-react-native";
+import { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
+} from "react-native";
+
+import { areas, categoryLabels } from "./data/catalog";
+import {
+  createDealAlert,
+  getDealAlertMatches,
+  toggleDealAlertStatus
+} from "./services/dealAlerts";
+import {
+  eventProvider,
+  filterShows,
+  getBestOffer,
+  getShowById
+} from "./services/eventCatalog";
+import { findNearestArea, locationProvider } from "./services/location";
+import {
+  markNotificationRead,
+  mergeNotifications,
+  notificationProvider
+} from "./services/notifications";
+import { appRepository } from "./services/storage";
+import { colors, radii, shadows, spacing } from "./theme";
+import type {
+  Area,
+  DateWindow,
+  DealAlert,
+  DealAlertMatch,
+  InventorySource,
+  NotificationMessage,
+  OfferAccess,
+  Show,
+  ShowCategory,
+  ShowSearchFilters,
+  TicketOffer
+} from "./types";
+import { formatDistance, formatMoney, formatShowDate } from "./utils/format";
+
+const categories = Object.keys(categoryLabels) as ShowCategory[];
+const dateWindowLabels: Record<DateWindow, string> = {
+  all: "All",
+  tonight: "Tonight",
+  week: "This week",
+  weekend: "Weekend"
+};
+const dateWindows = Object.keys(dateWindowLabels) as DateWindow[];
+
+const sourceLabels: Record<InventorySource, string> = {
+  "venue-direct": "Venue direct",
+  promoter: "Promoter",
+  "partner-feed": "Partner feed",
+  "primary-marketplace": "Primary",
+  "verified-resale": "Verified resale"
+};
+
+const accessLabels: Record<OfferAccess, string> = {
+  "mobile-entry": "Mobile entry",
+  "will-call": "Will call",
+  "external-transfer": "External transfer"
+};
+
+export default function App() {
+  const [selectedAreaId, setSelectedAreaId] = useState(areas[0]?.id ?? "nyc");
+  const [query, setQuery] = useState("");
+  const [selectedCategories, setSelectedCategories] = useState<ShowCategory[]>([]);
+  const [dateWindow, setDateWindow] = useState<DateWindow>("all");
+  const [onlyDeals, setOnlyDeals] = useState(false);
+  const [locationStatus, setLocationStatus] = useState("Manual area");
+  const [locating, setLocating] = useState(false);
+  const [areaMenuOpen, setAreaMenuOpen] = useState(false);
+  const [selectedShow, setSelectedShow] = useState<Show | null>(null);
+  const [savedShowIds, setSavedShowIds] = useState<string[]>([]);
+  const [dealAlerts, setDealAlerts] = useState<DealAlert[]>([]);
+  const [notifications, setNotifications] = useState<NotificationMessage[]>([]);
+  const [visibleShows, setVisibleShows] = useState<Show[]>([]);
+  const [areaInventory, setAreaInventory] = useState<Show[]>([]);
+  const [discoveryLoading, setDiscoveryLoading] = useState(true);
+  const [inventoryLoading, setInventoryLoading] = useState(true);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  const selectedArea = areas.find((area) => area.id === selectedAreaId) ?? areas[0];
+
+  useEffect(() => {
+    let mounted = true;
+
+    appRepository
+      .loadPreferences()
+      .then((preferences) => {
+        if (!mounted) {
+          return;
+        }
+
+        if (preferences) {
+          setSelectedAreaId(preferences.selectedAreaId);
+          setSelectedCategories(preferences.selectedCategories);
+          setDateWindow(preferences.dateWindow ?? "all");
+          setOnlyDeals(preferences.onlyDeals);
+          setSavedShowIds(preferences.savedShowIds);
+          setDealAlerts(preferences.dealAlerts ?? []);
+          setNotifications(preferences.notifications ?? []);
+          setLocationStatus(preferences.locationStatus);
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setHydrated(true);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) {
+      return;
+    }
+
+    void appRepository.savePreferences({
+      selectedAreaId,
+      selectedCategories,
+      dateWindow,
+      onlyDeals,
+      tasteEnabled: false,
+      savedShowIds,
+      dealAlerts,
+      notifications,
+      userSession: null,
+      musicConnection: null,
+      locationStatus,
+      updatedAt: new Date().toISOString()
+    });
+  }, [
+    hydrated,
+    dateWindow,
+    dealAlerts,
+    locationStatus,
+    notifications,
+    onlyDeals,
+    savedShowIds,
+    selectedAreaId,
+    selectedCategories
+  ]);
+
+  const discoveryFilters = useMemo<ShowSearchFilters>(
+    () => ({
+      areaId: selectedAreaId,
+      categories: selectedCategories,
+      query,
+      onlyDeals,
+      dateWindow
+    }),
+    [dateWindow, onlyDeals, query, selectedAreaId, selectedCategories]
+  );
+
+  const areaInventoryFilters = useMemo<ShowSearchFilters>(
+    () => ({
+      areaId: selectedAreaId,
+      categories: [],
+      query: "",
+      onlyDeals: false,
+      dateWindow: "all"
+    }),
+    [selectedAreaId]
+  );
+
+  useEffect(() => {
+    let mounted = true;
+
+    setDiscoveryLoading(true);
+    setDiscoveryError(null);
+
+    eventProvider
+      .listShows(discoveryFilters)
+      .then((shows) => {
+        if (mounted) {
+          setVisibleShows(shows);
+        }
+      })
+      .catch((error) => {
+        if (mounted) {
+          setVisibleShows([]);
+          setDiscoveryError(error instanceof Error ? error.message : "Unable to load shows.");
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setDiscoveryLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [discoveryFilters]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    setInventoryLoading(true);
+
+    eventProvider
+      .listShows(areaInventoryFilters)
+      .then((shows) => {
+        if (mounted) {
+          setAreaInventory(shows);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setAreaInventory([]);
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setInventoryLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [areaInventoryFilters]);
+
+  const dealAlertInventory = useMemo(
+    () =>
+      filterShows(areaInventory, {
+        areaId: selectedAreaId,
+        categories: [],
+        query: "",
+        onlyDeals: true,
+        dateWindow: "all"
+      }),
+    [areaInventory, selectedAreaId]
+  );
+
+  const dealShows = useMemo(() => dealAlertInventory.slice(0, 4), [dealAlertInventory]);
+  const dealAlertMatches = useMemo(
+    () => getDealAlertMatches(dealAlerts, dealAlertInventory).slice(0, 4),
+    [dealAlertInventory, dealAlerts]
+  );
+  const knownShowsById = useMemo(() => {
+    const showsById = new Map<string, Show>();
+
+    for (const show of [...areaInventory, ...visibleShows]) {
+      showsById.set(show.id, show);
+    }
+
+    return showsById;
+  }, [areaInventory, visibleShows]);
+  const unreadNotifications = useMemo(
+    () => notifications.filter((notification) => notification.status === "unread"),
+    [notifications]
+  );
+  const currentDealAlert = useMemo(() => {
+    const currentCategories = [...selectedCategories].sort().join("|");
+
+    return dealAlerts.find(
+      (alert) =>
+        alert.areaId === selectedAreaId &&
+        alert.dateWindow === dateWindow &&
+        alert.categories.join("|") === currentCategories
+    );
+  }, [dateWindow, dealAlerts, selectedAreaId, selectedCategories]);
+  const savedShows = useMemo(
+    () =>
+      savedShowIds
+        .map((showId) => knownShowsById.get(showId) ?? getShowById(showId))
+        .filter((show): show is Show => Boolean(show)),
+    [knownShowsById, savedShowIds]
+  );
+
+  const toggleCategory = (category: ShowCategory) => {
+    setSelectedCategories((current) =>
+      current.includes(category)
+        ? current.filter((candidate) => candidate !== category)
+        : [...current, category]
+    );
+  };
+
+  const useNearbyArea = async () => {
+    setLocating(true);
+
+    try {
+      const fix = await locationProvider.getCurrentLocation();
+      const nearest = findNearestArea(fix.coordinates);
+
+      if (!nearest) {
+        setLocationStatus("No supported area nearby");
+        return;
+      }
+
+      setSelectedAreaId(nearest.area.id);
+      setAreaMenuOpen(false);
+      setLocationStatus(
+        `${nearest.area.name} · ${formatDistance(nearest.distanceMiles)} from ${locationProvider.label}`
+      );
+    } catch (error) {
+      setLocationStatus(error instanceof Error ? error.message : "Location unavailable");
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const toggleSavedShow = (showId: string) => {
+    setSavedShowIds((current) =>
+      current.includes(showId) ? current.filter((candidate) => candidate !== showId) : [showId, ...current]
+    );
+  };
+
+  const toggleCurrentDealAlert = () => {
+    const now = new Date().toISOString();
+
+    if (currentDealAlert) {
+      setDealAlerts((current) =>
+        current.map((alert) =>
+          alert.id === currentDealAlert.id ? toggleDealAlertStatus(alert, now) : alert
+        )
+      );
+      return;
+    }
+
+    setDealAlerts((current) => [
+      createDealAlert(
+        {
+          areaId: selectedAreaId,
+          categories: selectedCategories,
+          dateWindow
+        },
+        now
+      ),
+      ...current
+    ]);
+  };
+
+  const openShowDetails = (show: Show) => {
+    setSelectedShow(show);
+  };
+
+  const resolveKnownShow = (showId: string) => knownShowsById.get(showId) ?? getShowById(showId);
+
+  useEffect(() => {
+    if (!hydrated || !dealAlertMatches.length) {
+      return;
+    }
+
+    let mounted = true;
+
+    notificationProvider.createDealAlertNotifications(dealAlertMatches).then((incoming) => {
+      if (mounted) {
+        setNotifications((current) => mergeNotifications(current, incoming));
+      }
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [dealAlertMatches, hydrated]);
+
+  const openNotification = (notification: NotificationMessage) => {
+    setNotifications((current) => markNotificationRead(current, notification.id));
+    const show = resolveKnownShow(notification.showId);
+
+    if (show) {
+      openShowDetails(show);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar style="dark" />
+      <View style={styles.appShell}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.topBar}>
+            <View>
+              <Text style={styles.kicker}>Tickets Tonight · {selectedArea?.discoveryLabel}</Text>
+              <Text style={styles.title}>Find a seat, a floor, or a stage nearby.</Text>
+              <Text style={styles.marketNote}>{selectedArea?.discoveryNote}</Text>
+            </View>
+            <View style={styles.logoMark}>
+              <Ticket color={colors.paper} size={24} strokeWidth={2.4} />
+            </View>
+          </View>
+
+          <View style={styles.controls}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setAreaMenuOpen((open) => !open)}
+              style={styles.areaButton}
+            >
+              <MapPin color={colors.teal} size={19} />
+              <View style={styles.areaButtonCopy}>
+                <Text style={styles.areaButtonText}>
+                  {selectedArea?.name}, {selectedArea?.region}
+                </Text>
+                <Text numberOfLines={1} style={styles.areaButtonMeta}>
+                  {selectedArea?.discoveryLabel}
+                </Text>
+              </View>
+              <ChevronDown color={colors.mutedInk} size={18} />
+            </Pressable>
+
+            {areaMenuOpen ? (
+              <View style={styles.areaMenu}>
+                {areas.map((area) => (
+                  <AreaOption
+                    area={area}
+                    key={area.id}
+                    selected={area.id === selectedAreaId}
+                    onPress={() => {
+                      setSelectedAreaId(area.id);
+                      setLocationStatus("Manual area");
+                      setAreaMenuOpen(false);
+                    }}
+                  />
+                ))}
+              </View>
+            ) : null}
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={locating}
+              onPress={useNearbyArea}
+              style={[styles.nearMeButton, locating ? styles.nearMeButtonLoading : undefined]}
+            >
+              <MapPin color={colors.paper} size={18} />
+              <View style={styles.nearMeCopy}>
+                <Text style={styles.nearMeTitle}>{locating ? "Finding area" : "Use near me"}</Text>
+                <Text numberOfLines={1} style={styles.nearMeMeta}>
+                  {locationStatus}
+                </Text>
+              </View>
+            </Pressable>
+
+            <View style={styles.searchBox}>
+              <Search color={colors.mutedInk} size={18} />
+              <TextInput
+                accessibilityLabel="Search shows"
+                onChangeText={setQuery}
+                placeholder="Search artist, venue, vibe"
+                placeholderTextColor="#8A8F98"
+                returnKeyType="search"
+                style={styles.searchInput}
+                value={query}
+              />
+              {query ? (
+                <Pressable
+                  accessibilityLabel="Clear search"
+                  hitSlop={10}
+                  onPress={() => setQuery("")}
+                >
+                  <X color={colors.mutedInk} size={18} />
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+
+          {savedShows.length ? (
+            <View style={styles.savedPanel}>
+              <View style={styles.walletHeader}>
+                <View style={styles.inlineTitle}>
+                  <Heart color={colors.coral} size={18} />
+                  <Text style={styles.sectionTitle}>Saved shows</Text>
+                </View>
+                <Text style={styles.walletCount}>
+                  {savedShows.length} {savedShows.length === 1 ? "show" : "shows"}
+                </Text>
+              </View>
+              <ScrollView
+                contentContainerStyle={styles.savedRail}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+              >
+                {savedShows.map((show) => (
+                  <SavedShowCard key={show.id} onBuy={() => openShowDetails(show)} show={show} />
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          <View style={styles.filterHeader}>
+            <View style={styles.inlineTitle}>
+              <SlidersHorizontal color={colors.ink} size={18} />
+              <Text style={styles.sectionTitle}>Browse by type</Text>
+            </View>
+            {selectedCategories.length ? (
+              <Pressable onPress={() => setSelectedCategories([])}>
+                <Text style={styles.clearFilters}>Clear</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          <ScrollView
+            contentContainerStyle={styles.categoryRail}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          >
+            {categories.map((category) => (
+              <CategoryChip
+                active={selectedCategories.includes(category)}
+                category={category}
+                key={category}
+                onPress={() => toggleCategory(category)}
+              />
+            ))}
+          </ScrollView>
+
+          <ScrollView
+            contentContainerStyle={styles.dateWindowRail}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          >
+            {dateWindows.map((window) => (
+              <DateWindowChip
+                active={dateWindow === window}
+                dateWindow={window}
+                key={window}
+                onPress={() => setDateWindow(window)}
+              />
+            ))}
+          </ScrollView>
+
+          <View style={styles.signalPanel}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setOnlyDeals((current) => !current)}
+              style={[styles.signalButton, onlyDeals ? styles.signalButtonActive : undefined]}
+            >
+              <BadgePercent color={onlyDeals ? colors.paper : colors.coralDark} size={18} />
+              <View style={styles.signalCopy}>
+                <Text style={[styles.signalTitle, onlyDeals ? styles.signalTitleActive : undefined]}>
+                  Deals only
+                </Text>
+                <Text style={[styles.signalMeta, onlyDeals ? styles.signalMetaActive : undefined]}>
+                  {inventoryLoading ? "Checking deals" : `${dealShows.length} active in ${selectedArea?.name}`}
+                </Text>
+              </View>
+            </Pressable>
+
+            <View style={styles.signalButton}>
+              <Sparkles color={colors.teal} size={18} />
+              <View style={styles.signalCopy}>
+                <Text style={styles.signalTitle}>Curated scope</Text>
+                <Text style={styles.signalMeta}>Discovery and discounts first</Text>
+              </View>
+            </View>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={toggleCurrentDealAlert}
+            style={[
+              styles.dealAlertPanel,
+              currentDealAlert?.status === "active" ? styles.dealAlertPanelActive : undefined
+            ]}
+          >
+            <View
+              style={[
+                styles.dealAlertIconBadge,
+                currentDealAlert?.status === "active" ? styles.dealAlertIconBadgeActive : undefined
+              ]}
+            >
+              <Bell color={currentDealAlert?.status === "active" ? colors.paper : colors.coralDark} size={18} />
+            </View>
+            <View style={styles.dealAlertCopy}>
+              <Text
+                style={[
+                  styles.dealAlertTitle,
+                  currentDealAlert?.status === "active" ? styles.dealAlertTitleActive : undefined
+                ]}
+              >
+                Deal alerts
+              </Text>
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.dealAlertMeta,
+                  currentDealAlert?.status === "active" ? styles.dealAlertMetaActive : undefined
+                ]}
+              >
+                {currentDealAlert?.status === "active"
+                  ? inventoryLoading
+                    ? "Checking discounts"
+                    : `${dealAlertMatches.length} matching discounted shows`
+                  : currentDealAlert?.status === "paused"
+                    ? "Paused for current filters"
+                    : "Track discounts for current filters"}
+              </Text>
+            </View>
+            <Text
+              style={[
+                styles.dealAlertAction,
+                currentDealAlert?.status === "active" ? styles.dealAlertActionActive : undefined
+              ]}
+            >
+              {currentDealAlert ? (currentDealAlert.status === "active" ? "Pause" : "Resume") : "Create"}
+            </Text>
+          </Pressable>
+
+          {dealAlertMatches.length ? (
+            <View style={styles.alertMatchPanel}>
+              <View style={styles.walletHeader}>
+                <View style={styles.inlineTitle}>
+                  <Bell color={colors.coral} size={18} />
+                  <Text style={styles.sectionTitle}>Alert matches</Text>
+                </View>
+                <Text style={styles.walletCount}>
+                  {dealAlertMatches.length} {dealAlertMatches.length === 1 ? "deal" : "deals"}
+                </Text>
+              </View>
+              <ScrollView
+                contentContainerStyle={styles.alertMatchRail}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+              >
+                {dealAlertMatches.map((match) => (
+                  <DealAlertMatchCard
+                    key={`${match.alert.id}-${match.show.id}-${match.offer.id}`}
+                    match={match}
+                    onBuy={() => openShowDetails(match.show)}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          {notifications.length ? (
+            <View style={styles.notificationPanel}>
+              <View style={styles.walletHeader}>
+                <View style={styles.inlineTitle}>
+                  <Bell color={colors.teal} size={18} />
+                  <Text style={styles.sectionTitle}>Inbox</Text>
+                </View>
+                <Text style={styles.walletCount}>
+                  {unreadNotifications.length} unread
+                </Text>
+              </View>
+              <ScrollView
+                contentContainerStyle={styles.notificationRail}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+              >
+                {notifications.slice(0, 4).map((notification) => (
+                  <NotificationCard
+                    key={notification.id}
+                    notification={notification}
+                    onPress={() => openNotification(notification)}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          {dealShows.length ? (
+            <View style={styles.dealPanel}>
+              <View style={styles.inlineTitle}>
+                <BadgePercent color={colors.coral} size={18} />
+                <Text style={styles.sectionTitle}>Last-minute deals</Text>
+              </View>
+              <ScrollView
+                contentContainerStyle={styles.dealRail}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+              >
+                {dealShows.map((show) => (
+                  <DealCard key={show.id} onPress={() => openShowDetails(show)} show={show} />
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          <View style={styles.resultsHeader}>
+            <View>
+              <Text style={styles.sectionTitle}>Upcoming near you</Text>
+              <Text style={styles.resultCount}>
+                {discoveryLoading
+                  ? "Loading shows"
+                  : `${visibleShows.length} ${visibleShows.length === 1 ? "show" : "shows"} · ${
+                      dateWindowLabels[dateWindow]
+                    }`}
+              </Text>
+            </View>
+            <View style={styles.discountBadge}>
+              <Text style={styles.discountBadgeText}>Deals-ready</Text>
+            </View>
+          </View>
+
+          {discoveryError ? (
+            <View style={styles.providerNotice}>
+              <Text style={styles.providerNoticeText}>{discoveryError}</Text>
+            </View>
+          ) : null}
+
+          {discoveryLoading && visibleShows.length ? (
+            <Text style={styles.refreshingText}>Refreshing provider inventory</Text>
+          ) : null}
+
+          <View style={styles.showList}>
+            {discoveryLoading && !visibleShows.length ? (
+              <View style={styles.loadingState}>
+                <ActivityIndicator color={colors.teal} />
+                <Text style={styles.loadingTitle}>Loading local inventory</Text>
+              </View>
+            ) : null}
+
+            {visibleShows.map((show) => (
+              <ShowCard
+                key={show.id}
+                onOpenDetails={() => openShowDetails(show)}
+                onToggleSaved={() => toggleSavedShow(show.id)}
+                saved={savedShowIds.includes(show.id)}
+                show={show}
+              />
+            ))}
+
+            {!discoveryLoading && !visibleShows.length ? (
+              <View style={styles.emptyState}>
+                <Music2 color={colors.teal} size={30} />
+                <Text style={styles.emptyTitle}>No shows match that mix.</Text>
+                <Text style={styles.emptyCopy}>
+                  Try a nearby city, clear a filter, or search for a venue or artist.
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </ScrollView>
+      </View>
+
+      <ShowDetailModal
+        onClose={() => setSelectedShow(null)}
+        onToggleSaved={(showId) => toggleSavedShow(showId)}
+        saved={selectedShow ? savedShowIds.includes(selectedShow.id) : false}
+        show={selectedShow}
+      />
+    </SafeAreaView>
+  );
+}
+
+function AreaOption({
+  area,
+  selected,
+  onPress
+}: {
+  area: Area;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.areaOption}>
+      <View style={styles.areaOptionCopy}>
+        <View style={styles.areaOptionHeader}>
+          <Text style={styles.areaOptionName}>{area.name}</Text>
+          <Text style={styles.areaOptionBadge}>{area.discoveryLabel}</Text>
+        </View>
+        <Text style={styles.areaOptionRegion}>{area.region}</Text>
+        <Text numberOfLines={2} style={styles.areaOptionNote}>
+          {area.discoveryNote}
+        </Text>
+      </View>
+      {selected ? <Check color={colors.teal} size={20} /> : null}
+    </Pressable>
+  );
+}
+
+function CategoryChip({
+  active,
+  category,
+  onPress
+}: {
+  active: boolean;
+  category: ShowCategory;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={[styles.categoryChip, active ? styles.categoryChipActive : undefined]}
+    >
+      <Text style={[styles.categoryChipText, active ? styles.categoryChipTextActive : undefined]}>
+        {categoryLabels[category]}
+      </Text>
+    </Pressable>
+  );
+}
+
+function DateWindowChip({
+  active,
+  dateWindow,
+  onPress
+}: {
+  active: boolean;
+  dateWindow: DateWindow;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={[styles.dateWindowChip, active ? styles.dateWindowChipActive : undefined]}
+    >
+      <Text style={[styles.dateWindowText, active ? styles.dateWindowTextActive : undefined]}>
+        {dateWindowLabels[dateWindow]}
+      </Text>
+    </Pressable>
+  );
+}
+
+function DealAlertMatchCard({ match, onBuy }: { match: DealAlertMatch; onBuy: () => void }) {
+  return (
+    <Pressable onPress={onBuy} style={styles.alertMatchCard}>
+      <View style={[styles.alertMatchStripe, { backgroundColor: match.show.imageTone }]} />
+      <Text numberOfLines={1} style={styles.alertMatchLabel}>
+        {match.offer.deal?.label ?? "Deal found"}
+      </Text>
+      <Text numberOfLines={2} style={styles.alertMatchTitle}>
+        {match.show.title}
+      </Text>
+      <Text numberOfLines={1} style={styles.alertMatchMeta}>
+        {match.show.neighborhood} · {formatShowDate(match.show.startsAt)}
+      </Text>
+      <View style={styles.alertMatchFooter}>
+        <Text style={styles.alertMatchPrice}>{formatMoney(match.offer.priceCents)}</Text>
+        {match.savingsCents > 0 ? (
+          <Text style={styles.alertMatchSavings}>Save {formatMoney(match.savingsCents)}</Text>
+        ) : null}
+      </View>
+    </Pressable>
+  );
+}
+
+function NotificationCard({
+  notification,
+  onPress
+}: {
+  notification: NotificationMessage;
+  onPress: () => void;
+}) {
+  const unread = notification.status === "unread";
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={[styles.notificationCard, unread ? styles.notificationCardUnread : undefined]}
+    >
+      <View style={styles.notificationTopLine}>
+        <Text style={[styles.notificationStatus, unread ? styles.notificationStatusUnread : undefined]}>
+          {unread ? "New" : "Read"}
+        </Text>
+        <Text numberOfLines={1} style={styles.notificationChannel}>
+          {notification.channels.join(", ")}
+        </Text>
+      </View>
+      <Text numberOfLines={2} style={styles.notificationTitle}>
+        {notification.title}
+      </Text>
+      <Text numberOfLines={2} style={styles.notificationBody}>
+        {notification.body}
+      </Text>
+    </Pressable>
+  );
+}
+
+function getOfferSavings(offer: TicketOffer | undefined): number {
+  if (!offer?.listPriceCents) {
+    return 0;
+  }
+
+  return Math.max(0, offer.listPriceCents - offer.priceCents);
+}
+
+function DealCard({ show, onPress }: { show: Show; onPress: () => void }) {
+  const offer = getBestOffer(show);
+  const savings = getOfferSavings(offer);
+
+  if (!offer) {
+    return null;
+  }
+
+  return (
+    <Pressable onPress={onPress} style={[styles.dealCard, { backgroundColor: show.imageTone }]}>
+      <View style={styles.dealCardTop}>
+        <Text style={styles.dealCardBadge}>{offer.deal?.label ?? "Deal"}</Text>
+        {savings > 0 ? <Text style={styles.dealCardSavings}>Save {formatMoney(savings)}</Text> : null}
+      </View>
+      <Text numberOfLines={2} style={styles.dealCardTitle}>
+        {show.title}
+      </Text>
+      <Text numberOfLines={1} style={styles.dealCardMeta}>
+        {show.neighborhood} · {formatShowDate(show.startsAt)}
+      </Text>
+      <Text style={styles.dealCardPrice}>{formatMoney(offer.priceCents)}</Text>
+    </Pressable>
+  );
+}
+
+function SavedShowCard({ show, onBuy }: { show: Show; onBuy: () => void }) {
+  const offer = getBestOffer(show);
+
+  return (
+    <Pressable onPress={onBuy} style={styles.savedShowCard}>
+      <View style={[styles.savedShowStripe, { backgroundColor: show.imageTone }]} />
+      <Text numberOfLines={1} style={styles.savedShowCategory}>
+        {categoryLabels[show.category]}
+      </Text>
+      <Text numberOfLines={2} style={styles.savedShowTitle}>
+        {show.title}
+      </Text>
+      <Text numberOfLines={1} style={styles.savedShowMeta}>
+        {show.neighborhood} · {formatShowDate(show.startsAt)}
+      </Text>
+      <Text style={styles.savedShowPrice}>{offer ? formatMoney(offer.priceCents) : "Soon"}</Text>
+    </Pressable>
+  );
+}
+
+function ShowCard({
+  show,
+  onOpenDetails,
+  onToggleSaved,
+  saved
+}: {
+  show: Show;
+  onOpenDetails: () => void;
+  onToggleSaved: () => void;
+  saved: boolean;
+}) {
+  const bestOffer = getBestOffer(show);
+  const savings = getOfferSavings(bestOffer);
+
+  return (
+    <View style={styles.showCard}>
+      <View style={[styles.showAccent, { backgroundColor: show.imageTone }]}>
+        <Text style={styles.showAccentText}>{categoryLabels[show.category].slice(0, 3)}</Text>
+      </View>
+      <View style={styles.showBody}>
+        <View style={styles.showMetaRow}>
+          <View style={styles.inlineMeta}>
+            <CalendarDays color={colors.teal} size={16} />
+            <Text style={styles.showMetaText}>{formatShowDate(show.startsAt)}</Text>
+          </View>
+          <Text style={styles.distance}>{formatDistance(show.distanceMiles)}</Text>
+        </View>
+
+        <View style={styles.sourceRow}>
+          <View style={styles.sourcePill}>
+            <Text style={styles.sourceText}>{sourceLabels[show.source]}</Text>
+          </View>
+          {bestOffer?.deal ? (
+            <View style={styles.dealPill}>
+              <BadgePercent color={colors.coralDark} size={13} />
+              <Text style={styles.dealPillText}>{bestOffer.deal.label}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.showTitleRow}>
+          <Text style={styles.showTitle}>{show.title}</Text>
+          <Pressable
+            accessibilityLabel={saved ? "Remove saved show" : "Save show"}
+            onPress={onToggleSaved}
+            style={[styles.saveButton, saved ? styles.saveButtonActive : undefined]}
+          >
+            <Heart
+              color={saved ? colors.paper : colors.coralDark}
+              fill={saved ? colors.paper : "transparent"}
+              size={17}
+            />
+          </Pressable>
+        </View>
+        <Text style={styles.showCompany}>{show.artistOrCompany}</Text>
+        <Text style={styles.showVenue}>
+          {show.venue} · {show.neighborhood}
+        </Text>
+        <Text style={styles.showDescription}>{show.description}</Text>
+
+        <View style={styles.vibeRow}>
+          {show.vibe.slice(0, 3).map((vibe) => (
+            <View key={vibe} style={styles.vibePill}>
+              <Text style={styles.vibeText}>{vibe}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.cardFooter}>
+          <View>
+            <Text style={styles.fromLabel}>{bestOffer?.deal ? "Deal from" : "From"}</Text>
+            <View style={styles.priceRow}>
+              {bestOffer?.listPriceCents ? (
+                <Text style={styles.listPriceText}>{formatMoney(bestOffer.listPriceCents)}</Text>
+              ) : null}
+              <Text style={styles.priceText}>
+                {bestOffer ? formatMoney(bestOffer.priceCents) : "Soon"}
+              </Text>
+            </View>
+            {savings > 0 ? <Text style={styles.savingsText}>Save {formatMoney(savings)}</Text> : null}
+          </View>
+          <View style={styles.cardActions}>
+            <Pressable accessibilityRole="button" onPress={onOpenDetails} style={styles.detailsButton}>
+              <Text style={styles.detailsButtonText}>Details</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function ShowDetailModal({
+  show,
+  saved,
+  onClose,
+  onToggleSaved
+}: {
+  show: Show | null;
+  saved: boolean;
+  onClose: () => void;
+  onToggleSaved: (showId: string) => void;
+}) {
+  const bestOffer = show ? getBestOffer(show) : undefined;
+  const savings = getOfferSavings(bestOffer);
+
+  return (
+    <Modal animationType="slide" onRequestClose={onClose} transparent visible={Boolean(show)}>
+      <View style={styles.modalBackdrop}>
+        <View style={styles.detailSheet}>
+          {show ? (
+            <>
+              <View style={[styles.detailHero, { backgroundColor: show.imageTone }]}>
+                <View style={styles.detailHeroTop}>
+                  <Text style={styles.detailCategory}>{categoryLabels[show.category]}</Text>
+                  <Pressable accessibilityLabel="Close details" onPress={onClose} style={styles.detailCloseButton}>
+                    <X color={colors.paper} size={20} />
+                  </Pressable>
+                </View>
+                <Text style={styles.detailTitle}>{show.title}</Text>
+                <Text style={styles.detailCompany}>{show.artistOrCompany}</Text>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.detailContent}>
+                  <View style={styles.detailMetaGrid}>
+                    <View style={styles.detailMetaItem}>
+                      <CalendarDays color={colors.teal} size={18} />
+                      <Text style={styles.detailMetaText}>{formatShowDate(show.startsAt)}</Text>
+                    </View>
+                    <View style={styles.detailMetaItem}>
+                      <MapPin color={colors.teal} size={18} />
+                      <Text style={styles.detailMetaText}>
+                        {show.venue} · {show.neighborhood}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.detailDescription}>{show.description}</Text>
+
+                  <View style={styles.detailPillRow}>
+                    <View style={styles.sourcePill}>
+                      <Text style={styles.sourceText}>{sourceLabels[show.source]}</Text>
+                    </View>
+                    {show.vibe.map((vibe) => (
+                      <View key={vibe} style={styles.vibePill}>
+                        <Text style={styles.vibeText}>{vibe}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  <View style={styles.detailSectionHeader}>
+                    <Text style={styles.sectionTitle}>Price and deal signals</Text>
+                    {bestOffer?.deal ? (
+                      <View style={styles.dealPill}>
+                        <BadgePercent color={colors.coralDark} size={13} />
+                        <Text style={styles.dealPillText}>{bestOffer.deal.label}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <View style={styles.detailOfferList}>
+                    {show.ticketOffers.map((offer) => (
+                      <View key={offer.id} style={styles.detailOfferRow}>
+                        <View style={styles.detailOfferCopy}>
+                          <Text style={styles.offerLabel}>{offer.label}</Text>
+                          <Text style={styles.offerMeta}>
+                            {offer.remaining} left · {accessLabels[offer.access]} · {sourceLabels[offer.source]}
+                          </Text>
+                          {offer.deal ? <Text style={styles.offerDealText}>{offer.deal.description}</Text> : null}
+                        </View>
+                        <View style={styles.offerPriceStack}>
+                          {offer.listPriceCents ? (
+                            <Text style={styles.offerListPrice}>{formatMoney(offer.listPriceCents)}</Text>
+                          ) : null}
+                          <Text style={styles.offerPrice}>{formatMoney(offer.priceCents)}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </ScrollView>
+
+              <View style={styles.detailFooter}>
+                <View>
+                  <Text style={styles.fromLabel}>{bestOffer?.deal ? "Best deal" : "From"}</Text>
+                  <View style={styles.priceRow}>
+                    {bestOffer?.listPriceCents ? (
+                      <Text style={styles.listPriceText}>{formatMoney(bestOffer.listPriceCents)}</Text>
+                    ) : null}
+                    <Text style={styles.priceText}>
+                      {bestOffer ? formatMoney(bestOffer.priceCents) : "Soon"}
+                    </Text>
+                  </View>
+                  {savings > 0 ? <Text style={styles.savingsText}>Save {formatMoney(savings)}</Text> : null}
+                </View>
+                <View style={styles.detailFooterActions}>
+                  <Pressable
+                    accessibilityLabel={saved ? "Remove saved show" : "Save show"}
+                    onPress={() => onToggleSaved(show.id)}
+                    style={[styles.saveButton, saved ? styles.saveButtonActive : undefined]}
+                  >
+                    <Heart
+                      color={saved ? colors.paper : colors.coralDark}
+                      fill={saved ? colors.paper : "transparent"}
+                      size={17}
+                    />
+                  </Pressable>
+                </View>
+              </View>
+            </>
+          ) : null}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.fog
+  },
+  appShell: {
+    flex: 1,
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 620,
+    backgroundColor: colors.fog
+  },
+  content: {
+    paddingBottom: 36
+  },
+  topBar: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    paddingTop: Platform.OS === "android" ? spacing.xl : spacing.lg,
+    paddingBottom: spacing.lg
+  },
+  kicker: {
+    color: colors.coralDark,
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0,
+    textTransform: "uppercase"
+  },
+  title: {
+    color: colors.ink,
+    fontSize: 30,
+    fontWeight: "800",
+    letterSpacing: 0,
+    lineHeight: 35,
+    maxWidth: 420,
+    marginTop: spacing.xs
+  },
+  marketNote: {
+    color: colors.mutedInk,
+    fontSize: 13,
+    lineHeight: 19,
+    maxWidth: 420,
+    marginTop: spacing.sm
+  },
+  logoMark: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.ink
+  },
+  controls: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    zIndex: 4
+  },
+  areaButton: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm,
+    minHeight: 58,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    paddingHorizontal: spacing.lg
+  },
+  areaButtonCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  areaButtonText: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "700"
+  },
+  areaButtonMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 2
+  },
+  areaMenu: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    overflow: "hidden",
+    ...shadows.card
+  },
+  areaOption: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 82,
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line
+  },
+  areaOptionCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  areaOptionHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm
+  },
+  areaOptionName: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "800"
+  },
+  areaOptionBadge: {
+    color: colors.teal,
+    borderRadius: radii.pill,
+    backgroundColor: colors.tealSoft,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    textTransform: "uppercase"
+  },
+  areaOptionRegion: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 2
+  },
+  areaOptionNote: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: spacing.xs
+  },
+  nearMeButton: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm,
+    minHeight: 56,
+    borderRadius: radii.md,
+    backgroundColor: colors.teal,
+    paddingHorizontal: spacing.lg
+  },
+  nearMeButtonLoading: {
+    opacity: 0.72
+  },
+  nearMeCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  nearMeTitle: {
+    color: colors.paper,
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  nearMeMeta: {
+    color: "#DFF1EE",
+    fontSize: 12,
+    marginTop: 2
+  },
+  searchBox: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm,
+    minHeight: 50,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    paddingHorizontal: spacing.lg
+  },
+  searchInput: {
+    flex: 1,
+    color: colors.ink,
+    fontSize: 16,
+    minWidth: 0,
+    paddingVertical: spacing.sm
+  },
+  accountPanel: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.md,
+    minHeight: 66,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.xl,
+    paddingHorizontal: spacing.lg
+  },
+  accountIconBadge: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.ink
+  },
+  accountCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  accountTitle: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  accountMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    marginTop: 3
+  },
+  accountAction: {
+    color: colors.teal,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  walletPanel: {
+    marginTop: spacing.xl
+  },
+  walletHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl
+  },
+  walletCount: {
+    color: colors.mutedInk,
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  walletRail: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md
+  },
+  ticketWalletCard: {
+    width: 276,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    padding: spacing.lg,
+    ...shadows.card
+  },
+  ticketWalletTop: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.md
+  },
+  ticketStub: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 42,
+    height: 42,
+    borderRadius: radii.md,
+    backgroundColor: colors.ink
+  },
+  ticketWalletCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  ticketWalletTitle: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  ticketWalletMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    marginTop: 2
+  },
+  ticketWalletDetails: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    marginTop: spacing.lg
+  },
+  ticketWalletCode: {
+    color: colors.teal,
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  ticketWalletQuantity: {
+    color: colors.mutedInk,
+    flexShrink: 1,
+    fontSize: 12,
+    fontWeight: "800",
+    textAlign: "right"
+  },
+  ticketHolderText: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: spacing.sm
+  },
+  barcodeBox: {
+    borderRadius: radii.sm,
+    backgroundColor: colors.fog,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.md
+  },
+  barcodeText: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0
+  },
+  savedPanel: {
+    marginTop: spacing.md
+  },
+  savedRail: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md
+  },
+  savedShowCard: {
+    width: 188,
+    minHeight: 146,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    padding: spacing.lg,
+    overflow: "hidden"
+  },
+  savedShowStripe: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5
+  },
+  savedShowCategory: {
+    color: colors.coralDark,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  savedShowTitle: {
+    color: colors.ink,
+    fontSize: 17,
+    fontWeight: "900",
+    lineHeight: 21,
+    marginTop: spacing.sm
+  },
+  savedShowMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    marginTop: spacing.sm
+  },
+  savedShowPrice: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: spacing.md
+  },
+  filterHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.xl,
+    marginTop: spacing.xl
+  },
+  inlineTitle: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm
+  },
+  sectionTitle: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "800"
+  },
+  clearFilters: {
+    color: colors.coralDark,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  categoryRail: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md
+  },
+  categoryChip: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 40,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    paddingHorizontal: spacing.lg
+  },
+  categoryChipActive: {
+    borderColor: colors.teal,
+    backgroundColor: colors.tealSoft
+  },
+  categoryChipText: {
+    color: colors.mutedInk,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  categoryChipTextActive: {
+    color: colors.teal
+  },
+  dateWindowRail: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md
+  },
+  dateWindowChip: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 36,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    paddingHorizontal: spacing.lg
+  },
+  dateWindowChipActive: {
+    borderColor: colors.ink,
+    backgroundColor: colors.ink
+  },
+  dateWindowText: {
+    color: colors.mutedInk,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  dateWindowTextActive: {
+    color: colors.paper
+  },
+  signalPanel: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    marginBottom: spacing.md
+  },
+  signalButton: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: spacing.sm,
+    minHeight: 60,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    paddingHorizontal: spacing.md
+  },
+  signalButtonActive: {
+    borderColor: colors.coral,
+    backgroundColor: colors.coral
+  },
+  tasteButtonActive: {
+    borderColor: colors.teal,
+    backgroundColor: colors.teal
+  },
+  signalCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  signalTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  signalTitleActive: {
+    color: colors.paper
+  },
+  signalMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    marginTop: 2
+  },
+  signalMetaActive: {
+    color: "#F8F3EA"
+  },
+  dealAlertPanel: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.md,
+    minHeight: 66,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.lg
+  },
+  dealAlertPanelActive: {
+    borderColor: colors.coral,
+    backgroundColor: colors.coral
+  },
+  dealAlertIconBadge: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#F8E6DC"
+  },
+  dealAlertIconBadgeActive: {
+    backgroundColor: colors.coralDark
+  },
+  dealAlertCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  dealAlertTitle: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  dealAlertTitleActive: {
+    color: colors.paper
+  },
+  dealAlertMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    marginTop: 3
+  },
+  dealAlertMetaActive: {
+    color: "#F8F3EA"
+  },
+  dealAlertAction: {
+    color: colors.teal,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  dealAlertActionActive: {
+    color: colors.paper
+  },
+  alertMatchPanel: {
+    marginTop: spacing.xs
+  },
+  alertMatchRail: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md
+  },
+  alertMatchCard: {
+    width: 202,
+    minHeight: 142,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    padding: spacing.lg,
+    overflow: "hidden"
+  },
+  alertMatchStripe: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5
+  },
+  alertMatchLabel: {
+    color: colors.coralDark,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  alertMatchTitle: {
+    color: colors.ink,
+    fontSize: 17,
+    fontWeight: "900",
+    lineHeight: 21,
+    marginTop: spacing.sm
+  },
+  alertMatchMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    marginTop: spacing.sm
+  },
+  alertMatchFooter: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    marginTop: spacing.md
+  },
+  alertMatchPrice: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  alertMatchSavings: {
+    color: colors.coralDark,
+    flexShrink: 1,
+    fontSize: 12,
+    fontWeight: "900",
+    textAlign: "right"
+  },
+  notificationPanel: {
+    marginTop: spacing.xs
+  },
+  notificationRail: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md
+  },
+  notificationCard: {
+    width: 224,
+    minHeight: 142,
+    justifyContent: "space-between",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    padding: spacing.lg
+  },
+  notificationCardUnread: {
+    borderColor: colors.teal,
+    backgroundColor: colors.tealSoft
+  },
+  notificationTopLine: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.sm
+  },
+  notificationStatus: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  notificationStatusUnread: {
+    color: colors.teal
+  },
+  notificationChannel: {
+    color: colors.mutedInk,
+    flexShrink: 1,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase"
+  },
+  notificationTitle: {
+    color: colors.ink,
+    fontSize: 17,
+    fontWeight: "900",
+    lineHeight: 21,
+    marginTop: spacing.md
+  },
+  notificationBody: {
+    color: colors.mutedInk,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: spacing.sm
+  },
+  musicConnectionPanel: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.md,
+    minHeight: 66,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.lg
+  },
+  musicIconBadge: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.plum
+  },
+  musicConnectionCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  musicConnectionTitle: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  musicConnectionMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    marginTop: 3
+  },
+  musicConnectionAction: {
+    color: colors.teal,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  dealPanel: {
+    marginTop: spacing.xs
+  },
+  dealRail: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md
+  },
+  dealCard: {
+    width: 214,
+    minHeight: 148,
+    justifyContent: "space-between",
+    borderRadius: radii.md,
+    padding: spacing.lg
+  },
+  dealCardTop: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.sm
+  },
+  dealCardBadge: {
+    color: colors.paper,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  dealCardSavings: {
+    color: colors.paper,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  dealCardTitle: {
+    color: colors.paper,
+    fontSize: 19,
+    fontWeight: "900",
+    lineHeight: 23,
+    marginTop: spacing.md
+  },
+  dealCardMeta: {
+    color: "#F2ECE2",
+    fontSize: 12,
+    marginTop: spacing.sm
+  },
+  dealCardPrice: {
+    color: colors.paper,
+    fontSize: 24,
+    fontWeight: "900",
+    marginTop: spacing.sm
+  },
+  recommendationPanel: {
+    marginTop: spacing.sm
+  },
+  recommendationRail: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md
+  },
+  recommendationCard: {
+    width: 196,
+    minHeight: 126,
+    justifyContent: "space-between",
+    borderRadius: radii.md,
+    backgroundColor: colors.ink,
+    padding: spacing.lg
+  },
+  recommendationCategory: {
+    color: colors.gold,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  recommendationTitle: {
+    color: colors.paper,
+    fontSize: 18,
+    fontWeight: "900",
+    lineHeight: 22,
+    marginTop: spacing.sm
+  },
+  recommendationMeta: {
+    color: "#D7D9D9",
+    fontSize: 13,
+    marginTop: spacing.sm
+  },
+  resultsHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm
+  },
+  resultCount: {
+    color: colors.mutedInk,
+    fontSize: 13,
+    marginTop: 3
+  },
+  discountBadge: {
+    borderRadius: radii.pill,
+    backgroundColor: "#F8E6DC",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
+  },
+  discountBadgeText: {
+    color: colors.coralDark,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  providerNotice: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: "#F0C6B9",
+    backgroundColor: "#FFF1EC",
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md
+  },
+  providerNoticeText: {
+    color: colors.coralDark,
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  refreshingText: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    paddingHorizontal: spacing.xl,
+    marginBottom: spacing.sm
+  },
+  showList: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl
+  },
+  loadingState: {
+    alignItems: "center",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    gap: spacing.sm,
+    padding: spacing.xl
+  },
+  loadingTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  showCard: {
+    flexDirection: "row",
+    borderRadius: radii.md,
+    backgroundColor: colors.paper,
+    borderWidth: 1,
+    borderColor: colors.line,
+    overflow: "hidden",
+    ...shadows.card
+  },
+  showAccent: {
+    width: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.teal
+  },
+  showAccentText: {
+    color: colors.paper,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    transform: [{ rotate: "-90deg" }]
+  },
+  showBody: {
+    flex: 1,
+    minWidth: 0,
+    padding: spacing.lg
+  },
+  showMetaRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md
+  },
+  inlineMeta: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: spacing.xs,
+    minWidth: 0
+  },
+  showMetaText: {
+    color: colors.teal,
+    flexShrink: 1,
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  distance: {
+    color: colors.mutedInk,
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  sourceRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginTop: spacing.sm
+  },
+  sourcePill: {
+    borderRadius: radii.pill,
+    backgroundColor: colors.fog,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5
+  },
+  sourceText: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "800"
+  },
+  dealPill: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 3,
+    borderRadius: radii.pill,
+    backgroundColor: "#F8E6DC",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5
+  },
+  dealPillText: {
+    color: colors.coralDark,
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  showTitleRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: spacing.md,
+    marginTop: spacing.sm
+  },
+  showTitle: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 21,
+    fontWeight: "900",
+    lineHeight: 25
+  },
+  saveButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#F8E6DC"
+  },
+  saveButtonActive: {
+    backgroundColor: colors.coral
+  },
+  showCompany: {
+    color: colors.plum,
+    fontSize: 15,
+    fontWeight: "800",
+    marginTop: 2
+  },
+  showVenue: {
+    color: colors.mutedInk,
+    fontSize: 14,
+    marginTop: spacing.xs
+  },
+  showDescription: {
+    color: colors.ink,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: spacing.md
+  },
+  vibeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginTop: spacing.md
+  },
+  vibePill: {
+    borderRadius: radii.pill,
+    backgroundColor: colors.fog,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5
+  },
+  vibeText: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  cardFooter: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    marginTop: spacing.lg
+  },
+  cardActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm
+  },
+  fromLabel: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase"
+  },
+  priceRow: {
+    alignItems: "baseline",
+    flexDirection: "row",
+    gap: spacing.xs
+  },
+  listPriceText: {
+    color: colors.mutedInk,
+    fontSize: 13,
+    fontWeight: "800",
+    textDecorationLine: "line-through"
+  },
+  priceText: {
+    color: colors.ink,
+    fontSize: 19,
+    fontWeight: "900"
+  },
+  savingsText: {
+    color: colors.coralDark,
+    fontSize: 12,
+    fontWeight: "900",
+    marginTop: 2
+  },
+  detailsButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    paddingHorizontal: spacing.md
+  },
+  detailsButtonText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  buyButton: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: spacing.xs,
+    minHeight: 44,
+    borderRadius: radii.md,
+    backgroundColor: colors.coral,
+    paddingHorizontal: spacing.lg
+  },
+  buyButtonDisabled: {
+    opacity: 0.45
+  },
+  buyButtonText: {
+    color: colors.paper,
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  emptyState: {
+    alignItems: "center",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    padding: spacing.xl
+  },
+  emptyTitle: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: spacing.md
+  },
+  emptyCopy: {
+    color: colors.mutedInk,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+    marginTop: spacing.xs
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(23, 28, 36, 0.42)"
+  },
+  detailSheet: {
+    maxHeight: "90%",
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    backgroundColor: colors.paper,
+    overflow: "hidden"
+  },
+  detailHero: {
+    padding: spacing.xl
+  },
+  detailHeroTop: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md
+  },
+  detailCategory: {
+    color: colors.paper,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  detailCloseButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(255, 255, 255, 0.18)"
+  },
+  detailTitle: {
+    color: colors.paper,
+    fontSize: 28,
+    fontWeight: "900",
+    lineHeight: 33,
+    marginTop: spacing.lg
+  },
+  detailCompany: {
+    color: "#F8F3EA",
+    fontSize: 15,
+    fontWeight: "800",
+    marginTop: spacing.xs
+  },
+  detailContent: {
+    padding: spacing.xl
+  },
+  detailMetaGrid: {
+    gap: spacing.sm
+  },
+  detailMetaItem: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm
+  },
+  detailMetaText: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  detailDescription: {
+    color: colors.ink,
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: spacing.lg
+  },
+  detailPillRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginTop: spacing.lg
+  },
+  detailSectionHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    marginTop: spacing.xl
+  },
+  detailOfferList: {
+    gap: spacing.sm,
+    marginTop: spacing.md
+  },
+  detailOfferRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    padding: spacing.lg
+  },
+  detailOfferCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  detailFooter: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
+    backgroundColor: colors.paper,
+    padding: spacing.xl
+  },
+  detailFooterActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm
+  },
+  checkoutSheet: {
+    maxHeight: "86%",
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    backgroundColor: colors.paper,
+    padding: spacing.xl
+  },
+  sheetHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.lg
+  },
+  sheetEyebrow: {
+    color: colors.teal,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  sheetTitle: {
+    color: colors.ink,
+    fontSize: 22,
+    fontWeight: "900",
+    lineHeight: 27,
+    marginTop: spacing.xs
+  },
+  iconButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.fog
+  },
+  offerList: {
+    gap: spacing.sm,
+    marginTop: spacing.xl
+  },
+  offerRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    minHeight: 64,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    padding: spacing.lg
+  },
+  offerRowActive: {
+    borderColor: colors.teal,
+    backgroundColor: colors.tealSoft
+  },
+  offerLabel: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  offerMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    marginTop: 3
+  },
+  offerDealText: {
+    color: colors.coralDark,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 5
+  },
+  offerPriceStack: {
+    alignItems: "flex-end"
+  },
+  offerListPrice: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    textDecorationLine: "line-through"
+  },
+  offerPrice: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  quantityRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: spacing.xl
+  },
+  quantityLabel: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  stepper: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.md
+  },
+  stepperButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.fog
+  },
+  stepperButtonDisabled: {
+    opacity: 0.38
+  },
+  plusText: {
+    color: colors.ink,
+    fontSize: 24,
+    fontWeight: "600",
+    lineHeight: 28
+  },
+  quantityValue: {
+    color: colors.ink,
+    minWidth: 22,
+    textAlign: "center",
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  totalsBox: {
+    borderRadius: radii.md,
+    backgroundColor: colors.fog,
+    padding: spacing.lg,
+    gap: spacing.sm,
+    marginTop: spacing.xl
+  },
+  totalLine: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
+  totalLabel: {
+    color: colors.mutedInk,
+    fontSize: 14
+  },
+  totalValue: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  dealTotalLabel: {
+    color: colors.coralDark,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  dealTotalValue: {
+    color: colors.coralDark,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  totalDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.line,
+    marginVertical: spacing.xs
+  },
+  grandTotalLabel: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  grandTotalValue: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  errorText: {
+    color: colors.coralDark,
+    fontSize: 13,
+    fontWeight: "700",
+    marginTop: spacing.md
+  },
+  primaryCheckoutButton: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: spacing.sm,
+    minHeight: 52,
+    borderRadius: radii.md,
+    backgroundColor: colors.ink,
+    marginTop: spacing.xl
+  },
+  loadingButton: {
+    opacity: 0.78
+  },
+  primaryCheckoutText: {
+    color: colors.paper,
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  confirmationBox: {
+    alignItems: "center",
+    borderRadius: radii.md,
+    backgroundColor: colors.tealSoft,
+    padding: spacing.xl,
+    marginTop: spacing.xl
+  },
+  confirmationTitle: {
+    color: colors.ink,
+    fontSize: 21,
+    fontWeight: "900",
+    marginTop: spacing.md
+  },
+  confirmationCopy: {
+    color: colors.mutedInk,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: spacing.xs,
+    textAlign: "center"
+  }
+});

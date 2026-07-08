@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Tickets Tonight",
+    "slug": "tickets-tonight",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ticketstonight.app"
+    },
+    "android": {
+      "package": "com.ticketstonight.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#F8F3EA"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
