@@ -1,4 +1,5 @@
 import { areas } from "../src/data/catalog";
+import { discoveryMarketPlans } from "../src/data/discoveryPlans";
 import { partnerFeedEvents } from "../src/data/partnerFeeds";
 import { ticketmasterDiscoveryFixture } from "../src/data/ticketmasterFixtures";
 import {
@@ -7,6 +8,14 @@ import {
   toggleDealAlertStatus
 } from "../src/services/dealAlerts";
 import { checkoutBackend } from "../src/services/checkoutBackend";
+import {
+  getDiscoveryMarketPlan,
+  getDiscoveryMarketPlans,
+  getDiscountLeversForMarket,
+  getMarketDiscoveryGaps,
+  getPrimaryDiscoveryMarketPlan,
+  getReadyDiscoverySources
+} from "../src/services/discoveryPlanning";
 import {
   CompositeEventProvider,
   eventProvider,
@@ -67,6 +76,46 @@ async function main() {
   assert(
     areas.find((area) => area.id === "hudson")?.discoveryRole === "test",
     "Hudson should be marked as the arts-town test market."
+  );
+  assert(
+    discoveryMarketPlans.length === areas.length,
+    "Every supported discovery market should have a source plan."
+  );
+  assert(
+    getDiscoveryMarketPlans().map((plan) => plan.areaId).join("|") === areaIds.join("|"),
+    "Discovery source plans should follow the supported market order."
+  );
+  assert(
+    getPrimaryDiscoveryMarketPlan()?.areaId === "nyc",
+    "New York should remain the first discovery integration target."
+  );
+  assert(
+    getDiscoveryMarketPlan("nyc")?.sources.some(
+      (source) => source.id === "ticketmaster-discovery" && source.status === "integration-ready"
+    ),
+    "New York should keep Ticketmaster Discovery marked as the first real provider adapter."
+  );
+  assert(
+    getReadyDiscoverySources("la").some((source) => source.id === "la-partner-feed"),
+    "Los Angeles should have an active partner-feed fixture for secondary-market validation."
+  );
+  assert(
+    getMarketDiscoveryGaps("nyc").length === 0,
+    "New York source planning should cover the primary category focus."
+  );
+  assert(
+    getMarketDiscoveryGaps("hudson").length === 0,
+    "Hudson source planning should cover the arts-town category focus."
+  );
+  assert(
+    getDiscoveryMarketPlan("hudson")?.sources.some(
+      (source) => source.sourceType === "calendar-feed"
+    ),
+    "Hudson should include a regional-calendar path for smaller-market discovery."
+  );
+  assert(
+    getDiscountLeversForMarket("hudson").includes("regional preview allocations"),
+    "Hudson should keep a regional discount lever for later experiments."
   );
 
   const nycShows = searchShows({

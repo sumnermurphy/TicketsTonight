@@ -10,6 +10,7 @@ Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ball
 - Checkout groundwork remains behind services, but purchase UI, account sign-in, and wallet are out of the active MVP for now.
 - Saved shows, deal alerts, in-app deal notifications, and persisted discovery preferences through a replaceable repository layer.
 - Spotify-shaped taste-provider groundwork remains in services, but Spotify connection and taste-pick UI are out of the active MVP for now.
+- Explicit discovery source plans for New York, Los Angeles, and Hudson so provider work stays focused.
 - Ticketmaster Discovery-shaped adapter for normalizing real provider events, classifications, venues, price ranges, and cached detail lookup.
 - Async event-provider pipeline powering visible results, area inventory, deal rails, alerts, saved shows, and provider-fed future checkout groundwork.
 - Typed service boundaries for replacing seed data with real event feeds, taste providers, and ticket providers.
@@ -45,11 +46,13 @@ npm run android
 ## Architecture
 
 - `src/data/catalog.ts`: alpha-market areas, categories, and seed event inventory.
+- `src/data/discoveryPlans.ts`: market-by-market discovery source strategy for New York, Los Angeles, and Hudson.
 - `src/data/partnerFeeds.ts`: raw partner feed fixtures that mimic external inventory in the supported alpha markets.
 - `src/data/ticketmasterFixtures.ts`: Ticketmaster Discovery-shaped fixture payload for adapter tests.
 - `src/services/auth.ts`: dormant auth provider groundwork for future checkout/account features.
 - `src/services/checkoutBackend.ts`: dormant backend-style checkout groundwork for future purchase flow.
 - `src/services/dealAlerts.ts`: alert creation and discounted-ticket matching.
+- `src/services/discoveryPlanning.ts`: helper layer for source readiness, category gaps, primary-market ordering, and discount levers.
 - `src/services/feedProvider.ts`: feed normalization from provider taxonomy/inventory into the app `Show` model.
 - `src/services/eventCatalog.ts`: discovery search, date-window filtering, deal search, recommendation scoring, composite event providers, and runtime caching for provider-fed shows.
 - `src/services/location.ts`: location provider interface, demo location provider, distance calculation, and nearest-area resolution.
@@ -77,7 +80,7 @@ npm run android
 
 ## Next integrations
 
-- Event inventory: Ticketmaster Discovery API, Eventbrite, Dice, venue RSS/ICS feeds, promoter submissions, and direct venue inventory for New York first, then Los Angeles and Hudson.
+- Event inventory: follow the checked-in discovery source plans: New York first, Los Angeles second, Hudson as the smaller-market arts-town test.
 - Discounts: partner-funded promo codes, unsold inventory drops, preview allocations, early-arrival prices, matinee value, and simple last-minute deals.
 - Later checkout: Stripe Payment Sheet or provider-native checkout once seller-of-record and payout flow are decided.
 - Later recommendations: saved shows, clicked events, followed venues, and eventually Spotify top artists/genres.

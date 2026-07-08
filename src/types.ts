@@ -265,3 +265,34 @@ export type LocationProvider = {
   label: string;
   getCurrentLocation(): Promise<LocationFix>;
 };
+
+export type DiscoverySourceType =
+  | "seed-catalog"
+  | "marketplace-api"
+  | "venue-direct"
+  | "promoter-feed"
+  | "partner-feed"
+  | "calendar-feed";
+
+export type DiscoverySourceStatus =
+  | "active-fixture"
+  | "integration-ready"
+  | "partner-needed"
+  | "deferred";
+
+export type DiscoverySourcePlan = {
+  id: string;
+  label: string;
+  sourceType: DiscoverySourceType;
+  status: DiscoverySourceStatus;
+  categories: ShowCategory[];
+  notes: string;
+};
+
+export type DiscoveryMarketPlan = {
+  areaId: string;
+  priority: number;
+  categoryFocus: ShowCategory[];
+  discountLevers: string[];
+  sources: DiscoverySourcePlan[];
+};
