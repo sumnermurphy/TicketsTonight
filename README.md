@@ -7,7 +7,7 @@ Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ball
 - Expo React Native app with provider-backed local-area event discovery.
 - City selector, near-me area resolution, search, category filters, neighborhood filters, budget filters, sort controls, date windows, deal-only filtering, active-filter summary/reset, event cards, and a show-detail sheet.
 - First-class category coverage for concerts, DJ sets, dance, ballet, opera, plays, theater, comedy, and variety/adjacent live events.
-- Deal-aware ticket inventory with list prices, savings, access method, inventory source, and max quantities.
+- Deal-aware ticket inventory with list prices, savings, access method, inventory source, max quantities, and link-ready market snapshots.
 - Best-bets ranking that lifts urgent deals, local-source picks, nearby shows, and weekend options above the full chronological list.
 - Discount discovery ranking that prioritizes stronger savings and urgent deal windows before checkout is active.
 - Deal alerts can track the current area/category/date filters with optional under-$35, under-$50, or under-$75 price thresholds.
@@ -72,7 +72,7 @@ npm run android
 - `src/services/calendarFeedProvider.ts`: generic local calendar feed normalizer for ICS/RSS/HTML/manual-import style listings.
 - `src/services/dealAlerts.ts`: alert creation and discounted-ticket matching.
 - `src/services/discoveryAcquisition.ts`: broad API recommendation and local-pipeline trigger planning so provider work starts with scalable sources.
-- `src/services/discoveryFacets.ts`: market summaries, source diversity, neighborhood facets, category facets, and date-window availability with discounted-count signals for the selected market.
+- `src/services/discoveryFacets.ts`: market summaries, source diversity, link-ready show counts, neighborhood facets, category facets, and date-window availability with discounted-count signals for the selected market.
 - `src/services/discoveryFilterSummary.ts`: compact active-filter labels and reset affordance state for the discovery UI.
 - `src/services/dealDiscovery.ts`: discount insight scoring, savings math, urgency labels, and area deal summaries.
 - `src/services/discoveryPlanning.ts`: helper layer for broad-API/local-pipeline lanes, category coverage, source readiness, category gaps, primary-market ordering, and discount levers.

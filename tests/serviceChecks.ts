@@ -360,6 +360,10 @@ async function main() {
     "Market summary should expose selected-area deal count."
   );
   assert(
+    nycMarketSummary.ticketLinkCount === 1,
+    "Market summary should expose link-ready shows in the selected-area inventory."
+  );
+  assert(
     nycMarketSummary.activeCategoryCount ===
       nycCategoryFacets.filter((facet) => facet.showCount > 0).length,
     "Market summary should expose active category breadth."
@@ -486,6 +490,11 @@ async function main() {
   assert(
     normalizedPlay.ticketOffers[0]?.deal?.label === "Preview price",
     "Partner feed deal metadata should map onto ticket offers."
+  );
+  assert(
+    normalizedPlay.ticketOffers[0]?.externalUrl === "https://example.com/venuecloud/vc-1001" &&
+      getBestTicketLinkIntent(normalizedPlay)?.offerId === "standard",
+    "Partner feed ticket URLs should map into link-ready offers."
   );
   const normalizedCalendarShow = normalizeCalendarEvent(localCalendarEvents[0]!);
 

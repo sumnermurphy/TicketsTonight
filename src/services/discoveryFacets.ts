@@ -1,5 +1,6 @@
 import type { DateWindow, Show, ShowCategory } from "../types";
 import { isWithinDateWindow } from "./eventCatalog";
+import { getSafeTicketUrl } from "./ticketLinks";
 
 export type CategoryFacet = {
   category: ShowCategory;
@@ -22,6 +23,7 @@ export type NeighborhoodFacet = {
 export type MarketDiscoverySummary = {
   showCount: number;
   dealCount: number;
+  ticketLinkCount: number;
   activeCategoryCount: number;
   sourceCount: number;
   nextStartsAt?: string;
@@ -94,6 +96,7 @@ export function getMarketDiscoverySummary(
   return {
     showCount: shows.length,
     dealCount: getDealCount(shows),
+    ticketLinkCount: getTicketLinkCount(shows),
     activeCategoryCount: categoryFacets.filter((facet) => facet.showCount > 0).length,
     sourceCount: new Set(shows.map((show) => show.source)).size,
     nextStartsAt: sortedShows[0]?.startsAt
@@ -102,4 +105,10 @@ export function getMarketDiscoverySummary(
 
 function getDealCount(shows: Show[]): number {
   return shows.filter((show) => show.ticketOffers.some((offer) => Boolean(offer.deal))).length;
+}
+
+function getTicketLinkCount(shows: Show[]): number {
+  return shows.filter((show) =>
+    show.ticketOffers.some((offer) => Boolean(getSafeTicketUrl(offer.externalUrl)))
+  ).length;
 }

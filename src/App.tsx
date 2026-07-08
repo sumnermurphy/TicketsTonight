@@ -689,6 +689,11 @@ export default function App() {
                 value={String(marketSummary.dealCount)}
               />
               <MarketSnapshotStat
+                label="Links"
+                loading={inventoryLoading}
+                value={String(marketSummary.ticketLinkCount)}
+              />
+              <MarketSnapshotStat
                 label="Types"
                 loading={inventoryLoading}
                 value={String(marketSummary.activeCategoryCount)}
@@ -1987,11 +1992,13 @@ const styles = StyleSheet.create({
   },
   marketSnapshotStats: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.md,
     marginTop: spacing.md
   },
   marketSnapshotStat: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 92,
     minHeight: 56,
     justifyContent: "center",
     borderRadius: radii.sm,
