@@ -240,7 +240,12 @@ export type MusicAccountConnection = {
   displayName: string;
   status: "connected" | "disconnected";
   connectedAt: string;
+  accessToken?: string;
+  refreshToken?: string;
+  expiresAt?: string;
+  scope?: string;
   topArtists: string[];
+  topTracks: string[];
   topGenres: string[];
   updatedAt: string;
 };
@@ -248,6 +253,7 @@ export type MusicAccountConnection = {
 export type RecommendationContext = {
   areaId: string;
   followedArtists?: string[];
+  spotifyTopTracks?: string[];
   spotifyTopGenres?: string[];
   recentCategories?: ShowCategory[];
 };

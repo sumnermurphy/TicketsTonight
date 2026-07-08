@@ -1,6 +1,6 @@
 # Tickets Tonight
 
-Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ballet, opera, plays, theater, comedy, variety, and adjacent live events. The active MVP is discovery plus discount tracking; checkout and Spotify personalization are intentionally deferred.
+Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ballet, opera, plays, theater, comedy, variety, and adjacent live events. The active MVP is discovery, discount tracking, external ticket links, and Spotify-powered recommendations; checkout remains deferred.
 
 ## What is built
 
@@ -15,7 +15,7 @@ Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ball
 - NYC coverage audit targets 200 events over 30 days with 70% ticket-link coverage, exposed through a service, CLI script, and compact app summary.
 - Checkout groundwork remains behind services, but purchase UI, account sign-in, and wallet are out of the active MVP for now.
 - Saved shows, deal alerts, in-app deal notifications, and persisted discovery preferences through a replaceable repository layer.
-- Spotify-shaped taste-provider groundwork remains in services, but Spotify connection and taste-pick UI are out of the active MVP for now.
+- Spotify PKCE auth can connect a listener with `user-top-read`, pull top artists, tracks, and genres, and rank provider-backed recommendations in-app.
 - Explicit discovery source plans for New York, Los Angeles, and Hudson so provider work stays focused.
 - Source planning separates broad event APIs from reusable local pipelines, so small venues can fill gaps without turning every venue into a bespoke integration.
 - Broad API acquisition planning ranks next candidate sources before any bespoke local venue work.
@@ -52,6 +52,14 @@ EXPO_PUBLIC_TICKETMASTER_PAGE_SIZE=100 EXPO_PUBLIC_TICKETMASTER_MAX_PAGES=5 npm 
 ```
 
 Without that key, the app stays on the checked-in seed catalog, partner-feed fixtures, and reusable local calendar fixtures.
+
+Optional Spotify recommendations can be enabled with a public Spotify app client id:
+
+```bash
+EXPO_PUBLIC_SPOTIFY_CLIENT_ID=your_spotify_client_id npm run web
+```
+
+Register the exact redirect URI in Spotify. Native builds use `ticketstonight://spotify-auth`; web builds can set `EXPO_PUBLIC_SPOTIFY_REDIRECT_URI` to the allowed local or production callback.
 
 Run focused service checks:
 
@@ -98,7 +106,7 @@ npm run android
 - `src/services/location.ts`: location provider interface, demo location provider, distance calculation, and nearest-area resolution.
 - `src/services/notifications.ts`: in-app notification provider for deal-alert matches, with read-state merge helpers for future push/email channels.
 - `src/services/payments.ts`: dormant payment provider groundwork shaped for future Stripe/provider-native checkout.
-- `src/services/personalization.ts`: dormant taste profile provider groundwork for future Spotify/personalization work.
+- `src/services/personalization.ts`: Spotify PKCE auth, token exchange, top artists/tracks/genres fetches, demo taste provider, and recommendation-context creation.
 - `src/services/storage.ts`: repository for preferences and orders, backed by browser storage on web and memory fallback elsewhere.
 - `src/services/ticketLinks.ts`: safe external ticket-link intent selection for provider-backed offers while checkout is deferred.
 - `src/services/ticketmasterProvider.ts`: Ticketmaster Discovery request builder, fetch client, event normalizer, and `EventProvider` implementation.
@@ -114,7 +122,7 @@ npm run android
 - `TicketingProvider`: dormant seam for Stripe Payment Sheet, provider-native checkout, or venue-direct order creation later.
 - `PaymentProvider`: dormant seam for Stripe Payment Sheet, Apple Pay/Google Pay, or provider-native payment confirmation later.
 - `CheckoutBackend`: dormant seam for future HTTPS endpoints so holds, payment intents, order creation, inventory checks, and seller-of-record logic stay server-side.
-- `TasteProfileProvider`: dormant seam for Spotify OAuth, saved auth tokens, and top artists/genres when personalization is ready.
+- `TasteProfileProvider`: Spotify OAuth, saved auth token metadata, top artists/tracks/genres, and recommendation-context refresh groundwork.
 - `LocationProvider`: replace `DemoLocationProvider` with Expo Location or native permissions when device geolocation is ready.
 - `AppRepository`: replace browser/memory storage with AsyncStorage, SQLite, or authenticated backend sync.
 - `NotificationProvider`: extend in-app deal notifications to push notifications or email once notification permissions and backend delivery are added.
@@ -127,5 +135,5 @@ npm run android
 - Hudson local pipeline: start with the generic calendar-feed path before bespoke venue adapters.
 - Discounts: partner-funded promo codes, unsold inventory drops, preview allocations, early-arrival prices, matinee value, and simple last-minute deals.
 - Later checkout: Stripe Payment Sheet or provider-native checkout once seller-of-record and payout flow are decided.
-- Later recommendations: saved shows, clicked events, followed venues, and eventually Spotify top artists/genres.
+- Recommendations: deepen Spotify ranking with saved shows, clicked events, followed venues, and artist follow alerts.
 - Location: Expo Location for nearby search, plus explicit city selection for planning trips.

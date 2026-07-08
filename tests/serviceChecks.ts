@@ -73,7 +73,15 @@ import {
   mergeNotifications,
   notificationProvider
 } from "../src/services/notifications";
-import { tasteProfileProvider } from "../src/services/personalization";
+import {
+  DemoSpotifyTasteProvider,
+  SpotifyTasteProfileProvider,
+  spotifyScopes,
+  type SpotifyApiClient,
+  type SpotifyAuthAdapter,
+  type SpotifyAuthorizationRequest,
+  type SpotifyCodeExchangeRequest
+} from "../src/services/personalization";
 import { AppRepository, MemoryStorageAdapter } from "../src/services/storage";
 import { authProvider } from "../src/services/auth";
 import { mockCardPaymentMethod, paymentProvider } from "../src/services/payments";
@@ -1272,8 +1280,9 @@ async function main() {
   assert(recommendations.length > 0, "Taste profile should produce recommendations.");
   assert(recommendations[0]?.reason, "Recommendations should explain why they were selected.");
 
-  const musicConnection = await tasteProfileProvider.connectAccount();
-  const musicContext = await tasteProfileProvider.getRecommendationContext("nyc", musicConnection);
+  const demoTasteProfileProvider = new DemoSpotifyTasteProvider();
+  const musicConnection = await demoTasteProfileProvider.connectAccount();
+  const musicContext = await demoTasteProfileProvider.getRecommendationContext("nyc", musicConnection);
 
   assert(musicConnection.status === "connected", "Music provider should create a connected account.");
   assert(
@@ -1287,8 +1296,8 @@ async function main() {
     "Spotify genres with spaces should match catalog signals with hyphens."
   );
 
-  const disconnectedMusicConnection = await tasteProfileProvider.disconnectAccount(musicConnection);
-  const disconnectedContext = await tasteProfileProvider.getRecommendationContext(
+  const disconnectedMusicConnection = await demoTasteProfileProvider.disconnectAccount(musicConnection);
+  const disconnectedContext = await demoTasteProfileProvider.getRecommendationContext(
     "nyc",
     disconnectedMusicConnection
   );
@@ -1296,6 +1305,119 @@ async function main() {
   assert(
     disconnectedContext.spotifyTopGenres?.length === 0,
     "Disconnected music account should stop contributing Spotify genres."
+  );
+  const spotifyAuthorizationRequests: SpotifyAuthorizationRequest[] = [];
+  const spotifyCodeExchangeRequests: SpotifyCodeExchangeRequest[] = [];
+  const fakeSpotifyAuthAdapter: SpotifyAuthAdapter = {
+    async authorize(request) {
+      spotifyAuthorizationRequests.push(request);
+
+      return {
+        code: "spotify-auth-code",
+        codeVerifier: "spotify-code-verifier",
+        redirectUri: request.redirectUri ?? "ticketstonight://spotify-auth"
+      };
+    },
+    async exchangeCode(request) {
+      spotifyCodeExchangeRequests.push(request);
+
+      return {
+        accessToken: "spotify-access-token",
+        refreshToken: "spotify-refresh-token",
+        expiresIn: 3600,
+        scope: spotifyScopes.join(" ")
+      };
+    }
+  };
+  const fakeSpotifyApiClient: SpotifyApiClient = {
+    async getCurrentUser(accessToken) {
+      assert(accessToken === "spotify-access-token", "Spotify profile requests should use the exchanged token.");
+
+      return {
+        id: "spotify-real-listener",
+        display_name: "Real Spotify Listener"
+      };
+    },
+    async getTopArtists(accessToken) {
+      assert(accessToken === "spotify-access-token", "Spotify artist requests should use the exchanged token.");
+
+      return [
+        {
+          id: "artist-alina",
+          name: "Alina Ives",
+          genres: ["indie pop", "synth pop"]
+        },
+        {
+          id: "artist-paloma",
+          name: "DJ Paloma",
+          genres: ["house", "electronic"]
+        }
+      ];
+    },
+    async getTopTracks(accessToken) {
+      assert(accessToken === "spotify-access-token", "Spotify track requests should use the exchanged token.");
+
+      return [
+        {
+          id: "track-electric-room",
+          name: "Electric Room",
+          artists: [{ name: "Alina Ives" }]
+        }
+      ];
+    }
+  };
+  const spotifyTasteProfileProvider = new SpotifyTasteProfileProvider(
+    {
+      clientId: "spotify-client-id",
+      redirectUri: "ticketstonight://spotify-auth",
+      now: () => new Date("2026-07-08T16:00:00.000Z")
+    },
+    {
+      authAdapter: fakeSpotifyAuthAdapter,
+      apiClient: fakeSpotifyApiClient
+    }
+  );
+  const realSpotifyConnection = await spotifyTasteProfileProvider.connectAccount();
+  const realSpotifyContext = await spotifyTasteProfileProvider.getRecommendationContext(
+    "nyc",
+    realSpotifyConnection
+  );
+  const realSpotifyRecommendations = getRecommendedShowsFromCatalog(nycAreaInventory, realSpotifyContext);
+  const firstSpotifyAuthorizationRequest = spotifyAuthorizationRequests[0];
+  const firstSpotifyCodeExchangeRequest = spotifyCodeExchangeRequests[0];
+
+  assert(spotifyTasteProfileProvider.isConfigured(), "Spotify provider should report configured clients.");
+  assert(
+    firstSpotifyAuthorizationRequest?.scopes.includes("user-top-read") &&
+      firstSpotifyAuthorizationRequest.clientId === "spotify-client-id",
+    "Spotify authorization should request user-top-read with the configured public client id."
+  );
+  assert(
+    firstSpotifyCodeExchangeRequest?.codeVerifier === "spotify-code-verifier" &&
+      firstSpotifyCodeExchangeRequest.redirectUri === "ticketstonight://spotify-auth",
+    "Spotify token exchange should preserve the PKCE verifier and exact redirect URI."
+  );
+  assert(
+    realSpotifyConnection.accessToken === "spotify-access-token" &&
+      realSpotifyConnection.refreshToken === "spotify-refresh-token" &&
+      realSpotifyConnection.expiresAt === "2026-07-08T17:00:00.000Z",
+    "Spotify connection should store the exchanged token metadata for recommendation refresh groundwork."
+  );
+  assert(
+    realSpotifyConnection.topArtists.includes("Alina Ives") &&
+      realSpotifyConnection.topTracks.includes("Electric Room") &&
+      realSpotifyConnection.topGenres.includes("indie pop"),
+    "Spotify connection should pull top artists, tracks, and genres from the Web API."
+  );
+  assert(
+    realSpotifyContext.spotifyTopTracks?.includes("Electric Room") &&
+      realSpotifyContext.recentCategories?.includes("dj"),
+    "Spotify recommendation context should expose tracks and genre-derived category signals."
+  );
+  assert(
+    realSpotifyRecommendations[0]?.show.id === "show-alina-ives" &&
+      realSpotifyRecommendations[0].reason.includes("Alina Ives"),
+    "Spotify-powered ranking should lift direct artist matches with an explainable reason."
   );
 
   const hudsonDistance = getDistanceBetweenCoordinates(

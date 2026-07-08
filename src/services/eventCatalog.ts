@@ -98,31 +98,81 @@ export function getRecommendedShowsFromCatalog(
   candidates: Show[],
   context: RecommendationContext
 ): Recommendation[] {
-  const genreSignals = new Set(
-    [...(context.spotifyTopGenres ?? []), ...(context.followedArtists ?? [])].map(normalize)
-  );
+  const artistSignals = normalizeSignals(context.followedArtists ?? []);
+  const trackSignals = normalizeSignals(context.spotifyTopTracks ?? []);
+  const genreSignals = normalizeSignals(context.spotifyTopGenres ?? []);
   const recentCategories = new Set(context.recentCategories ?? []);
 
   return candidates
     .filter((show) => show.areaId === context.areaId)
     .map((show) => {
       const categoryScore = recentCategories.has(show.category) ? 2 : 0;
-      const signalScore = (show.recommendationSignals ?? []).filter((signal) => {
-        const [, rawValue = signal] = signal.split(":");
-        return genreSignals.has(normalize(rawValue));
-      }).length;
+      const showText = normalize(
+        [show.title, show.artistOrCompany, show.venue, show.category, ...show.vibe].join(" ")
+      );
+      const matchedArtist = findContainedSignal(showText, artistSignals);
+      const matchedTrack = findContainedSignal(showText, trackSignals);
+      const genreMatches = getGenreMatchCount(show, genreSignals);
+      const score =
+        (matchedArtist ? 5 : 0) +
+        (matchedTrack ? 3 : 0) +
+        genreMatches * 2 +
+        categoryScore;
 
       const reason =
-        signalScore > 0
-          ? "Matches your listening taste"
-          : categoryScore > 0
-            ? `Because you browse ${show.category}`
-            : "";
+        matchedArtist
+          ? `Matches ${matchedArtist} from Spotify`
+          : matchedTrack
+            ? "Matches a top Spotify track"
+            : genreMatches > 0
+              ? "Matches your Spotify genres"
+              : categoryScore > 0
+                ? `Because you browse ${show.category}`
+                : "";
 
-      return { show, score: categoryScore + signalScore, reason };
+      return { show, score, reason };
     })
     .filter(({ score }) => score > 0)
-    .sort((first, second) => second.score - first.score)
+    .sort(
+      (first, second) =>
+        second.score - first.score || first.show.startsAt.localeCompare(second.show.startsAt)
+    );
+}
+
+function normalizeSignals(values: string[]): Map<string, string> {
+  const signals = new Map<string, string>();
+
+  for (const value of values) {
+    const normalizedValue = normalize(value);
+
+    if (normalizedValue) {
+      signals.set(normalizedValue, value);
+    }
+  }
+
+  return signals;
+}
+
+function findContainedSignal(showText: string, signals: Map<string, string>): string | undefined {
+  for (const [normalizedSignal, originalSignal] of signals) {
+    if (showText.includes(normalizedSignal)) {
+      return originalSignal;
+    }
+  }
+
+  return undefined;
+}
+
+function getGenreMatchCount(show: Show, genreSignals: Map<string, string>): number {
+  const signalValues = [...show.vibe, ...(show.recommendationSignals ?? []).map(getSignalValue)];
+
+  return signalValues.filter((signal) => genreSignals.has(normalize(signal))).length;
+}
+
+function getSignalValue(signal: string): string {
+  const [, rawValue = signal] = signal.split(":");
+
+  return rawValue;
 }
 
 export function getShowById(showId: string): Show | undefined {

@@ -1,4 +1,5 @@
 import { StatusBar } from "expo-status-bar";
+import * as WebBrowser from "expo-web-browser";
 import {
   BadgePercent,
   Bell,
@@ -66,6 +67,7 @@ import { getDiscoveryResultSections } from "./services/discoveryResultSections";
 import {
   filterShows,
   getBestOffer,
+  getRecommendedShowsFromCatalog,
   getShowById
 } from "./services/eventCatalog";
 import { eventProvider } from "./services/eventProviderFactory";
@@ -75,6 +77,7 @@ import {
   mergeNotifications,
   notificationProvider
 } from "./services/notifications";
+import { tasteProfileProvider } from "./services/personalization";
 import { appRepository } from "./services/storage";
 import {
   getBestTicketLinkIntent,
@@ -89,13 +92,17 @@ import type {
   DealAlertMatch,
   DiscoverySortMode,
   InventorySource,
+  MusicAccountConnection,
   NotificationMessage,
   OfferAccess,
+  Recommendation,
   Show,
   ShowCategory,
   ShowSearchFilters
 } from "./types";
 import { formatDistance, formatMoney, formatShowDate } from "./utils/format";
+
+WebBrowser.maybeCompleteAuthSession();
 
 const categories = Object.keys(categoryLabels) as ShowCategory[];
 const dateWindowLabels: Record<DateWindow, string> = {
@@ -147,6 +154,11 @@ export default function App() {
   const [locating, setLocating] = useState(false);
   const [areaMenuOpen, setAreaMenuOpen] = useState(false);
   const [selectedShow, setSelectedShow] = useState<Show | null>(null);
+  const [tasteEnabled, setTasteEnabled] = useState(false);
+  const [musicConnection, setMusicConnection] = useState<MusicAccountConnection | null>(null);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [tasteLoading, setTasteLoading] = useState(false);
+  const [tasteError, setTasteError] = useState<string | null>(null);
   const [savedShowIds, setSavedShowIds] = useState<string[]>([]);
   const [dealAlerts, setDealAlerts] = useState<DealAlert[]>([]);
   const [notifications, setNotifications] = useState<NotificationMessage[]>([]);
@@ -178,6 +190,8 @@ export default function App() {
           setOnlyDeals(preferences.onlyDeals);
           setMaxPriceCents(preferences.maxPriceCents);
           setDealAlertMaxPriceCents(preferences.dealAlertMaxPriceCents);
+          setTasteEnabled(preferences.tasteEnabled);
+          setMusicConnection(preferences.musicConnection ?? null);
           setSavedShowIds(preferences.savedShowIds);
           setDealAlerts(preferences.dealAlerts ?? []);
           setNotifications(preferences.notifications ?? []);
@@ -209,12 +223,12 @@ export default function App() {
       onlyDeals,
       maxPriceCents,
       dealAlertMaxPriceCents,
-      tasteEnabled: false,
+      tasteEnabled,
       savedShowIds,
       dealAlerts,
       notifications,
       userSession: null,
-      musicConnection: null,
+      musicConnection,
       locationStatus,
       updatedAt: new Date().toISOString()
     });
@@ -226,12 +240,14 @@ export default function App() {
     discoverySortMode,
     locationStatus,
     maxPriceCents,
+    musicConnection,
     notifications,
     onlyDeals,
     savedShowIds,
     selectedAreaId,
     selectedCategories,
-    selectedNeighborhoods
+    selectedNeighborhoods,
+    tasteEnabled
   ]);
 
   const discoveryFilters = useMemo<ShowSearchFilters>(
@@ -479,6 +495,43 @@ export default function App() {
     [knownShowsById, savedShowIds]
   );
 
+  useEffect(() => {
+    let mounted = true;
+
+    if (!tasteEnabled || musicConnection?.status !== "connected") {
+      setRecommendations([]);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    setTasteLoading(true);
+
+    tasteProfileProvider
+      .getRecommendationContext(selectedAreaId, musicConnection)
+      .then((context) => {
+        if (mounted) {
+          setRecommendations(getRecommendedShowsFromCatalog(areaInventory, context).slice(0, 5));
+          setTasteError(null);
+        }
+      })
+      .catch((error) => {
+        if (mounted) {
+          setRecommendations([]);
+          setTasteError(error instanceof Error ? error.message : "Spotify recommendations unavailable.");
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setTasteLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [areaInventory, musicConnection, selectedAreaId, tasteEnabled]);
+
   const toggleCategory = (category: ShowCategory) => {
     setSelectedCategories((current) =>
       current.includes(category)
@@ -560,6 +613,31 @@ export default function App() {
       ),
       ...current
     ]);
+  };
+
+  const toggleMusicConnection = async () => {
+    setTasteLoading(true);
+    setTasteError(null);
+
+    try {
+      if (musicConnection?.status === "connected") {
+        const disconnectedConnection = await tasteProfileProvider.disconnectAccount(musicConnection);
+
+        setMusicConnection(disconnectedConnection);
+        setTasteEnabled(false);
+        setRecommendations([]);
+        return;
+      }
+
+      const connectedAccount = await tasteProfileProvider.connectAccount();
+
+      setMusicConnection(connectedAccount);
+      setTasteEnabled(true);
+    } catch (error) {
+      setTasteError(error instanceof Error ? error.message : "Spotify connection unavailable.");
+    } finally {
+      setTasteLoading(false);
+    }
   };
 
   const openShowDetails = (show: Show) => {
@@ -924,6 +1002,41 @@ export default function App() {
 
           <Pressable
             accessibilityRole="button"
+            disabled={tasteLoading}
+            onPress={toggleMusicConnection}
+            style={[
+              styles.musicConnectionPanel,
+              musicConnection?.status === "connected" ? styles.musicConnectionPanelActive : undefined,
+              tasteLoading ? styles.musicConnectionPanelLoading : undefined
+            ]}
+          >
+            <View style={styles.musicIconBadge}>
+              <Music2 color={colors.paper} size={18} />
+            </View>
+            <View style={styles.musicConnectionCopy}>
+              <Text style={styles.musicConnectionTitle}>Spotify taste</Text>
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.musicConnectionMeta,
+                  tasteError ? styles.musicConnectionMetaError : undefined
+                ]}
+              >
+                {getMusicConnectionCopy({
+                  connection: musicConnection,
+                  configured: tasteProfileProvider.isConfigured(),
+                  error: tasteError,
+                  loading: tasteLoading
+                })}
+              </Text>
+            </View>
+            <Text style={styles.musicConnectionAction}>
+              {getMusicConnectionActionCopy(musicConnection, tasteLoading)}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
             onPress={toggleCurrentDealAlert}
             style={[
               styles.dealAlertPanel,
@@ -1087,6 +1200,28 @@ export default function App() {
                     key={pick.show.id}
                     onPress={() => openShowDetails(pick.show)}
                     pick={pick}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          {recommendations.length ? (
+            <View style={styles.recommendationPanel}>
+              <View style={styles.inlineTitlePadded}>
+                <Music2 color={colors.plum} size={18} />
+                <Text style={styles.sectionTitle}>Spotify picks</Text>
+              </View>
+              <ScrollView
+                contentContainerStyle={styles.recommendationRail}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+              >
+                {recommendations.map((recommendation) => (
+                  <RecommendationCard
+                    key={recommendation.show.id}
+                    onPress={() => openShowDetails(recommendation.show)}
+                    recommendation={recommendation}
                   />
                 ))}
               </ScrollView>
@@ -1498,6 +1633,52 @@ function mergeSelectedNeighborhoodFacets(
   return Array.from(facetsByNeighborhood.values());
 }
 
+function getMusicConnectionCopy({
+  connection,
+  configured,
+  error,
+  loading
+}: {
+  connection: MusicAccountConnection | null;
+  configured: boolean;
+  error: string | null;
+  loading: boolean;
+}): string {
+  if (loading) {
+    return connection?.status === "connected" ? "Refreshing listening taste" : "Opening Spotify";
+  }
+
+  if (error) {
+    return error;
+  }
+
+  if (!configured) {
+    return "Client ID needed";
+  }
+
+  if (connection?.status === "connected") {
+    const tasteCopy = [
+      ...connection.topArtists.slice(0, 2),
+      ...connection.topGenres.slice(0, 1)
+    ].join(" · ");
+
+    return tasteCopy || `Connected as ${connection.displayName}`;
+  }
+
+  return "Not connected";
+}
+
+function getMusicConnectionActionCopy(
+  connection: MusicAccountConnection | null,
+  loading: boolean
+): string {
+  if (loading) {
+    return "Syncing";
+  }
+
+  return connection?.status === "connected" ? "Disconnect" : "Connect";
+}
+
 function getMarketNextCopy(summary: MarketDiscoverySummary): string {
   return summary.nextStartsAt ? `Next ${formatShowDate(summary.nextStartsAt)}` : "No upcoming shows";
 }
@@ -1552,6 +1733,32 @@ function DiscoveryPickCard({ pick, onPress }: { pick: DiscoveryPick; onPress: ()
           {offer ? formatMoney(offer.priceCents) : "Soon"}
         </Text>
       </View>
+    </Pressable>
+  );
+}
+
+function RecommendationCard({
+  recommendation,
+  onPress
+}: {
+  recommendation: Recommendation;
+  onPress: () => void;
+}) {
+  const { show } = recommendation;
+  const offer = getBestOffer(show);
+
+  return (
+    <Pressable onPress={onPress} style={styles.recommendationCard}>
+      <Text numberOfLines={1} style={styles.recommendationCategory}>
+        {categoryLabels[show.category]}
+      </Text>
+      <Text numberOfLines={2} style={styles.recommendationTitle}>
+        {show.title}
+      </Text>
+      <Text numberOfLines={2} style={styles.recommendationMeta}>
+        {recommendation.reason || show.neighborhood}
+      </Text>
+      <Text style={styles.discoveryPickPrice}>{offer ? formatMoney(offer.priceCents) : "Soon"}</Text>
     </Pressable>
   );
 }
@@ -2764,6 +2971,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     paddingHorizontal: spacing.lg
   },
+  musicConnectionPanelActive: {
+    borderColor: colors.teal,
+    backgroundColor: colors.tealSoft
+  },
+  musicConnectionPanelLoading: {
+    opacity: 0.72
+  },
   musicIconBadge: {
     alignItems: "center",
     justifyContent: "center",
@@ -2785,6 +2999,10 @@ const styles = StyleSheet.create({
     color: colors.mutedInk,
     fontSize: 12,
     marginTop: 3
+  },
+  musicConnectionMetaError: {
+    color: colors.coralDark,
+    fontWeight: "800"
   },
   musicConnectionAction: {
     color: colors.teal,

@@ -2,6 +2,7 @@
   "expo": {
     "name": "Tickets Tonight",
     "slug": "tickets-tonight",
+    "scheme": "ticketstonight",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
