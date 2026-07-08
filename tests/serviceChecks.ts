@@ -5,6 +5,11 @@ import { partnerFeedEvents } from "../src/data/partnerFeeds";
 import { ticketmasterDiscoveryFixture } from "../src/data/ticketmasterFixtures";
 import { normalizeCalendarEvent } from "../src/services/calendarFeedProvider";
 import {
+  getBroadApiCoverageGaps,
+  getDiscoveryAcquisitionPlan,
+  getRecommendedBroadApiCandidates
+} from "../src/services/discoveryAcquisition";
+import {
   createDealAlert,
   getDealAlertMatches,
   toggleDealAlertStatus
@@ -209,6 +214,39 @@ async function main() {
     createEventProviders({ ticketmasterApiKey: "" }).map((provider) => provider.id).join("|") ===
       "local-catalog|partner-feed|calendar-feed",
     "Default discovery providers should stay fixture and calendar backed until a marketplace key is configured."
+  );
+  const nycBroadApiRecommendations = getRecommendedBroadApiCandidates("nyc");
+  const nycAcquisitionPlan = getDiscoveryAcquisitionPlan("nyc");
+  const hudsonAcquisitionPlan = getDiscoveryAcquisitionPlan("hudson");
+
+  assert(
+    nycBroadApiRecommendations
+      .slice(0, 3)
+      .map((candidate) => candidate.id)
+      .join("|") === "ticketmaster-discovery|eventbrite-marketplace|seatgeek-platform",
+    "Broad API candidates should keep Ticketmaster first, then ticket-link/community marketplaces before local bespoke work."
+  );
+  assert(
+    nycBroadApiRecommendations[0]?.status === "adapter-ready" &&
+      nycBroadApiRecommendations[0].matchingCategories.length ===
+        getDiscoveryMarketPlan("nyc")?.categoryFocus.length,
+    "The first broad API candidate should be adapter-ready and cover the full New York category focus."
+  );
+  assert(
+    nycAcquisitionPlan?.firstBroadApiCandidateId === "ticketmaster-discovery" &&
+      nycAcquisitionPlan.broadApiCoverageGapCategories.length === 0 &&
+      nycAcquisitionPlan.localPipelineTriggerCategories.includes("dance") &&
+      nycAcquisitionPlan.shouldDelayBespokeVenueWork,
+    "New York acquisition planning should start with broad APIs and defer bespoke local work until depth gaps are measured."
+  );
+  assert(
+    hudsonAcquisitionPlan?.firstBroadApiCandidateId === "ticketmaster-discovery" &&
+      hudsonAcquisitionPlan.nextLocalPipelineSourceIds[0] === "hudson-calendar-feed",
+    "Hudson acquisition planning should still run broad APIs before the reusable calendar pipeline."
+  );
+  assert(
+    getBroadApiCoverageGaps("hudson", ["ticketmaster-discovery"]).length === 0,
+    "Broad API planning should distinguish baseline category coverage from local depth work."
   );
 
   const nycShows = searchShows({
