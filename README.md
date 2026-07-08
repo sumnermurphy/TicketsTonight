@@ -46,6 +46,8 @@ Optional live Ticketmaster Discovery inventory can be enabled with public Expo e
 EXPO_PUBLIC_TICKETMASTER_API_KEY=your_key npm run web
 ```
 
+For local CLI audits, copy `.env.example` to `.env.local` and set `EXPO_PUBLIC_TICKETMASTER_API_KEY` there. Local `.env` files are ignored by git.
+
 The adapter defaults to 100 results per page and up to 3 pages. Override the live fetch breadth with:
 
 ```bash
@@ -72,6 +74,12 @@ Run the NYC coverage audit:
 
 ```bash
 npm run audit:coverage
+```
+
+Run the NYC live supply audit against the current 50-event discovery target:
+
+```bash
+npm run audit:live-supply
 ```
 
 Run live Ticketmaster provider diagnostics:
@@ -113,6 +121,7 @@ npm run android
 - `src/services/eventCatalog.ts`: discovery search, date-window filtering, deal search, recommendation scoring, composite event providers, cross-source event dedupe, calendar-feed inventory, and runtime caching for provider-fed shows.
 - `src/services/eventProviderFactory.ts`: default provider stack that keeps fixtures active and adds Ticketmaster Discovery when public Expo config is present.
 - `src/services/location.ts`: location provider interface, demo location provider, distance calculation, and nearest-area resolution.
+- `src/services/liveSupplyAudit.ts`: focused NYC live-supply target audit for the current 50-event provider sprint.
 - `src/services/notifications.ts`: in-app notification provider for deal-alert matches, with read-state merge helpers for future push/email channels.
 - `src/services/payments.ts`: dormant payment provider groundwork shaped for future Stripe/provider-native checkout.
 - `src/services/personalization.ts`: Spotify PKCE auth, token exchange, top artists/tracks/genres fetches, demo taste provider, and recommendation-context creation.
@@ -123,6 +132,7 @@ npm run android
 - `src/services/ticketing.ts`: ticketing provider interface plus a mock provider.
 - `src/types.ts`: shared app, ticketing, and recommendation types.
 - `src/App.tsx`: provider-backed mobile discovery, detail, saved-show, discount alert, inbox, and preference UI.
+- `scripts/env.ts`: local `.env.local` loader for audit scripts without committing provider keys.
 - `tests/serviceChecks.ts`: discovery, market scope, feed normalization, provider adapters, deal filtering, discount alerts, and dormant checkout groundwork checks.
 
 ## Provider seams

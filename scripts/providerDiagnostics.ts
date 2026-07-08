@@ -4,8 +4,11 @@ import {
 } from "../src/services/eventProviderFactory";
 import { FetchTicketmasterDiscoveryClient } from "../src/services/ticketmasterProvider";
 import type { ShowSearchFilters } from "../src/types";
+import { loadLocalEnv } from "./env";
 
 async function main() {
+  loadLocalEnv();
+
   const config = readPublicDiscoveryConfig();
   const apiKey = config.ticketmasterApiKey?.trim();
 

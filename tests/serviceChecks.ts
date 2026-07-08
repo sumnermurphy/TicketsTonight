@@ -3,6 +3,7 @@ import { discoveryMarketPlans } from "../src/data/discoveryPlans";
 import { localCalendarEvents } from "../src/data/localCalendarFeeds";
 import { partnerFeedEvents } from "../src/data/partnerFeeds";
 import { ticketmasterDiscoveryFixture } from "../src/data/ticketmasterFixtures";
+import { parseEnvFile } from "../scripts/env";
 import { normalizeCalendarEvent } from "../src/services/calendarFeedProvider";
 import {
   getBroadApiCoverageGaps,
@@ -69,6 +70,11 @@ import {
   getDistanceBetweenCoordinates,
   locationProvider
 } from "../src/services/location";
+import {
+  createLiveSupplyAudit,
+  getLiveSupplyAuditActionCopy,
+  getLiveSupplyAuditStatusCopy
+} from "../src/services/liveSupplyAudit";
 import {
   markNotificationRead,
   mergeNotifications,
@@ -312,6 +318,11 @@ async function main() {
     referenceNow,
     windowDays: 30
   });
+  const nycLiveSupplyAudit = createLiveSupplyAudit(nycAreaInventory, {
+    areaId: "nyc",
+    referenceNow,
+    targetEventCount: 50
+  });
   const nycNeighborhoodFacets = getNeighborhoodFacets(nycAreaInventory);
   const lowerEastSideFacet = nycNeighborhoodFacets.find(
     (facet) => facet.neighborhood === "Lower East Side"
@@ -407,6 +418,18 @@ async function main() {
   assert(
     nycCoverageAudit.sourceCounts.length === nycMarketSummary.sourceCount,
     "Coverage audit should report source breadth for provider expansion checks."
+  );
+  assert(
+    nycLiveSupplyAudit.eventCount === nycAreaInventory.length &&
+      nycLiveSupplyAudit.targetEventCount === 50 &&
+      nycLiveSupplyAudit.eventGapCount === 42 &&
+      nycLiveSupplyAudit.status === "needs-events",
+    "Live supply audit should track the 50-event NYC target separately from the broader coverage target."
+  );
+  assert(
+    getLiveSupplyAuditStatusCopy(nycLiveSupplyAudit) === "Needs more live events" &&
+      getLiveSupplyAuditActionCopy(nycLiveSupplyAudit).includes("42 more NYC events"),
+    "Live supply audit copy should make the next NYC event gap explicit."
   );
   assert(
     nycMarketSummary.activeCategoryCount ===
@@ -509,6 +532,17 @@ async function main() {
       activeFilterSummary.labels.join("|") ===
         '2 types|Lower East Side|Search "Alina"|Deals only|Under $35|Tonight|Cheapest first',
     "Active discovery filters should produce a compact summary for visible reset state."
+  );
+  const parsedEnv = parseEnvFile(`
+    # local provider config
+    EXPO_PUBLIC_TICKETMASTER_API_KEY="tm-key"
+    EXPO_PUBLIC_TICKETMASTER_MAX_PAGES=5 # wider live audit
+  `);
+
+  assert(
+    parsedEnv.EXPO_PUBLIC_TICKETMASTER_API_KEY === "tm-key" &&
+      parsedEnv.EXPO_PUBLIC_TICKETMASTER_MAX_PAGES === "5",
+    "Local env parsing should support quoted provider keys and inline comments."
   );
   assert(nycDiscoveryPicks.length === 4, "Discovery picks should return a bounded best-bets rail.");
   assert(

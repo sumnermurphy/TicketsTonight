@@ -1,8 +1,12 @@
-import { createCoverageAudit, getCoverageAuditActionCopy, getCoverageAuditStatusCopy } from "../src/services/coverageAudit";
 import {
   createDefaultEventProvider,
   readPublicDiscoveryConfig
 } from "../src/services/eventProviderFactory";
+import {
+  createLiveSupplyAudit,
+  getLiveSupplyAuditActionCopy,
+  getLiveSupplyAuditStatusCopy
+} from "../src/services/liveSupplyAudit";
 import type { ShowSearchFilters } from "../src/types";
 import { loadLocalEnv } from "./env";
 
@@ -11,7 +15,9 @@ async function main() {
 
   const areaId = "nyc";
   const referenceNow = new Date().toISOString();
-  const provider = createDefaultEventProvider(readPublicDiscoveryConfig());
+  const config = readPublicDiscoveryConfig();
+  const liveTicketmasterEnabled = Boolean(config.ticketmasterApiKey?.trim());
+  const provider = createDefaultEventProvider(config);
   const filters: ShowSearchFilters = {
     areaId,
     categories: [],
@@ -22,13 +28,14 @@ async function main() {
     referenceNow
   };
   const shows = await provider.listShows(filters);
-  const audit = createCoverageAudit(shows, {
+  const audit = createLiveSupplyAudit(shows, {
     areaId,
     referenceNow,
-    windowDays: 30
+    targetEventCount: 50
   });
 
-  console.log(`Coverage audit - ${areaId.toUpperCase()}`);
+  console.log(`NYC live supply audit`);
+  console.log(`Live Ticketmaster: ${liveTicketmasterEnabled ? "enabled" : "not configured"}`);
   console.log(`Events: ${audit.eventCount}/${audit.targetEventCount} (${audit.eventProgressPercent}%)`);
   console.log(
     `Ticket links: ${audit.ticketLinkCount}/${audit.eventCount} (${audit.ticketLinkCoveragePercent}%, target ${audit.targetTicketLinkCoveragePercent}%)`
@@ -36,20 +43,16 @@ async function main() {
   console.log(
     `Ticket offers: ${audit.pricedOfferCount} priced, ${audit.linkOnlyOfferCount} link-only`
   );
-  console.log(`Status: ${getCoverageAuditStatusCopy(audit)}`);
-  console.log(`Next action: ${getCoverageAuditActionCopy(audit)}`);
+  console.log(`Status: ${getLiveSupplyAuditStatusCopy(audit)}`);
+  console.log(`Next action: ${getLiveSupplyAuditActionCopy(audit)}`);
   console.log("Category lanes:");
 
   for (const group of audit.categoryGroupCounts) {
-    console.log(
-      `- ${group.label}: ${group.count}/${group.targetCount}${group.passes ? " ok" : " gap"}`
-    );
+    console.log(`- ${group.label}: ${group.count}`);
   }
 
-  console.log("Sources:");
-
-  for (const sourceCount of audit.sourceCounts) {
-    console.log(`- ${sourceCount.source}: ${sourceCount.count}`);
+  if (!liveTicketmasterEnabled) {
+    console.log("Set EXPO_PUBLIC_TICKETMASTER_API_KEY in .env.local or your shell for live supply.");
   }
 }
 

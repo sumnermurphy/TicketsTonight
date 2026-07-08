@@ -10,6 +10,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "audit:coverage": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/coverageAudit.ts && node .audit-build/scripts/coverageAudit.js",
+    "audit:live-supply": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/liveSupplyAudit.ts && node .audit-build/scripts/liveSupplyAudit.js",
     "audit:providers": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/providerDiagnostics.ts && node .audit-build/scripts/providerDiagnostics.js",
     "test:services": "tsc --ignoreConfig --outDir .test-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict tests/serviceChecks.ts && node .test-build/tests/serviceChecks.js"
   },
