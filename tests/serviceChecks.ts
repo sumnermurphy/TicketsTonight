@@ -8,7 +8,11 @@ import {
   toggleDealAlertStatus
 } from "../src/services/dealAlerts";
 import { checkoutBackend } from "../src/services/checkoutBackend";
-import { getCategoryFacets, getDateWindowFacets } from "../src/services/discoveryFacets";
+import {
+  getCategoryFacets,
+  getDateWindowFacets,
+  getMarketDiscoverySummary
+} from "../src/services/discoveryFacets";
 import {
   getDealInsights,
   getDealSummary,
@@ -174,6 +178,10 @@ async function main() {
     nycAreaInventory,
     Object.keys(categoryLabels) as Array<keyof typeof categoryLabels>
   );
+  const nycMarketSummary = getMarketDiscoverySummary(
+    nycAreaInventory,
+    Object.keys(categoryLabels) as Array<keyof typeof categoryLabels>
+  );
   const comedyFacet = nycCategoryFacets.find((facet) => facet.category === "comedy");
   const danceFacet = nycCategoryFacets.find((facet) => facet.category === "dance");
   const nycDateWindowFacets = getDateWindowFacets(
@@ -192,6 +200,23 @@ async function main() {
   assert(
     nycCategoryFacets.length === Object.keys(categoryLabels).length,
     "Category facets should cover every browse category."
+  );
+  assert(
+    nycMarketSummary.showCount === nycAreaInventory.length,
+    "Market summary should expose selected-area inventory count."
+  );
+  assert(
+    nycMarketSummary.dealCount === dealShows.length,
+    "Market summary should expose selected-area deal count."
+  );
+  assert(
+    nycMarketSummary.activeCategoryCount ===
+      nycCategoryFacets.filter((facet) => facet.showCount > 0).length,
+    "Market summary should expose active category breadth."
+  );
+  assert(
+    nycMarketSummary.nextStartsAt === "2026-07-08T20:00:00-04:00",
+    "Market summary should expose the next upcoming show time."
   );
   assert(
     comedyFacet?.showCount === 1 && comedyFacet.dealCount === 1,

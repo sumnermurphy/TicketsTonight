@@ -38,8 +38,10 @@ import {
 import {
   getDateWindowFacets,
   getCategoryFacets,
+  getMarketDiscoverySummary,
   type CategoryFacet,
-  type DateWindowFacet
+  type DateWindowFacet,
+  type MarketDiscoverySummary
 } from "./services/discoveryFacets";
 import {
   getDealInsights,
@@ -294,6 +296,10 @@ export default function App() {
     () => getCategoryFacets(areaInventory, categories),
     [areaInventory]
   );
+  const marketSummary = useMemo(
+    () => getMarketDiscoverySummary(areaInventory, categories),
+    [areaInventory]
+  );
   const categoryFacetsByCategory = useMemo(
     () => new Map(categoryFacets.map((facet) => [facet.category, facet])),
     [categoryFacets]
@@ -536,6 +542,32 @@ export default function App() {
                   <X color={colors.mutedInk} size={18} />
                 </Pressable>
               ) : null}
+            </View>
+          </View>
+
+          <View style={styles.marketSnapshot}>
+            <View style={styles.marketSnapshotHeader}>
+              <Text style={styles.marketSnapshotTitle}>{selectedArea?.name} snapshot</Text>
+              <Text style={styles.marketSnapshotMeta}>
+                {inventoryLoading ? "Refreshing" : getMarketNextCopy(marketSummary)}
+              </Text>
+            </View>
+            <View style={styles.marketSnapshotStats}>
+              <MarketSnapshotStat
+                label="Upcoming"
+                loading={inventoryLoading}
+                value={String(marketSummary.showCount)}
+              />
+              <MarketSnapshotStat
+                label="Deals"
+                loading={inventoryLoading}
+                value={String(marketSummary.dealCount)}
+              />
+              <MarketSnapshotStat
+                label="Types"
+                loading={inventoryLoading}
+                value={String(marketSummary.activeCategoryCount)}
+              />
             </View>
           </View>
 
@@ -942,6 +974,23 @@ function DateWindowChip({
   );
 }
 
+function MarketSnapshotStat({
+  label,
+  loading,
+  value
+}: {
+  label: string;
+  loading: boolean;
+  value: string;
+}) {
+  return (
+    <View style={styles.marketSnapshotStat}>
+      <Text style={styles.marketSnapshotValue}>{loading ? "..." : value}</Text>
+      <Text style={styles.marketSnapshotLabel}>{label}</Text>
+    </View>
+  );
+}
+
 function DealAlertPriceChip({
   active,
   label,
@@ -1073,6 +1122,10 @@ function getDateWindowFacetCopy(facet: DateWindowFacet | undefined, loading: boo
   }
 
   return `${facet.showCount} ${facet.showCount === 1 ? "show" : "shows"}`;
+}
+
+function getMarketNextCopy(summary: MarketDiscoverySummary): string {
+  return summary.nextStartsAt ? `Next ${formatShowDate(summary.nextStartsAt)}` : "No upcoming shows";
 }
 
 function DealCard({ insight, onPress }: { insight: DealInsight; onPress: () => void }) {
@@ -1521,6 +1574,57 @@ const styles = StyleSheet.create({
     fontSize: 16,
     minWidth: 0,
     paddingVertical: spacing.sm
+  },
+  marketSnapshot: {
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.lg,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.line,
+    paddingVertical: spacing.md
+  },
+  marketSnapshotHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md
+  },
+  marketSnapshotTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  marketSnapshotMeta: {
+    flexShrink: 1,
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "right"
+  },
+  marketSnapshotStats: {
+    flexDirection: "row",
+    gap: spacing.md,
+    marginTop: spacing.md
+  },
+  marketSnapshotStat: {
+    flex: 1,
+    minHeight: 56,
+    justifyContent: "center",
+    borderRadius: radii.sm,
+    backgroundColor: colors.fog,
+    paddingHorizontal: spacing.md
+  },
+  marketSnapshotValue: {
+    color: colors.ink,
+    fontSize: 19,
+    fontWeight: "900"
+  },
+  marketSnapshotLabel: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "800",
+    marginTop: 2,
+    textTransform: "uppercase"
   },
   accountPanel: {
     alignItems: "center",

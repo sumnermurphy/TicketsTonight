@@ -13,6 +13,13 @@ export type DateWindowFacet = {
   dealCount: number;
 };
 
+export type MarketDiscoverySummary = {
+  showCount: number;
+  dealCount: number;
+  activeCategoryCount: number;
+  nextStartsAt?: string;
+};
+
 export function getCategoryFacets(
   shows: Show[],
   categories: ShowCategory[]
@@ -46,6 +53,23 @@ export function getDateWindowFacets(
       dealCount: getDealCount(dateWindowShows)
     };
   });
+}
+
+export function getMarketDiscoverySummary(
+  shows: Show[],
+  categories: ShowCategory[]
+): MarketDiscoverySummary {
+  const sortedShows = [...shows].sort((first, second) =>
+    first.startsAt.localeCompare(second.startsAt)
+  );
+  const categoryFacets = getCategoryFacets(shows, categories);
+
+  return {
+    showCount: shows.length,
+    dealCount: getDealCount(shows),
+    activeCategoryCount: categoryFacets.filter((facet) => facet.showCount > 0).length,
+    nextStartsAt: sortedShows[0]?.startsAt
+  };
 }
 
 function getDealCount(shows: Show[]): number {
