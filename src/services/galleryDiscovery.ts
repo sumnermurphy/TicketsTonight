@@ -642,6 +642,73 @@ function isRouteUsableStatus(status: GalleryVisitStatus): boolean {
   return status === "open-now" || status === "opens-later";
 }
 
+function getRouteTrustPriority(exhibition: GalleryExhibition): number {
+  const trust = getGalleryInventoryTrust(exhibition);
+
+  if (trust.isVerified) {
+    return 0;
+  }
+
+  if (trust.kind === "partner-submitted") {
+    return 1;
+  }
+
+  if (trust.kind === "needs-review" || trust.kind === "stale-needs-review") {
+    return 2;
+  }
+
+  return 3;
+}
+
+function getGalleryRouteNameKey(exhibition: GalleryExhibition): string {
+  return normalizeText(exhibition.galleryName);
+}
+
+function getRouteModeScore(
+  exhibition: GalleryExhibition,
+  referenceNow: string,
+  mode: GalleryWalkMode
+): number {
+  if (mode === "opening-night") {
+    return isGalleryOpeningTonight(exhibition, referenceNow) ? -20 : 20;
+  }
+
+  if (mode === "last-chance") {
+    const daysUntilClose = getDaysUntilGalleryCloses(exhibition, referenceNow);
+
+    return daysUntilClose >= 0 ? daysUntilClose : 30;
+  }
+
+  return 0;
+}
+
+function getRouteCandidateScore(input: {
+  candidate: GalleryExhibition;
+  previous?: GalleryExhibition;
+  referenceNow: string;
+  savedIdSet: Set<string>;
+  selectedGalleryNames?: Set<string>;
+  mode: GalleryWalkMode;
+}): number {
+  const status = getGalleryVisitStatus(input.candidate, input.referenceNow);
+  const distance = input.previous
+    ? getDistanceMiles(input.previous.coordinates, input.candidate.coordinates)
+    : input.candidate.distanceMiles;
+  const isDuplicateGallery =
+    input.selectedGalleryNames?.has(getGalleryRouteNameKey(input.candidate)) ?? false;
+  const savedScore = input.savedIdSet.has(input.candidate.id) ? -1000 : 0;
+  const duplicatePenalty = isDuplicateGallery ? 90 : 0;
+
+  return (
+    savedScore +
+    duplicatePenalty +
+    visitStatusPriority[status] * 45 +
+    getRouteTrustPriority(input.candidate) * 18 +
+    getRouteModeScore(input.candidate, input.referenceNow, input.mode) +
+    distance * 20
+  );
+}
+
 function getRouteReasonSet(
   exhibition: GalleryExhibition,
   previous: GalleryExhibition | undefined,
@@ -692,33 +759,39 @@ function getRouteReasonSet(
 function getFirstRouteCandidate(
   candidates: GalleryExhibition[],
   referenceNow: string,
-  savedIdSet: Set<string> = new Set()
+  savedIdSet: Set<string> = new Set(),
+  mode: GalleryWalkMode = "quick-loop"
 ): GalleryExhibition | undefined {
   return [...candidates].sort((left, right) => {
-    const savedDelta = Number(savedIdSet.has(right.id)) - Number(savedIdSet.has(left.id));
+    const scoreDelta =
+      getRouteCandidateScore({
+        candidate: left,
+        referenceNow,
+        savedIdSet,
+        mode
+      }) -
+      getRouteCandidateScore({
+        candidate: right,
+        referenceNow,
+        savedIdSet,
+        mode
+      });
 
-    if (savedDelta !== 0) {
-      return savedDelta;
+    if (scoreDelta !== 0) {
+      return scoreDelta;
     }
 
-    const statusDelta =
-      visitStatusPriority[getGalleryVisitStatus(left, referenceNow)] -
-      visitStatusPriority[getGalleryVisitStatus(right, referenceNow)];
-
-    if (statusDelta !== 0) {
-      return statusDelta;
-    }
-
-    return left.distanceMiles - right.distanceMiles;
+    return left.title.localeCompare(right.title);
   })[0];
 }
 
 function orderGalleryWalkCandidates(
   candidates: GalleryExhibition[],
   referenceNow: string,
-  savedIdSet: Set<string> = new Set()
+  savedIdSet: Set<string> = new Set(),
+  mode: GalleryWalkMode = "quick-loop"
 ): GalleryExhibition[] {
-  const firstCandidate = getFirstRouteCandidate(candidates, referenceNow, savedIdSet);
+  const firstCandidate = getFirstRouteCandidate(candidates, referenceNow, savedIdSet, mode);
 
   if (!firstCandidate) {
     return [];
@@ -729,6 +802,7 @@ function orderGalleryWalkCandidates(
 
   while (remaining.length > 0) {
     const previous = ordered[ordered.length - 1];
+    const selectedGalleryNames = new Set(ordered.map(getGalleryRouteNameKey));
     const nextIndex = remaining
       .map((candidate, index) => ({
         candidate,
@@ -736,22 +810,35 @@ function orderGalleryWalkCandidates(
         distance: previous ? getDistanceMiles(previous.coordinates, candidate.coordinates) : 0
       }))
       .sort((left, right) => {
-        const savedDelta =
-          Number(savedIdSet.has(right.candidate.id)) - Number(savedIdSet.has(left.candidate.id));
+        const scoreDelta =
+          getRouteCandidateScore({
+            candidate: left.candidate,
+            previous,
+            referenceNow,
+            savedIdSet,
+            selectedGalleryNames,
+            mode
+          }) -
+          getRouteCandidateScore({
+            candidate: right.candidate,
+            previous,
+            referenceNow,
+            savedIdSet,
+            selectedGalleryNames,
+            mode
+          });
 
-        if (savedDelta !== 0) {
-          return savedDelta;
+        if (scoreDelta !== 0) {
+          return scoreDelta;
         }
 
-        const statusDelta =
-          visitStatusPriority[getGalleryVisitStatus(left.candidate, referenceNow)] -
-          visitStatusPriority[getGalleryVisitStatus(right.candidate, referenceNow)];
+        const distanceDelta = left.distance - right.distance;
 
-        if (statusDelta !== 0) {
-          return statusDelta;
+        if (distanceDelta !== 0) {
+          return distanceDelta;
         }
 
-        return left.distance - right.distance;
+        return left.candidate.title.localeCompare(right.candidate.title);
       })[0]?.index;
 
     if (typeof nextIndex !== "number") {
@@ -771,7 +858,8 @@ function orderGalleryWalkCandidates(
 function getWalkReadiness(
   stops: GalleryWalkStop[],
   neighborhood: string,
-  modeLabel: string
+  modeLabel: string,
+  mode: GalleryWalkMode
 ): {
   readinessLevel: GalleryWalkReadinessLevel;
   readinessCopy: string;
@@ -779,8 +867,18 @@ function getWalkReadiness(
   const usableStops = stops.filter((stop) => isRouteUsableStatus(stop.status)).length;
   const verifiedStops = stops.filter((stop) => getGalleryInventoryTrust(stop.exhibition).isVerified)
     .length;
+  const uniqueGalleryCount = new Set(stops.map((stop) => getGalleryRouteNameKey(stop.exhibition)))
+    .size;
+  const repeatedGalleryCount = stops.length - uniqueGalleryCount;
+  const requiredUniqueStops = mode === "quick-loop" ? 2 : 3;
+  const requiredVerifiedStops = Math.min(2, requiredUniqueStops);
 
-  if (stops.length >= 3 && usableStops >= 2 && verifiedStops >= 2) {
+  if (
+    stops.length >= requiredUniqueStops &&
+    usableStops >= requiredUniqueStops &&
+    verifiedStops >= requiredVerifiedStops &&
+    uniqueGalleryCount >= requiredUniqueStops
+  ) {
     return {
       readinessLevel: "ready",
       readinessCopy: `${neighborhood} has enough verified, open listings for this ${modeLabel}.`
@@ -788,6 +886,13 @@ function getWalkReadiness(
   }
 
   if (stops.length >= 2 && usableStops >= 1) {
+    if (repeatedGalleryCount > 0) {
+      return {
+        readinessLevel: "thin",
+        readinessCopy: `${neighborhood} can support a light walk, but this route repeats a gallery because unique verified alternatives are thin.`
+      };
+    }
+
     return {
       readinessLevel: "thin",
       readinessCopy: `${neighborhood} can support a light walk, but verified inventory is still thin.`
@@ -798,6 +903,31 @@ function getWalkReadiness(
     readinessLevel: "not-ready",
     readinessCopy: `${neighborhood} does not have enough verified, open listings for a strong ${modeLabel} yet.`
   };
+}
+
+function getFallbackNeighborhoodCopy(
+  intelligence: GalleryNeighborhoodIntelligence[],
+  currentNeighborhood: string
+): string {
+  const fallback = intelligence
+    .filter(
+      (item) =>
+        item.neighborhood !== currentNeighborhood &&
+        item.canSupportWalk &&
+        item.openNowCount + item.opensLaterCount > 0
+    )
+    .sort((left, right) => {
+      const usableDelta =
+        right.openNowCount + right.opensLaterCount - (left.openNowCount + left.opensLaterCount);
+
+      if (usableDelta !== 0) {
+        return usableDelta;
+      }
+
+      return right.exhibitionCount - left.exhibitionCount;
+    })[0];
+
+  return fallback ? ` Try ${fallback.neighborhood} for a stronger route.` : "";
 }
 
 export function filterGalleryExhibitions(
@@ -938,7 +1068,8 @@ export function createGalleryWalkPlan(input: GalleryWalkPlanInput): GalleryWalkP
   const selectedExhibitions = orderGalleryWalkCandidates(
     routeCandidates,
     referenceNow,
-    savedIdSet
+    savedIdSet,
+    input.mode
   ).slice(0, maxStops);
   const stops = selectedExhibitions.map((exhibition, index) => {
     const previous = selectedExhibitions[index - 1];
@@ -949,11 +1080,15 @@ export function createGalleryWalkPlan(input: GalleryWalkPlanInput): GalleryWalkP
       referenceNow,
       input.savedIds ?? []
     );
+    const savedReasons = savedIdSet.has(exhibition.id) ? ["Saved by user"] : [];
 
     return {
       exhibition,
       status: getGalleryVisitStatus(exhibition, referenceNow),
-      reasons: Array.from(new Set([...routeReasons, ...whyGoReasons])).slice(0, 5),
+      reasons: Array.from(new Set([...savedReasons, ...routeReasons, ...whyGoReasons])).slice(
+        0,
+        5
+      ),
       isSaved: savedIdSet.has(exhibition.id),
       minutesAtStop,
       stopNumber: index + 1,
@@ -984,7 +1119,17 @@ export function createGalleryWalkPlan(input: GalleryWalkPlanInput): GalleryWalkP
   const modeLabel = config.label;
   const startStop = stops[0];
   const nextStop = stops[1];
-  const { readinessLevel, readinessCopy } = getWalkReadiness(stops, neighborhood, modeLabel);
+  let { readinessLevel, readinessCopy } = getWalkReadiness(
+    stops,
+    neighborhood,
+    modeLabel,
+    input.mode
+  );
+
+  if (readinessLevel !== "ready") {
+    readinessCopy = `${readinessCopy}${getFallbackNeighborhoodCopy(intelligence, neighborhood)}`;
+  }
+
   const guidance = startStop
     ? `${startStop.status === "open-now" ? "Start here" : "Start when open"}: ${
         startStop.exhibition.galleryName

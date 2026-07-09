@@ -336,6 +336,18 @@ async function main() {
   const hudsonVerifiedInventory = verifiedInventory.filter(
     (exhibition) => exhibition.areaId === "hudson"
   );
+  const nycChinatownVerifiedInventory = nycVerifiedInventory.filter(
+    (exhibition) => exhibition.neighborhood === "Chinatown"
+  );
+  const nycLowerEastSideVerifiedInventory = nycVerifiedInventory.filter(
+    (exhibition) => exhibition.neighborhood === "Lower East Side"
+  );
+  const nycTribecaVerifiedInventory = nycVerifiedInventory.filter(
+    (exhibition) => exhibition.neighborhood === "Tribeca"
+  );
+  const nycUpperEastSideVerifiedInventory = nycVerifiedInventory.filter(
+    (exhibition) => exhibition.neighborhood === "Upper East Side"
+  );
   const sampleFixtureTrust = getGalleryInventoryTrust(
     galleryExhibitions.find((exhibition) => exhibition.id === "nyc-afterimage-index") ??
       galleryExhibitions[0]
@@ -356,16 +368,23 @@ async function main() {
 
   assert(
     nycTrust.exhibitionCount >= 30 &&
-      nycTrust.verifiedExhibitionCount >= 30 &&
+      nycTrust.verifiedExhibitionCount >= 35 &&
       laTrust.exhibitionCount >= 8 &&
       hudsonTrust.exhibitionCount >= 6,
     "Gallery source trust should report expanded verified NYC inventory while preserving LA and Hudson coverage."
   );
   assert(
-    nycVerifiedInventory.length >= 30 &&
+    nycVerifiedInventory.length >= 35 &&
       hudsonVerifiedInventory.length >= 1 &&
       fixtureInventory.length > 0,
     "Verified inventory should materially increase NYC while leaving fixture/demo records explicitly identifiable."
+  );
+  assert(
+    nycChinatownVerifiedInventory.length >= 3 &&
+      nycLowerEastSideVerifiedInventory.length >= 3 &&
+      nycTribecaVerifiedInventory.length >= 4 &&
+      nycUpperEastSideVerifiedInventory.length >= 4,
+    "Verified NYC inventory should add route-useful Lower East Side, Chinatown, Tribeca, and Upper East Side depth."
   );
   assert(
     sampleFixtureTrust.kind === "fixture-demo" &&
@@ -576,6 +595,157 @@ async function main() {
       ),
     "Gallery routes should exclude closed galleries when enough open alternatives exist."
   );
+  const duplicateAvoidanceWalk = createGalleryWalkPlan({
+    areaId: "nyc",
+    mode: "quick-loop",
+    neighborhood: "Chelsea",
+    referenceNow: galleryReferenceNow,
+    exhibitions: [
+      createSyntheticGalleryExhibition({
+        id: "route-repeat-gallery-a",
+        title: "Repeat Gallery A",
+        galleryName: "Repeat Gallery",
+        coordinates: { latitude: 40.747, longitude: -74.006 },
+        distanceMiles: 0.1,
+        externalUrl: "https://repeat-gallery.test/a"
+      }),
+      createSyntheticGalleryExhibition({
+        id: "route-repeat-gallery-b",
+        title: "Repeat Gallery B",
+        galleryName: "Repeat Gallery",
+        coordinates: { latitude: 40.7471, longitude: -74.0061 },
+        distanceMiles: 0.11,
+        externalUrl: "https://repeat-gallery.test/b"
+      }),
+      createSyntheticGalleryExhibition({
+        id: "route-unique-gallery",
+        title: "Unique Gallery",
+        galleryName: "Unique Gallery",
+        coordinates: { latitude: 40.7473, longitude: -74.0062 },
+        distanceMiles: 0.12,
+        externalUrl: "https://unique-gallery.test/show"
+      })
+    ]
+  });
+  const duplicateAvoidanceGalleryNames = duplicateAvoidanceWalk.stops.map(
+    (stop) => stop.exhibition.galleryName
+  );
+
+  assert(
+    new Set(duplicateAvoidanceGalleryNames).size === duplicateAvoidanceGalleryNames.length,
+    "Gallery routes should avoid duplicate galleries when a unique alternative exists."
+  );
+
+  const verifiedPreferenceWalk = createGalleryWalkPlan({
+    areaId: "nyc",
+    mode: "quick-loop",
+    neighborhood: "Chelsea",
+    referenceNow: galleryReferenceNow,
+    exhibitions: [
+      createSyntheticGalleryExhibition({
+        id: "route-fixture-nearby",
+        title: "Fixture Nearby",
+        galleryName: "Fixture Nearby",
+        coordinates: { latitude: 40.747, longitude: -74.006 },
+        distanceMiles: 0.08,
+        source: "seed-fixture",
+        sourceFreshness: "fresh",
+        externalUrl: "https://example.org/fixture-nearby"
+      }),
+      createSyntheticGalleryExhibition({
+        id: "route-verified-nearby",
+        title: "Verified Nearby",
+        galleryName: "Verified Nearby",
+        coordinates: { latitude: 40.7472, longitude: -74.0061 },
+        distanceMiles: 0.18,
+        externalUrl: "https://verified-gallery.test/current"
+      })
+    ]
+  });
+
+  assert(
+    getGalleryInventoryTrust(verifiedPreferenceWalk.stops[0]?.exhibition ?? galleryExhibitions[0])
+      .isVerified,
+    "Gallery routes should prefer a verified official-page stop over a nearby fixture/demo stop when practical."
+  );
+
+  const chinatownQuickLoop = createGalleryWalkPlan({
+    areaId: "nyc",
+    mode: "quick-loop",
+    neighborhood: "Chinatown",
+    referenceNow: galleryReferenceNow
+  });
+  const chinatownQuickLoopGalleryNames = chinatownQuickLoop.stops.map(
+    (stop) => stop.exhibition.galleryName
+  );
+
+  assert(
+    chinatownQuickLoop.stops.length === 2 &&
+      new Set(chinatownQuickLoopGalleryNames).size === chinatownQuickLoopGalleryNames.length &&
+      chinatownQuickLoop.stops.every((stop) => getGalleryInventoryTrust(stop.exhibition).isVerified) &&
+      chinatownQuickLoop.readinessLevel === "ready",
+    "Chinatown quick-loop routing should use unique verified official-page stops after inventory depth improves."
+  );
+
+  const upperEastSideWalk = createGalleryWalkPlan({
+    areaId: "nyc",
+    mode: "two-hour",
+    neighborhood: "Upper East Side",
+    referenceNow: galleryReferenceNow
+  });
+
+  assert(
+    upperEastSideWalk.stops.some((stop) => stop.exhibition.galleryName === "Skarstedt") &&
+      upperEastSideWalk.readinessCopy.includes("repeats a gallery"),
+    "Upper East Side routing should add a unique verified stop but honestly flag repeated-gallery quality when alternatives are thin."
+  );
+
+  const thinFallbackWalk = createGalleryWalkPlan({
+    areaId: "nyc",
+    mode: "two-hour",
+    neighborhood: "Lower East Side",
+    referenceNow: galleryReferenceNow,
+    exhibitions: [
+      createSyntheticGalleryExhibition({
+        id: "thin-les-only-stop",
+        title: "Thin LES Only Stop",
+        galleryName: "Thin LES Gallery",
+        neighborhood: "Lower East Side",
+        coordinates: { latitude: 40.718, longitude: -73.989 },
+        externalUrl: "https://thin-les-gallery.test/current"
+      }),
+      createSyntheticGalleryExhibition({
+        id: "fallback-chelsea-one",
+        title: "Fallback Chelsea One",
+        galleryName: "Fallback Chelsea One",
+        neighborhood: "Chelsea",
+        coordinates: { latitude: 40.747, longitude: -74.006 },
+        externalUrl: "https://fallback-chelsea.test/one"
+      }),
+      createSyntheticGalleryExhibition({
+        id: "fallback-chelsea-two",
+        title: "Fallback Chelsea Two",
+        galleryName: "Fallback Chelsea Two",
+        neighborhood: "Chelsea",
+        coordinates: { latitude: 40.7472, longitude: -74.0062 },
+        externalUrl: "https://fallback-chelsea.test/two"
+      }),
+      createSyntheticGalleryExhibition({
+        id: "fallback-chelsea-three",
+        title: "Fallback Chelsea Three",
+        galleryName: "Fallback Chelsea Three",
+        neighborhood: "Chelsea",
+        coordinates: { latitude: 40.7474, longitude: -74.0064 },
+        externalUrl: "https://fallback-chelsea.test/three"
+      })
+    ]
+  });
+
+  assert(
+    thinFallbackWalk.readinessLevel === "not-ready" &&
+      thinFallbackWalk.readinessCopy.includes("Try Chelsea"),
+    "Thin neighborhood routes should say supply is weak and suggest a stronger nearby cluster."
+  );
 
   const neighborhoodReadiness = createNeighborhoodIntelligence(
     "nyc",
@@ -758,17 +928,44 @@ async function main() {
   const jamesCohanSource = gallerySourceCandidates.find(
     (source) => source.id === "source-james-cohan-tribeca"
   );
+  const chapterSource = gallerySourceCandidates.find(
+    (source) => source.id === "source-chapter-ny-chinatown"
+  );
+  const companySource = gallerySourceCandidates.find((source) => source.id === "source-company-les");
+  const derosiaSource = gallerySourceCandidates.find(
+    (source) => source.id === "source-derosia-chinatown"
+  );
+  const derekEllerSource = gallerySourceCandidates.find(
+    (source) => source.id === "source-derek-eller-tribeca"
+  );
+  const skarstedtSource = gallerySourceCandidates.find(
+    (source) => source.id === "source-skarstedt-ues"
+  );
 
   assert(staleMiguelAbreuSource, "Stale source fixture should exist.");
   assert(jamesCohanSource, "James Cohan source fixture should exist.");
+  assert(chapterSource, "Chapter NY source fixture should exist.");
+  assert(companySource, "Company Gallery source fixture should exist.");
+  assert(derosiaSource, "Derosia source fixture should exist.");
+  assert(derekEllerSource, "Derek Eller source fixture should exist.");
+  assert(skarstedtSource, "Skarstedt source fixture should exist.");
   assert(
     getGallerySourceEffectiveFreshness(staleMiguelAbreuSource, galleryReferenceNow) ===
       "stale-risk",
-    "Gallery data foundation should flag stale source candidates."
+    "Gallery data foundation should keep contradictory official-page date evidence out of live inventory."
   );
   assert(
     getGallerySourceEffectiveFreshness(jamesCohanSource, galleryReferenceNow) === "fresh",
     "Gallery data foundation should preserve fresh official source candidates."
+  );
+  assert(
+    [chapterSource, companySource, derosiaSource, derekEllerSource, skarstedtSource].every(
+      (source) =>
+        source?.preferredImportLane === "official-page-ready" &&
+        source.sourceFreshness === "fresh" &&
+        source.exhibitionsUrl.startsWith("https://")
+    ),
+    "New verified downtown and Upper East Side source candidates should be official-page-ready with fresh source checks."
   );
 
   const manualImportRecord = createGalleryImportRecord(

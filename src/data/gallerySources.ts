@@ -16,6 +16,45 @@ const tueSat11To6: GalleryHoursInterval[] = [
   { day: 6, opens: "11:00", closes: "18:00" }
 ];
 
+const tueSat12To6: GalleryHoursInterval[] = [
+  { day: 2, opens: "12:00", closes: "18:00" },
+  { day: 3, opens: "12:00", closes: "18:00" },
+  { day: 4, opens: "12:00", closes: "18:00" },
+  { day: 5, opens: "12:00", closes: "18:00" },
+  { day: 6, opens: "12:00", closes: "18:00" }
+];
+
+const tueFri10To6: GalleryHoursInterval[] = [
+  { day: 2, opens: "10:00", closes: "18:00" },
+  { day: 3, opens: "10:00", closes: "18:00" },
+  { day: 4, opens: "10:00", closes: "18:00" },
+  { day: 5, opens: "10:00", closes: "18:00" }
+];
+
+const monFri10To5: GalleryHoursInterval[] = [
+  { day: 1, opens: "10:00", closes: "17:00" },
+  { day: 2, opens: "10:00", closes: "17:00" },
+  { day: 3, opens: "10:00", closes: "17:00" },
+  { day: 4, opens: "10:00", closes: "17:00" },
+  { day: 5, opens: "10:00", closes: "17:00" }
+];
+
+const monFri10To6: GalleryHoursInterval[] = [
+  { day: 1, opens: "10:00", closes: "18:00" },
+  { day: 2, opens: "10:00", closes: "18:00" },
+  { day: 3, opens: "10:00", closes: "18:00" },
+  { day: 4, opens: "10:00", closes: "18:00" },
+  { day: 5, opens: "10:00", closes: "18:00" }
+];
+
+const monFri12To5: GalleryHoursInterval[] = [
+  { day: 1, opens: "12:00", closes: "17:00" },
+  { day: 2, opens: "12:00", closes: "17:00" },
+  { day: 3, opens: "12:00", closes: "17:00" },
+  { day: 4, opens: "12:00", closes: "17:00" },
+  { day: 5, opens: "12:00", closes: "17:00" }
+];
+
 const wedSat12To6: GalleryHoursInterval[] = [
   { day: 3, opens: "12:00", closes: "18:00" },
   { day: 4, opens: "12:00", closes: "18:00" },
@@ -170,6 +209,28 @@ export const gallerySourceCandidates: GallerySourceCandidate[] = [
     notes: "Nonprofit/project-space source; manual review preferred before importing."
   },
   {
+    id: "source-company-les",
+    galleryName: "Company Gallery",
+    galleryKind: "emerging",
+    areaId: "nyc",
+    neighborhood: "Lower East Side",
+    city: "New York",
+    address: "145 Elizabeth St, New York, NY",
+    coordinates: { latitude: 40.7191, longitude: -73.9947 },
+    websiteUrl: "https://companygallery.us",
+    exhibitionsUrl: "https://companygallery.us/exhibitions",
+    hoursUrl: "https://companygallery.us/exhibitions",
+    contactUrl: "https://companygallery.us/exhibitions",
+    sourceType: "commercial-gallery",
+    preferredImportLane: "official-page-ready",
+    sourceLegalStatus: "official-public-page",
+    sourceFreshness: "fresh",
+    lastCheckedAt: "2026-07-09T14:05:00-04:00",
+    confidence: 0.91,
+    defaultHours: monFri12To5,
+    notes: "Official exhibitions page lists three current Elizabeth Street shows through July 31, 2026 and summer Monday-Friday hours."
+  },
+  {
     id: "source-miguel-abreu-les",
     galleryName: "Miguel Abreu Gallery",
     galleryKind: "emerging",
@@ -189,7 +250,7 @@ export const gallerySourceCandidates: GallerySourceCandidate[] = [
     lastCheckedAt: "2026-05-29T09:00:00-04:00",
     confidence: 0.64,
     defaultHours: tueSat11To6,
-    notes: "Useful LES source but stale until checked again."
+    notes: "Official page still labels the Kate Mosher Hall show current, but its listed dates ended June 27, 2026; keep out of live inventory until a new on-view show is verified."
   },
   {
     id: "source-canal-projects-chinatown",
@@ -223,17 +284,83 @@ export const gallerySourceCandidates: GallerySourceCandidate[] = [
     address: "60 Walker St, New York, NY",
     coordinates: { latitude: 40.7187, longitude: -74.0054 },
     websiteUrl: "https://chapter-ny.com",
-    exhibitionsUrl: "https://chapter-ny.com/exhibitions",
-    hoursUrl: "https://chapter-ny.com/contact",
-    contactUrl: "https://chapter-ny.com/contact",
+    exhibitionsUrl: "https://chapter-ny.com/exhibitions/current/",
+    hoursUrl: "https://chapter-ny.com/contact/",
+    contactUrl: "https://chapter-ny.com/contact/",
     sourceType: "commercial-gallery",
-    preferredImportLane: "manual-seed",
+    preferredImportLane: "official-page-ready",
     sourceLegalStatus: "official-public-page",
-    sourceFreshness: "needs-review",
-    lastCheckedAt: "2026-06-17T09:00:00-04:00",
-    confidence: 0.7,
-    defaultHours: tueSat11To6,
-    notes: "Small-gallery source candidate close to Chinatown/Tribeca boundary."
+    sourceFreshness: "fresh",
+    lastCheckedAt: "2026-07-09T13:20:00-04:00",
+    confidence: 0.92,
+    defaultHours: tueFri10To6,
+    notes: "Official current and contact pages verify two Walker Street shows through July 31, 2026 and Tuesday-Friday summer hours."
+  },
+  {
+    id: "source-derosia-chinatown",
+    galleryName: "Derosia",
+    galleryKind: "emerging",
+    areaId: "nyc",
+    neighborhood: "Chinatown",
+    city: "New York",
+    address: "197 Grand St, 2W, New York, NY",
+    coordinates: { latitude: 40.7192, longitude: -73.9967 },
+    websiteUrl: "https://derosia.nyc",
+    exhibitionsUrl: "https://derosia.nyc/exhibitions",
+    hoursUrl: "https://derosia.nyc/exhibitions",
+    contactUrl: "https://derosia.nyc/exhibitions",
+    sourceType: "commercial-gallery",
+    preferredImportLane: "official-page-ready",
+    sourceLegalStatus: "official-public-page",
+    sourceFreshness: "fresh",
+    lastCheckedAt: "2026-07-09T13:35:00-04:00",
+    confidence: 0.9,
+    defaultHours: tueSat12To6,
+    notes: "Official exhibitions page lists Shuriya Davis as present through July 31, 2026 and includes Grand Street hours/address."
+  },
+  {
+    id: "source-derek-eller-tribeca",
+    galleryName: "Derek Eller Gallery",
+    galleryKind: "emerging",
+    areaId: "nyc",
+    neighborhood: "Tribeca",
+    city: "New York",
+    address: "38 Walker St, Ground Floor, New York, NY",
+    coordinates: { latitude: 40.7188, longitude: -74.0047 },
+    websiteUrl: "https://www.derekeller.com",
+    exhibitionsUrl: "https://www.derekeller.com/exhibitions",
+    hoursUrl: "https://www.derekeller.com/contact",
+    contactUrl: "https://www.derekeller.com/contact",
+    sourceType: "commercial-gallery",
+    preferredImportLane: "official-page-ready",
+    sourceLegalStatus: "official-public-page",
+    sourceFreshness: "fresh",
+    lastCheckedAt: "2026-07-09T13:40:00-04:00",
+    confidence: 0.91,
+    defaultHours: monFri10To6,
+    notes: "Official exhibitions and contact pages verify the Walker Street show through July 10, 2026 and July/August Monday-Friday hours."
+  },
+  {
+    id: "source-skarstedt-ues",
+    galleryName: "Skarstedt",
+    galleryKind: "blue-chip",
+    areaId: "nyc",
+    neighborhood: "Upper East Side",
+    city: "New York",
+    address: "20 E 79th St, New York, NY",
+    coordinates: { latitude: 40.7763, longitude: -73.9626 },
+    websiteUrl: "https://www.skarstedt.com",
+    exhibitionsUrl: "https://www.skarstedt.com/exhibitions/faces-figures2",
+    hoursUrl: "https://www.skarstedt.com/galleries",
+    contactUrl: "https://www.skarstedt.com/galleries",
+    sourceType: "commercial-gallery",
+    preferredImportLane: "official-page-ready",
+    sourceLegalStatus: "official-public-page",
+    sourceFreshness: "fresh",
+    lastCheckedAt: "2026-07-09T13:45:00-04:00",
+    confidence: 0.84,
+    defaultHours: monFri10To5,
+    notes: "Official page verifies Faces & Figures at New York - Upper East Side for Summer 2026; exact exhibition dates are not published."
   },
   {
     id: "source-transmitter-bushwick",

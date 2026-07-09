@@ -284,6 +284,7 @@ function WalkStopRow({
       ) : null}
       <Pressable
         accessibilityRole="link"
+        accessibilityLabel={`Open map for ${stop.exhibition.galleryName}`}
         onPress={() => {
           void Linking.openURL(stop.mapUrl);
         }}
@@ -475,6 +476,7 @@ function ExhibitionCard({
           ))}
           <Pressable
             accessibilityRole="link"
+            accessibilityLabel={`Open source listing for ${exhibition.title} at ${exhibition.galleryName}`}
             onPress={() => {
               void Linking.openURL(exhibition.externalUrl);
             }}
@@ -823,6 +825,7 @@ export function GalleryApp() {
             {walkPlan.routeMapUrl ? (
               <Pressable
                 accessibilityRole="link"
+                accessibilityLabel={`Open full ${walkPlan.neighborhood} walking route in maps`}
                 onPress={() => {
                   if (walkPlan.routeMapUrl) {
                     void Linking.openURL(walkPlan.routeMapUrl);
@@ -837,15 +840,23 @@ export function GalleryApp() {
           </View>
           <RoutePreview walkPlan={walkPlan} />
           <View style={styles.walkStops}>
-            {walkPlan.stops.map((stop, index) => (
-              <WalkStopRow
-                key={stop.exhibition.id}
-                stop={stop}
-                leg={index > 0 ? walkPlan.legs[index - 1] : undefined}
-                isStart={walkPlan.startStopId === stop.exhibition.id}
-                isNext={walkPlan.nextStopId === stop.exhibition.id}
-              />
-            ))}
+            {walkPlan.stops.length === 0 ? (
+              <View style={styles.emptyRouteState}>
+                <Text style={styles.emptyRouteText}>
+                  No walk-ready route yet. Try another nearby cluster or switch route mode.
+                </Text>
+              </View>
+            ) : (
+              walkPlan.stops.map((stop, index) => (
+                <WalkStopRow
+                  key={stop.exhibition.id}
+                  stop={stop}
+                  leg={index > 0 ? walkPlan.legs[index - 1] : undefined}
+                  isStart={walkPlan.startStopId === stop.exhibition.id}
+                  isNext={walkPlan.nextStopId === stop.exhibition.id}
+                />
+              ))
+            )}
           </View>
         </View>
 
@@ -1239,7 +1250,8 @@ const styles = StyleSheet.create({
   },
   routePreviewStop: {
     marginRight: spacing.md,
-    width: 132
+    minHeight: 86,
+    width: 124
   },
   routePreviewNodeRow: {
     alignItems: "center",
@@ -1290,6 +1302,19 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md
+  },
+  emptyRouteState: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    padding: spacing.md
+  },
+  emptyRouteText: {
+    color: colors.mutedInk,
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 18
   },
   walkStop: {
     alignItems: "center",
