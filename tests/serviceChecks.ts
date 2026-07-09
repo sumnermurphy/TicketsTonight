@@ -473,6 +473,12 @@ async function main() {
     savedIds: ["nyc-afterimage-index", "nyc-material-weather"],
     referenceNow: galleryReferenceNow
   });
+  const chelseaTwoHourWalk = createGalleryWalkPlan({
+    areaId: "nyc",
+    mode: "two-hour",
+    neighborhood: "Chelsea",
+    referenceNow: galleryReferenceNow
+  });
   const nycOpeningWalk = createGalleryWalkPlan({
     areaId: "nyc",
     mode: "opening-night",
@@ -525,6 +531,15 @@ async function main() {
       chelseaWalk.stops.every((stop) => stop.mapUrl.includes("google.com/maps/search")) &&
       chelseaWalk.guidance.includes("Start"),
     "Map Walk UX should expose route legs, full-route map links, stop map links, and start guidance."
+  );
+  assert(
+    chelseaTwoHourWalk.stops.length >= 3 &&
+      chelseaTwoHourWalk.routeMapUrl?.includes("travelmode=walking") &&
+      chelseaTwoHourWalk.routeMapUrl.includes("origin=") &&
+      chelseaTwoHourWalk.routeMapUrl.includes("destination=") &&
+      chelseaTwoHourWalk.routeMapUrl.includes("waypoints=") &&
+      !chelseaTwoHourWalk.routeMapUrl.includes(" "),
+    "Full-route map links should encode origin, destination, and waypoint addresses for multi-stop walks."
   );
   const routeOrderingWalk = createGalleryWalkPlan({
     areaId: "nyc",
@@ -684,9 +699,11 @@ async function main() {
       groupedStop?.groupedExhibitionCount === 3 &&
       groupedStop.exhibitions.map((exhibition) => exhibition.title).join("|") ===
         "Grouped Gallery First|Grouped Gallery Second|Grouped Gallery Third" &&
+      groupedStop.mapUrl.includes("Grouped%20Gallery") &&
+      groupedStop.mapUrl.includes("100%20Grouped%20St") &&
       groupedStop.reasons.includes("Grouped 3 shows here") &&
       groupedStopWalk.readinessCopy.includes("only 2 unique gallery stops"),
-    "Same-gallery exhibitions should become one route stop while preserving all grouped show titles and thin-route honesty."
+    "Same-gallery exhibitions should become one route stop while preserving all grouped show titles, map anchoring, and thin-route honesty."
   );
 
   const verifiedPreferenceWalk = createGalleryWalkPlan({

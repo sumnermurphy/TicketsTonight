@@ -97,6 +97,12 @@ const walkModeOptions: GalleryWalkMode[] = [
   "last-chance"
 ];
 const lensOptions: GalleryLens[] = ["all", "open-now", "opening-tonight", "last-chance"];
+const walkModeDetails: Record<GalleryWalkMode, string> = {
+  "quick-loop": "Fastest good loop",
+  "two-hour": "Deeper neighborhood pass",
+  "opening-night": "Timed around receptions",
+  "last-chance": "Closing soon first"
+};
 
 function getDatePart(iso: string, index: number): string {
   return iso.match(/^(\d{4})-(\d{2})-(\d{2})T?(\d{2})?:?(\d{2})?/)?.[index] ?? "";
@@ -211,6 +217,66 @@ function Metric({
   );
 }
 
+function SignalCard({
+  label,
+  value,
+  detail,
+  tone = "neutral"
+}: {
+  label: string;
+  value: string | number;
+  detail: string;
+  tone?: "neutral" | "good" | "warn" | "dark";
+}) {
+  return (
+    <View
+      style={[
+        styles.signalCard,
+        tone === "good" ? styles.goodSignalCard : null,
+        tone === "warn" ? styles.warnSignalCard : null,
+        tone === "dark" ? styles.darkSignalCard : null
+      ]}
+    >
+      <Text style={[styles.signalValue, tone === "dark" ? styles.darkSignalText : null]}>
+        {value}
+      </Text>
+      <Text style={[styles.signalLabel, tone === "dark" ? styles.darkSignalText : null]}>
+        {label}
+      </Text>
+      <Text style={[styles.signalDetail, tone === "dark" ? styles.darkSignalDetail : null]}>
+        {detail}
+      </Text>
+    </View>
+  );
+}
+
+function RouteModeButton({
+  label,
+  detail,
+  active,
+  onPress
+}: {
+  label: string;
+  detail: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={[styles.routeModeButton, active ? styles.activeRouteModeButton : null]}
+    >
+      <Text style={[styles.routeModeLabel, active ? styles.activeRouteModeLabel : null]}>
+        {label}
+      </Text>
+      <Text style={[styles.routeModeDetail, active ? styles.activeRouteModeDetail : null]}>
+        {detail}
+      </Text>
+    </Pressable>
+  );
+}
+
 function OpeningRadarItem({ exhibition }: { exhibition: GalleryExhibition }) {
   const event = getTonightEvent(exhibition);
 
@@ -304,6 +370,7 @@ function WalkStopRow({
         style={styles.mapIconButton}
       >
         <MapPin size={16} color={colors.ink} />
+        <Text style={styles.mapIconButtonText}>Map</Text>
       </Pressable>
     </View>
   );
@@ -417,11 +484,9 @@ function ExhibitionCard({
       <View style={styles.cardBody}>
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleBlock}>
-            <Text style={styles.eyebrow}>{exhibition.neighborhood}</Text>
+            <Text style={styles.cardGalleryName}>{exhibition.galleryName}</Text>
             <Text style={styles.cardTitle}>{exhibition.title}</Text>
-            <Text style={styles.cardMeta}>
-              {exhibition.artists.join(", ")} at {exhibition.galleryName}
-            </Text>
+            <Text style={styles.cardMeta}>{exhibition.artists.join(", ")}</Text>
           </View>
           <View style={styles.statusBadge}>
             <Clock size={13} color={colors.teal} />
@@ -431,10 +496,14 @@ function ExhibitionCard({
 
         <Text style={styles.cardDescription}>{exhibition.description}</Text>
 
-        <View style={styles.factRow}>
+        <View style={styles.cardSignalRow}>
+          <Text style={styles.factText}>{exhibition.neighborhood}</Text>
           <Text style={styles.factText}>{formatShortDate(exhibition.opensAt)} to {formatShortDate(exhibition.closesAt)}</Text>
-          <Text style={styles.factText}>{getClosingCopy(exhibition)}</Text>
-          {openingTonight ? <Text style={styles.factText}>Social tonight</Text> : null}
+          <Text style={[styles.factText, getDaysUntilGalleryCloses(exhibition, referenceNow) <= 7 ? styles.urgentFactText : null]}>
+            {getClosingCopy(exhibition)}
+          </Text>
+          {openingTonight ? <Text style={styles.openingFactText}>Opening tonight</Text> : null}
+          <Text style={styles.trustFactText}>{trust.label}</Text>
         </View>
 
         <View style={styles.reasonRow}>
@@ -447,7 +516,6 @@ function ExhibitionCard({
         </View>
 
         <View style={styles.sourceRow}>
-          <Text style={styles.sourceText}>{trust.label}</Text>
           <Text style={styles.sourceText}>{getFreshnessCopy(exhibition)}</Text>
           <Text style={styles.sourceText}>{getSourceCopy(exhibition)}</Text>
           <Text style={styles.sourceText}>{exhibition.mediums.map((medium) => mediumLabels[medium]).join(", ")}</Text>
@@ -632,6 +700,35 @@ export function GalleryApp() {
     () => Array.from(new Set(areaInventory.flatMap((exhibition) => exhibition.mediums))),
     [areaInventory]
   );
+  const openNowCount = useMemo(
+    () =>
+      areaInventory.filter(
+        (exhibition) => getGalleryVisitStatus(exhibition, referenceNow) === "open-now"
+      ).length,
+    [areaInventory]
+  );
+  const closingSoonCount = useMemo(
+    () =>
+      areaInventory.filter((exhibition) => getDaysUntilGalleryCloses(exhibition, referenceNow) <= 7)
+        .length,
+    [areaInventory]
+  );
+  const walkReadyCount = neighborhoodIntelligence.filter((item) => item.canSupportWalk).length;
+  const selectedNeighborhoodInsight = selectedNeighborhood
+    ? neighborhoodIntelligence.find((item) => item.neighborhood === selectedNeighborhood)
+    : undefined;
+  const routeScopeLabel = selectedNeighborhood ?? walkPlan.neighborhood;
+  const activeFilterCopy = [
+    activeLens !== "all" ? lensLabels[activeLens] : undefined,
+    selectedMedium ? mediumLabels[selectedMedium] : undefined,
+    query.trim() ? `Search: ${query.trim()}` : undefined
+  ]
+    .filter(Boolean)
+    .join(" - ");
+  const discoveryLead = selectedNeighborhoodInsight
+    ? `${selectedNeighborhoodInsight.exhibitionCount} shows, ${selectedNeighborhoodInsight.openNowCount} open now`
+    : `${walkReadyCount} walkable clusters`;
+  const tonightPick = openingTonight[0] ?? visibleExhibitions[0];
 
   function resetMarket(areaId: GalleryAreaId) {
     setSelectedAreaId(areaId);
@@ -687,13 +784,22 @@ export function GalleryApp() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.headerBand}>
           <View style={styles.headerTopline}>
-            <Text style={styles.eyebrow}>{getAreaRoleCopy(selectedAreaId)}</Text>
+            <Text style={styles.heroEyebrow}>{getAreaRoleCopy(selectedAreaId)}</Text>
             <Text style={styles.marketClock}>Demo clock {formatShortDate(referenceNow)}, {formatShortTime(referenceNow)}</Text>
           </View>
-          <Text style={styles.title}>Gallery Walks</Text>
-          <Text style={styles.subtitle}>
-            {selectedArea?.name ?? "Market"} discovery tuned for what is open, closing, social, and walkable.
-          </Text>
+          <View style={styles.heroTitleRow}>
+            <View style={styles.heroTitleBlock}>
+              <Text style={styles.title}>Tonight in {selectedArea?.name ?? "the city"}</Text>
+              <Text style={styles.subtitle}>
+                Open-now gallery discovery, verified source trust, and a practical walk route for {routeScopeLabel}.
+              </Text>
+            </View>
+            <View style={styles.heroRouteCard}>
+              <Text style={styles.heroRouteLabel}>Suggested route</Text>
+              <Text style={styles.heroRouteTitle}>{walkPlan.title}</Text>
+              <Text style={styles.heroRouteMeta}>{walkPlan.summary}</Text>
+            </View>
+          </View>
 
           <View style={styles.areaRow}>
             {galleryAreas.map((area) => (
@@ -716,37 +822,88 @@ export function GalleryApp() {
               style={styles.searchInput}
             />
           </View>
-        </View>
 
-        <View style={styles.marketSnapshot}>
-          <Metric label="exhibitions" value={sourceTrust.exhibitionCount} tone="good" />
-          <Metric label="verified" value={sourceTrust.verifiedExhibitionCount} tone="good" />
-          <Metric
-            label="fixture/demo"
-            value={sourceTrust.fixtureExhibitionCount}
-            tone={sourceTrust.fixtureExhibitionCount > 0 ? "warn" : "good"}
-          />
-          <Metric label="openings tonight" value={sourceTrust.openingCount} tone="good" />
-          <Metric
-            label="needs review"
-            value={sourceTrust.needsReviewExhibitionCount}
-            tone={sourceTrust.needsReviewExhibitionCount > 0 ? "warn" : "good"}
-          />
-        </View>
+          <View style={styles.tonightBrief}>
+            <SignalCard
+              label="Open now"
+              value={openNowCount}
+              detail={`${sourceTrust.exhibitionCount} total listings`}
+              tone="dark"
+            />
+            <SignalCard
+              label="Verified"
+              value={sourceTrust.verifiedExhibitionCount}
+              detail="Official-page checked"
+              tone="good"
+            />
+            <SignalCard
+              label="Demo/review"
+              value={sourceTrust.fixtureExhibitionCount + sourceTrust.needsReviewExhibitionCount}
+              detail={`${sourceTrust.fixtureExhibitionCount} demo, ${sourceTrust.needsReviewExhibitionCount} review`}
+              tone={sourceTrust.fixtureExhibitionCount + sourceTrust.needsReviewExhibitionCount > 0 ? "warn" : "good"}
+            />
+            <SignalCard
+              label="Walkable"
+              value={walkReadyCount}
+              detail={discoveryLead}
+              tone="good"
+            />
+            <SignalCard
+              label="Opening"
+              value={sourceTrust.openingCount}
+              detail="Social signals tonight"
+              tone={sourceTrust.openingCount > 0 ? "warn" : "neutral"}
+            />
+            <SignalCard
+              label="Closing soon"
+              value={closingSoonCount}
+              detail="Within 7 days"
+              tone={closingSoonCount > 0 ? "warn" : "neutral"}
+            />
+          </View>
 
-        <View style={styles.statusLine}>
-          <Check size={16} color={colors.teal} />
-          <Text style={styles.statusLineText}>
-            {selectedAreaId === "nyc"
-              ? `NYC now mixes ${sourceTrust.verifiedExhibitionCount} manually verified official-page listings with ${sourceTrust.fixtureExhibitionCount} fixture/demo listings still marked as demo.`
-              : `${selectedArea?.name ?? "Market"} has ${sourceTrust.verifiedExhibitionCount} verified listings and ${sourceTrust.fixtureExhibitionCount} fixture/demo listings; thin walks are labeled honestly.`} Source directory: {dataAudit.sourceCount} candidates, {dataAudit.officialLinkCoveragePercent}% official links.
-          </Text>
+          <View style={styles.trustBrief}>
+            <View style={styles.trustBriefIcon}>
+              <Check size={16} color={colors.teal} />
+            </View>
+            <Text style={styles.trustBriefText}>
+              {selectedAreaId === "nyc"
+                ? `NYC mixes ${sourceTrust.verifiedExhibitionCount} manually verified official-page listings with ${sourceTrust.fixtureExhibitionCount} fixture/demo listings still marked as demo.`
+                : `${selectedArea?.name ?? "Market"} has ${sourceTrust.verifiedExhibitionCount} verified listings and ${sourceTrust.fixtureExhibitionCount} fixture/demo listings; thin walks are labeled honestly.`} Source directory: {dataAudit.sourceCount} candidates, {dataAudit.officialLinkCoveragePercent}% official links.
+            </Text>
+          </View>
+
+          {tonightPick ? (
+            <View style={styles.tonightPick}>
+              <View style={styles.tonightPickCopy}>
+                <Text style={styles.tonightPickLabel}>Start browsing here</Text>
+                <Text style={styles.tonightPickTitle}>{tonightPick.title}</Text>
+                <Text style={styles.tonightPickMeta}>
+                  {tonightPick.galleryName} - {tonightPick.neighborhood} - {galleryVisitStatusLabels[getGalleryVisitStatus(tonightPick, referenceNow)]}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel={`Open source listing for ${tonightPick.title}`}
+                onPress={() => {
+                  void Linking.openURL(tonightPick.externalUrl);
+                }}
+                style={styles.heroLinkButton}
+              >
+                <ExternalLink size={14} color={colors.paper} />
+                <Text style={styles.heroLinkButtonText}>Open link</Text>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.sectionHeader}>
           <View>
             <Text style={styles.sectionTitle}>Neighborhood Intelligence</Text>
-            <Text style={styles.sectionSubtitle}>{neighborhoodIntelligence.filter((item) => item.canSupportWalk).length} clusters can support a walk today</Text>
+            <Text style={styles.sectionSubtitle}>
+              {walkReadyCount} clusters can support a walk today
+              {selectedNeighborhood ? ` - planning ${selectedNeighborhood}` : ""}
+            </Text>
           </View>
           <SlidersHorizontal size={19} color={colors.ink} />
         </View>
@@ -756,8 +913,9 @@ export function GalleryApp() {
             onPress={() => setSelectedNeighborhood(undefined)}
             style={[styles.neighborhoodCard, !selectedNeighborhood ? styles.selectedNeighborhoodCard : null]}
           >
+            {!selectedNeighborhood ? <Text style={styles.selectedMiniLabel}>Active view</Text> : null}
             <Text style={styles.neighborhoodName}>All clusters</Text>
-            <Text style={styles.neighborhoodMeta}>{areaInventory.length} total listings</Text>
+            <Text style={styles.neighborhoodMeta}>{areaInventory.length} listings - {openNowCount} open now</Text>
             <Text style={styles.neighborhoodReason}>Scan the full market</Text>
           </Pressable>
           {neighborhoodIntelligence.map((item) => (
@@ -769,16 +927,29 @@ export function GalleryApp() {
                 selectedNeighborhood === item.neighborhood ? styles.selectedNeighborhoodCard : null
               ]}
             >
+              {selectedNeighborhood === item.neighborhood ? (
+                <Text style={styles.selectedMiniLabel}>Planning here</Text>
+              ) : null}
               <Text style={styles.neighborhoodName}>{item.neighborhood}</Text>
               <Text style={styles.neighborhoodMeta}>
                 {item.exhibitionCount} shows - {item.openNowCount} open now
               </Text>
               <Text style={styles.neighborhoodReason}>{item.topReason}</Text>
+              <View style={styles.neighborhoodFooter}>
+                <Text style={styles.neighborhoodFooterText}>
+                  {item.canSupportWalk ? "Walk-ready" : "Thin today"}
+                </Text>
+              </View>
             </Pressable>
           ))}
         </ScrollView>
 
         <View style={styles.filterBlock}>
+          <View style={styles.activeFilterBar}>
+            <Text style={styles.activeFilterText}>
+              Showing {activeFilterCopy || "all shows"} in {selectedNeighborhood ?? selectedArea?.name ?? "this market"}
+            </Text>
+          </View>
           <View style={styles.filterRow}>
             {lensOptions.map((lens) => (
               <ChipButton
@@ -813,18 +984,33 @@ export function GalleryApp() {
           <View style={styles.sectionHeader}>
             <View>
               <Text style={styles.sectionTitle}>Map Walk Planner</Text>
-              <Text style={styles.sectionSubtitle}>{walkPlan.summary}</Text>
+              <Text style={styles.sectionSubtitle}>
+                {selectedNeighborhood ?? walkPlan.neighborhood} - {galleryWalkModeLabels[walkMode]}
+              </Text>
             </View>
             <Route size={21} color={colors.teal} />
           </View>
-          <View style={styles.filterRow}>
+          <View style={styles.routeCommand}>
+            <View style={styles.routeCommandCopy}>
+              <Text style={styles.routeCommandKicker}>Recommended walk</Text>
+              <Text style={styles.routeCommandTitle}>{walkPlan.summary}</Text>
+              <Text style={styles.routeCommandMeta}>{walkPlan.guidance}</Text>
+            </View>
+            <View style={styles.routeQualityStack}>
+              <Text style={styles.routeQualityLabel}>{walkPlan.readinessLevel}</Text>
+              <Text style={styles.routeQualityMeta}>
+                {walkPlan.canStartNow ? "Can start now" : "Timing check needed"}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.routeModeGrid}>
             {walkModeOptions.map((mode) => (
-              <ChipButton
+              <RouteModeButton
                 key={mode}
                 label={galleryWalkModeLabels[mode]}
+                detail={walkModeDetails[mode]}
                 active={walkMode === mode}
                 onPress={() => setWalkMode(mode)}
-                compact
               />
             ))}
           </View>
@@ -835,10 +1021,10 @@ export function GalleryApp() {
             <Metric label="saved stops" value={walkPlan.savedStopCount} tone={walkPlan.savedStopCount > 0 ? "good" : "neutral"} />
           </View>
           <View style={styles.routeGuidance}>
-            <Text style={styles.guidanceTitle}>{walkPlan.guidance}</Text>
+            <Text style={styles.guidanceTitle}>Why this route works</Text>
             <Text style={styles.guidanceCopy}>{walkPlan.readinessCopy}</Text>
             <View style={styles.routeReasonRow}>
-              {walkPlan.selectionReasons.slice(0, 5).map((reason) => (
+              {walkPlan.selectionReasons.slice(0, 4).map((reason) => (
                 <Text key={reason} style={styles.routeReasonPill}>{reason}</Text>
               ))}
             </View>
@@ -970,7 +1156,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl
   },
   headerBand: {
-    backgroundColor: colors.paper,
+    backgroundColor: "#FBF7F2",
     borderBottomColor: colors.line,
     borderBottomWidth: 1,
     paddingHorizontal: spacing.lg,
@@ -984,6 +1170,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: spacing.md
   },
+  heroEyebrow: {
+    color: colors.coralDark,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0,
+    textTransform: "uppercase"
+  },
   eyebrow: {
     color: colors.coralDark,
     fontSize: 11,
@@ -996,17 +1189,57 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700"
   },
+  heroTitleRow: {
+    alignItems: "stretch",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md
+  },
+  heroTitleBlock: {
+    flex: 1,
+    minWidth: 280
+  },
   title: {
     color: colors.ink,
-    fontSize: 34,
+    fontSize: 36,
     fontWeight: "900",
-    letterSpacing: 0
+    letterSpacing: 0,
+    lineHeight: 40
   },
   subtitle: {
     color: colors.mutedInk,
     fontSize: 15,
     lineHeight: 21,
+    marginTop: spacing.sm,
     maxWidth: 680
+  },
+  heroRouteCard: {
+    backgroundColor: colors.ink,
+    borderRadius: radii.md,
+    flexGrow: 1,
+    flexShrink: 1,
+    justifyContent: "center",
+    minWidth: 250,
+    padding: spacing.lg
+  },
+  heroRouteLabel: {
+    color: "#DEB6B2",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  heroRouteTitle: {
+    color: colors.paper,
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: spacing.sm
+  },
+  heroRouteMeta: {
+    color: "#DAD8D0",
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
+    marginTop: spacing.xs
   },
   areaRow: {
     flexDirection: "row",
@@ -1056,6 +1289,131 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     minWidth: 0
+  },
+  tonightBrief: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm
+  },
+  signalCard: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexGrow: 1,
+    minWidth: 132,
+    padding: spacing.md
+  },
+  goodSignalCard: {
+    backgroundColor: colors.tealSoft,
+    borderColor: "#A6D5CF"
+  },
+  warnSignalCard: {
+    backgroundColor: "#FFF2D7",
+    borderColor: "#E8C77A"
+  },
+  darkSignalCard: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink
+  },
+  signalValue: {
+    color: colors.ink,
+    fontSize: 25,
+    fontWeight: "900"
+  },
+  signalLabel: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "900",
+    marginTop: spacing.xs,
+    textTransform: "uppercase"
+  },
+  signalDetail: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 16,
+    marginTop: spacing.xs
+  },
+  darkSignalText: {
+    color: colors.paper
+  },
+  darkSignalDetail: {
+    color: "#DAD8D0"
+  },
+  trustBrief: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.sm,
+    padding: spacing.md
+  },
+  trustBriefIcon: {
+    alignItems: "center",
+    backgroundColor: colors.tealSoft,
+    borderRadius: radii.pill,
+    height: 30,
+    justifyContent: "center",
+    width: 30
+  },
+  trustBriefText: {
+    color: colors.mutedInk,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18
+  },
+  tonightPick: {
+    alignItems: "center",
+    backgroundColor: "#F1E8DC",
+    borderColor: "#D8C4AA",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+    justifyContent: "space-between",
+    padding: spacing.md
+  },
+  tonightPickCopy: {
+    flex: 1,
+    minWidth: 230
+  },
+  tonightPickLabel: {
+    color: colors.coralDark,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  tonightPickTitle: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "900",
+    marginTop: spacing.xs
+  },
+  tonightPickMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17,
+    marginTop: spacing.xs
+  },
+  heroLinkButton: {
+    alignItems: "center",
+    backgroundColor: colors.ink,
+    borderRadius: radii.md,
+    flexDirection: "row",
+    gap: spacing.xs,
+    minHeight: 36,
+    paddingHorizontal: spacing.md
+  },
+  heroLinkButtonText: {
+    color: colors.paper,
+    fontSize: 12,
+    fontWeight: "900"
   },
   marketSnapshot: {
     flexDirection: "row",
@@ -1147,7 +1505,21 @@ const styles = StyleSheet.create({
   },
   selectedNeighborhoodCard: {
     borderColor: colors.teal,
-    borderWidth: 2
+    borderWidth: 2,
+    backgroundColor: colors.tealSoft
+  },
+  selectedMiniLabel: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.ink,
+    borderRadius: radii.pill,
+    color: colors.paper,
+    fontSize: 10,
+    fontWeight: "900",
+    marginBottom: spacing.sm,
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    textTransform: "uppercase"
   },
   neighborhoodName: {
     color: colors.ink,
@@ -1167,10 +1539,36 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: spacing.md
   },
+  neighborhoodFooter: {
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    marginTop: spacing.md,
+    paddingTop: spacing.sm
+  },
+  neighborhoodFooterText: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
   filterBlock: {
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg
+  },
+  activeFilterBar: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
+  },
+  activeFilterText: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17
   },
   filterRow: {
     flexDirection: "row",
@@ -1189,6 +1587,102 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.lg,
     marginTop: spacing.xl,
     paddingBottom: spacing.lg
+  },
+  routeCommand: {
+    alignItems: "stretch",
+    backgroundColor: colors.ink,
+    borderRadius: radii.md,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+    justifyContent: "space-between",
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.lg
+  },
+  routeCommandCopy: {
+    flex: 1,
+    minWidth: 240
+  },
+  routeCommandKicker: {
+    color: "#DEB6B2",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  routeCommandTitle: {
+    color: colors.paper,
+    fontSize: 22,
+    fontWeight: "900",
+    lineHeight: 27,
+    marginTop: spacing.sm
+  },
+  routeCommandMeta: {
+    color: "#DAD8D0",
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 19,
+    marginTop: spacing.sm
+  },
+  routeQualityStack: {
+    backgroundColor: "#252C35",
+    borderColor: "#3B4652",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    justifyContent: "center",
+    minWidth: 150,
+    padding: spacing.md
+  },
+  routeQualityLabel: {
+    color: colors.paper,
+    fontSize: 15,
+    fontWeight: "900",
+    textTransform: "capitalize"
+  },
+  routeQualityMeta: {
+    color: "#DAD8D0",
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: spacing.xs
+  },
+  routeModeGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md
+  },
+  routeModeButton: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexGrow: 1,
+    minHeight: 58,
+    minWidth: 148,
+    padding: spacing.md
+  },
+  activeRouteModeButton: {
+    backgroundColor: colors.teal,
+    borderColor: colors.teal
+  },
+  routeModeLabel: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  activeRouteModeLabel: {
+    color: colors.paper
+  },
+  routeModeDetail: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "800",
+    lineHeight: 15,
+    marginTop: spacing.xs
+  },
+  activeRouteModeDetail: {
+    color: "#E6F3F1"
   },
   walkStats: {
     flexDirection: "row",
@@ -1446,9 +1940,16 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: radii.md,
     borderWidth: 1,
-    height: 36,
+    gap: 2,
+    minHeight: 42,
     justifyContent: "center",
-    width: 36
+    paddingHorizontal: spacing.sm,
+    width: 48
+  },
+  mapIconButtonText: {
+    color: colors.ink,
+    fontSize: 10,
+    fontWeight: "900"
   },
   savedPill: {
     alignItems: "center",
@@ -1568,6 +2069,12 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0
   },
+  cardGalleryName: {
+    color: colors.coralDark,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
   cardTitle: {
     color: colors.ink,
     fontSize: 20,
@@ -1601,6 +2108,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 20
   },
+  cardSignalRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm
+  },
   factRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1612,6 +2124,30 @@ const styles = StyleSheet.create({
     color: colors.mutedInk,
     fontSize: 12,
     fontWeight: "800",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  urgentFactText: {
+    backgroundColor: "#FFE8E2",
+    color: colors.coralDark
+  },
+  openingFactText: {
+    backgroundColor: "#EFE8F4",
+    borderRadius: radii.pill,
+    color: colors.plum,
+    fontSize: 12,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  trustFactText: {
+    backgroundColor: colors.tealSoft,
+    borderRadius: radii.pill,
+    color: colors.teal,
+    fontSize: 12,
+    fontWeight: "900",
+    overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
   },
