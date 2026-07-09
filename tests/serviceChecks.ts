@@ -1,4 +1,9 @@
 import { areas, categoryLabels } from "../src/data/catalog";
+import {
+  galleryAreas,
+  galleryExhibitions,
+  galleryNeighborhoods
+} from "../src/data/galleryCatalog";
 import { discoveryMarketPlans } from "../src/data/discoveryPlans";
 import { localSourceCandidates } from "../src/data/localSourceCandidates";
 import {
@@ -35,6 +40,19 @@ import {
   getCoverageAuditStatusCopy
 } from "../src/services/coverageAudit";
 import { importHtmlCalendarEvents } from "../src/services/htmlCalendarImporter";
+import {
+  createGallerySourceTrustSummary,
+  createGallerySubmissionDraft,
+  createGalleryWalkPlan,
+  createNeighborhoodIntelligence,
+  filterGalleryExhibitions,
+  getDaysUntilGalleryCloses,
+  getGalleryVisitStatus,
+  getGalleryWhyGoReasons,
+  getLastChanceGalleryAlerts,
+  getSavedGalleryIdsFromLog,
+  upsertGalleryLogEntry
+} from "../src/services/galleryDiscovery";
 import { createTicketmasterProviderDiagnostics } from "../src/services/providerDiagnostics";
 import { checkoutBackend } from "../src/services/checkoutBackend";
 import {
@@ -225,6 +243,254 @@ async function main() {
       "concert|dj|dance|ballet|opera|play|theater|comedy|variety",
     "Discovery categories should cover concerts, DJ sets, dance, ballet, opera, plays, theater, comedy, and adjacent live events."
   );
+
+  const galleryReferenceNow = "2026-07-09T15:30:00-04:00";
+  const galleryAreaIds = galleryAreas.map((area) => area.id);
+
+  assert(
+    galleryAreaIds.join("|") === "nyc|la|hudson",
+    "Gallery discovery should stay scoped to New York, Los Angeles, and Hudson."
+  );
+
+  for (const [areaId, expectedNeighborhoods] of [
+    ["nyc", ["Chelsea", "Tribeca", "Lower East Side", "Chinatown", "Brooklyn/Bushwick"]],
+    ["la", ["Culver City", "Hollywood/Sycamore", "DTLA", "Chinatown", "West Hollywood"]],
+    ["hudson", ["Warren Street", "Kingston", "Beacon"]]
+  ] as const) {
+    const marketNeighborhoods = galleryNeighborhoods
+      .filter((neighborhood) => neighborhood.areaId === areaId)
+      .map((neighborhood) => neighborhood.name);
+
+    for (const expectedNeighborhood of expectedNeighborhoods) {
+      assert(
+        marketNeighborhoods.includes(expectedNeighborhood),
+        `Gallery neighborhoods should include ${expectedNeighborhood} for ${areaId}.`
+      );
+    }
+  }
+
+  const nycTrust = createGallerySourceTrustSummary("nyc", galleryExhibitions, galleryReferenceNow);
+  const laTrust = createGallerySourceTrustSummary("la", galleryExhibitions, galleryReferenceNow);
+  const hudsonTrust = createGallerySourceTrustSummary(
+    "hudson",
+    galleryExhibitions,
+    galleryReferenceNow
+  );
+
+  assert(
+    nycTrust.exhibitionCount >= 10 && laTrust.exhibitionCount >= 8 && hudsonTrust.exhibitionCount >= 6,
+    "Gallery source trust should report enough market inventory for NYC, LA, and Hudson."
+  );
+  assert(
+    nycTrust.openingCount >= 3 && laTrust.openingCount >= 1 && hudsonTrust.openingCount >= 1,
+    "Gallery source trust should count opening-night/social supply by market."
+  );
+  assert(
+    nycTrust.hoursCoveragePercent === 100 &&
+      nycTrust.addressCoveragePercent === 100 &&
+      nycTrust.externalLinkCoveragePercent === 100,
+    "Gallery source trust should audit hours, address, and external-link coverage."
+  );
+  assert(
+    nycTrust.staleSourceRiskCount > 0 && laTrust.staleSourceRiskCount > 0 && hudsonTrust.staleSourceRiskCount > 0,
+    "Gallery source trust should expose stale-source risk instead of hiding it."
+  );
+
+  const galleryStatuses = new Set(
+    galleryExhibitions.map((exhibition) => getGalleryVisitStatus(exhibition, galleryReferenceNow))
+  );
+
+  assert(galleryStatuses.has("open-now"), "Gallery discovery should identify open-now shows.");
+  assert(galleryStatuses.has("opens-later"), "Gallery discovery should identify opens-later shows.");
+  assert(galleryStatuses.has("closed-today"), "Gallery discovery should identify closed-today shows.");
+
+  const nycOpeningTonight = filterGalleryExhibitions(galleryExhibitions, {
+    areaId: "nyc",
+    openingOnly: true,
+    referenceNow: galleryReferenceNow
+  });
+  const nycAllOnView = filterGalleryExhibitions(galleryExhibitions, {
+    areaId: "nyc",
+    referenceNow: galleryReferenceNow
+  });
+
+  assert(
+    nycOpeningTonight.length > 0 && nycOpeningTonight.length < nycAllOnView.length,
+    "Opening Night Radar should separate social events tonight from exhibitions simply on view."
+  );
+
+  const nycOpenNow = filterGalleryExhibitions(galleryExhibitions, {
+    areaId: "nyc",
+    openOnly: true,
+    referenceNow: galleryReferenceNow
+  });
+
+  assert(
+    nycOpenNow.every(
+      (exhibition) => getGalleryVisitStatus(exhibition, galleryReferenceNow) === "open-now"
+    ),
+    "Open-now filtering should be based on gallery hours."
+  );
+
+  const chelseaWalk = createGalleryWalkPlan({
+    areaId: "nyc",
+    mode: "quick-loop",
+    neighborhood: "Chelsea",
+    savedIds: ["nyc-afterimage-index", "nyc-material-weather"],
+    referenceNow: galleryReferenceNow
+  });
+  const nycOpeningWalk = createGalleryWalkPlan({
+    areaId: "nyc",
+    mode: "opening-night",
+    referenceNow: galleryReferenceNow
+  });
+  const nycLastChanceWalk = createGalleryWalkPlan({
+    areaId: "nyc",
+    mode: "last-chance",
+    referenceNow: galleryReferenceNow
+  });
+  const hudsonWalk = createGalleryWalkPlan({
+    areaId: "hudson",
+    mode: "two-hour",
+    neighborhood: "Warren Street",
+    referenceNow: galleryReferenceNow
+  });
+
+  assert(
+    chelseaWalk.stops.length === 2 &&
+      chelseaWalk.totalMinutes <= 45 &&
+      chelseaWalk.savedStopCount === 2,
+    "Gallery Walk Builder should create a 45-minute route from saved exhibitions."
+  );
+  assert(
+    nycOpeningWalk.stops.length > 0 &&
+      nycOpeningWalk.stops.every((stop) =>
+        filterGalleryExhibitions(galleryExhibitions, {
+          areaId: "nyc",
+          openingOnly: true,
+          referenceNow: galleryReferenceNow
+        })
+          .map((exhibition) => exhibition.id)
+          .includes(stop.exhibition.id)
+      ),
+    "Opening-night walk mode should route through social events tonight."
+  );
+  assert(
+    nycLastChanceWalk.stops.every(
+      (stop) => getDaysUntilGalleryCloses(stop.exhibition, galleryReferenceNow) <= 14
+    ),
+    "Last-chance walk mode should prioritize exhibitions closing soon."
+  );
+  assert(
+    hudsonWalk.stops.length >= 3 && hudsonWalk.neighborhood === "Warren Street",
+    "Hudson should support a Warren Street gallery walk while remaining an arts-town test."
+  );
+
+  const neighborhoodReadiness = createNeighborhoodIntelligence(
+    "nyc",
+    galleryExhibitions,
+    galleryReferenceNow
+  );
+  const laReadiness = createNeighborhoodIntelligence("la", galleryExhibitions, galleryReferenceNow);
+  const hudsonReadiness = createNeighborhoodIntelligence(
+    "hudson",
+    galleryExhibitions,
+    galleryReferenceNow
+  );
+
+  assert(
+    neighborhoodReadiness.some(
+      (neighborhood) => neighborhood.neighborhood === "Chelsea" && neighborhood.canSupportWalk
+    ),
+    "Neighborhood intelligence should prove Chelsea can support a walk."
+  );
+  assert(
+    laReadiness.some((neighborhood) => neighborhood.canSupportWalk),
+    "Neighborhood intelligence should identify at least one LA walk-ready cluster."
+  );
+  assert(
+    hudsonReadiness.some(
+      (neighborhood) =>
+        neighborhood.neighborhood === "Warren Street" && neighborhood.canSupportWalk
+    ),
+    "Neighborhood intelligence should prove Warren Street can support a Hudson walk."
+  );
+
+  const whyGoReasons = getGalleryWhyGoReasons(
+    galleryExhibitions.find((exhibition) => exhibition.id === "nyc-afterimage-index") ??
+      galleryExhibitions[0],
+    galleryExhibitions,
+    galleryReferenceNow,
+    ["nyc-material-weather", "nyc-soft-systems", "nyc-blue-notes"]
+  );
+
+  assert(
+    whyGoReasons.includes("Good first stop") &&
+      whyGoReasons.includes("Opening reception tonight") &&
+      whyGoReasons.includes("Closing this weekend") &&
+      whyGoReasons.includes("Strong photography show"),
+    "Why Go cards should explain first-stop, opening, closing, and medium reasons."
+  );
+  assert(
+    whyGoReasons.includes("Near three other saved shows"),
+    "Why Go cards should identify shows near three other saved exhibitions."
+  );
+
+  const lastChanceAlerts = getLastChanceGalleryAlerts(galleryExhibitions, {
+    areaId: "nyc",
+    days: 7,
+    neighborhoods: ["Chelsea"],
+    mediums: ["sculpture"],
+    referenceNow: galleryReferenceNow
+  });
+
+  assert(
+    lastChanceAlerts.some((alert) => alert.matchedSignals.includes("saved medium")),
+    "Last-chance alerts should match saved artists, galleries, neighborhoods, and media lanes."
+  );
+
+  const artLog = upsertGalleryLogEntry([], "nyc-afterimage-index", "saved", "Bring a friend.");
+  const visitedLog = upsertGalleryLogEntry(
+    artLog,
+    "nyc-afterimage-index",
+    "visited",
+    "Strong projection room."
+  );
+
+  assert(
+    getSavedGalleryIdsFromLog(artLog).join("|") === "nyc-afterimage-index" &&
+      getSavedGalleryIdsFromLog(visitedLog).length === 0 &&
+      visitedLog[0]?.note === "Strong projection room.",
+    "Personal Art Log should track saved, visited, and private note state."
+  );
+
+  const readySubmission = createGallerySubmissionDraft({
+    galleryName: "Future Gallery",
+    areaId: "nyc",
+    title: "Submitted Show",
+    artists: ["Test Artist"],
+    opensAt: "2026-08-01T10:00:00-04:00",
+    closesAt: "2026-08-30T18:00:00-04:00",
+    externalUrl: "https://example.org/future-gallery/submitted-show",
+    createdAt: galleryReferenceNow
+  });
+  const incompleteSubmission = createGallerySubmissionDraft({
+    galleryName: "Future Gallery",
+    createdAt: galleryReferenceNow
+  });
+
+  assert(
+    readySubmission.errors.length === 0 &&
+      readySubmission.draft.sourceLegalStatus === "partner-submission" &&
+      readySubmission.draft.status === "ready-for-review",
+    "Gallery submission drafts should create a partner-safe show update shape."
+  );
+  assert(
+    incompleteSubmission.errors.length > 0 &&
+      incompleteSubmission.draft.status === "needs-required-fields",
+    "Gallery submission drafts should report missing required fields."
+  );
+
   const visibilityShows = Array.from({ length: 130 }, (_, index): Show => ({
     id: `visibility-${index}`,
     title: `Visibility Show ${index}`,

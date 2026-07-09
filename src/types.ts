@@ -326,3 +326,125 @@ export type DiscoveryMarketPlan = {
   discountLevers: string[];
   sources: DiscoverySourcePlan[];
 };
+
+export type GalleryAreaId = "nyc" | "la" | "hudson";
+
+export type GalleryMedium =
+  | "painting"
+  | "photography"
+  | "sculpture"
+  | "installation"
+  | "video"
+  | "performance"
+  | "design"
+  | "prints"
+  | "mixed-media";
+
+export type GalleryKind =
+  | "blue-chip"
+  | "emerging"
+  | "nonprofit"
+  | "artist-run"
+  | "project-space"
+  | "museum";
+
+export type GalleryEventKind =
+  | "opening-reception"
+  | "artist-talk"
+  | "walkthrough"
+  | "rsvp-preview"
+  | "closing-party";
+
+export type GallerySourceLegalStatus =
+  | "official-public-page"
+  | "partner-submission"
+  | "permission-required"
+  | "do-not-ingest";
+
+export type GallerySourceFreshness = "fresh" | "needs-review" | "stale-risk";
+
+export type GalleryHoursInterval = {
+  day: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  opens: string;
+  closes: string;
+};
+
+export type GallerySpecialEvent = {
+  id: string;
+  kind: GalleryEventKind;
+  title: string;
+  startsAt: string;
+  endsAt?: string;
+  rsvpUrl?: string;
+};
+
+export type GalleryArea = {
+  id: GalleryAreaId;
+  name: string;
+  region: string;
+  timezone: string;
+  role: "primary" | "secondary" | "arts-town-test";
+  description: string;
+};
+
+export type GalleryNeighborhood = {
+  id: string;
+  areaId: GalleryAreaId;
+  name: string;
+  walkLabel: string;
+  anchor: Coordinates;
+};
+
+export type GalleryExhibition = {
+  id: string;
+  title: string;
+  artists: string[];
+  galleryName: string;
+  galleryKind: GalleryKind;
+  areaId: GalleryAreaId;
+  neighborhood: string;
+  address: string;
+  coordinates: Coordinates;
+  distanceMiles: number;
+  mediums: GalleryMedium[];
+  opensAt: string;
+  closesAt: string;
+  receptionAt?: string;
+  specialEvents: GallerySpecialEvent[];
+  hours: GalleryHoursInterval[];
+  externalUrl: string;
+  rsvpUrl?: string;
+  imageTone: string;
+  source: "seed-fixture" | "official-page" | "gallery-submission" | "manual-review";
+  sourceLegalStatus: GallerySourceLegalStatus;
+  sourceFreshness: GallerySourceFreshness;
+  sourceUpdatedAt: string;
+  description: string;
+  whyGoSignals: string[];
+};
+
+export type GalleryLogStatus = "saved" | "want-to-see" | "visited" | "skipped";
+
+export type GalleryLogEntry = {
+  exhibitionId: string;
+  status: GalleryLogStatus;
+  note?: string;
+  updatedAt: string;
+};
+
+export type GallerySubmissionDraft = {
+  id: string;
+  galleryName: string;
+  areaId: GalleryAreaId;
+  title: string;
+  artists: string[];
+  opensAt: string;
+  closesAt: string;
+  receptionAt?: string;
+  externalUrl: string;
+  submitterEmail?: string;
+  notes?: string;
+  sourceLegalStatus: "partner-submission";
+  status: "ready-for-review" | "needs-required-fields";
+  createdAt: string;
+};

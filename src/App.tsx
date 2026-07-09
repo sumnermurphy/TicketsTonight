@@ -32,6 +32,7 @@ import {
 } from "react-native";
 
 import { areas, categoryLabels } from "./data/catalog";
+import { GalleryApp } from "./GalleryApp";
 import {
   createDealAlert,
   getDealAlertMatches,
@@ -143,6 +144,7 @@ const priceOptions: Array<{ label: string; value?: number }> = [
   { label: "Under $50", value: 5000 },
   { label: "Under $75", value: 7500 }
 ];
+const galleryWalkExperienceEnabled = Boolean("gallery-walk-v1");
 
 const sourceLabels: Record<InventorySource, string> = {
   "calendar-feed": "Calendar",
@@ -160,6 +162,10 @@ const accessLabels: Record<OfferAccess, string> = {
 };
 
 export default function App() {
+  if (galleryWalkExperienceEnabled) {
+    return <GalleryApp />;
+  }
+
   const [selectedAreaId, setSelectedAreaId] = useState(areas[0]?.id ?? "nyc");
   const [query, setQuery] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<ShowCategory[]>([]);

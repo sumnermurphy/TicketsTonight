@@ -18,6 +18,7 @@
     "audit:live-inventory": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/liveInventoryAudit.ts && node .audit-build/scripts/liveInventoryAudit.js",
     "audit:providers": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/providerDiagnostics.ts && node .audit-build/scripts/providerDiagnostics.js",
     "audit:spotify": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/spotifyConfigAudit.ts && node .audit-build/scripts/spotifyConfigAudit.js",
+    "audit:galleries": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/galleryDiscoveryAudit.ts && node .audit-build/scripts/galleryDiscoveryAudit.js",
     "test:services": "tsc --ignoreConfig --outDir .test-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict tests/serviceChecks.ts && node .test-build/tests/serviceChecks.js"
   },
   "engines": {
