@@ -1195,6 +1195,38 @@ function RoutePreview({ routeMapModel }: { routeMapModel: GalleryRouteMapModel }
           {routeMapModel.totalWalkingMinutes} min walking
         </Text>
       </View>
+      <View style={styles.routeMapActionRow}>
+        {routeMapModel.currentPin ? (
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={`Open map for current stop ${routeMapModel.currentPin.galleryName}`}
+            onPress={() => {
+              if (routeMapModel.currentPin) {
+                void Linking.openURL(routeMapModel.currentPin.mapUrl);
+              }
+            }}
+            style={styles.routeMapPrimaryAction}
+          >
+            <MapPin size={14} color={colors.paper} />
+            <Text style={styles.routeMapPrimaryActionText}>Open current stop</Text>
+          </Pressable>
+        ) : null}
+        {routeMapModel.routeMapUrl ? (
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel="Open full route map"
+            onPress={() => {
+              if (routeMapModel.routeMapUrl) {
+                void Linking.openURL(routeMapModel.routeMapUrl);
+              }
+            }}
+            style={styles.routeMapSecondaryAction}
+          >
+            <ExternalLink size={14} color={colors.ink} />
+            <Text style={styles.routeMapSecondaryActionText}>Full route</Text>
+          </Pressable>
+        ) : null}
+      </View>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -3085,8 +3117,29 @@ export function GalleryApp() {
             <Check size={16} color={colors.ink} />
             <Text style={styles.trustBriefStatus}>{freshnessAudit.summaryLabel}</Text>
             <Text style={styles.trustBriefText}>
-              {freshnessAudit.verifiedCount} verified - {freshnessAudit.fixtureDemoCount} demo - {freshnessAudit.needsReviewCount} needs review - {dataAudit.sourceCount} sources
+              {freshnessAudit.verifiedRecentlyCount} recent - {freshnessAudit.verifiedAgingCount} aging - {freshnessAudit.needsReviewCount} needs review - {freshnessAudit.fixtureDemoCount} demo
             </Text>
+          </View>
+
+          <View style={styles.freshnessQueuePanel}>
+            <View style={styles.freshnessQueueHeader}>
+              <Text style={styles.guidanceTitle}>Freshness queue</Text>
+              <Text style={styles.freshnessQueueMeta}>{freshnessAudit.officialLinkCount} official links - {dataAudit.sourceCount} sources</Text>
+            </View>
+            {freshnessAudit.needsReviewNext.slice(0, 3).map((item) => (
+              <View key={item.exhibitionId} style={styles.freshnessQueueRow}>
+                <View style={styles.savedWalkCopy}>
+                  <Text style={styles.savedWalkTitle}>{item.galleryName}</Text>
+                  <Text style={styles.savedWalkMeta}>
+                    {item.neighborhood} - {item.freshness.label} - {item.actionLabel}
+                  </Text>
+                </View>
+                <Text style={styles.routePlannerFact}>{item.priority}</Text>
+              </View>
+            ))}
+            {freshnessAudit.needsReviewNext.length === 0 ? (
+              <Text style={styles.savedWalkMeta}>No immediate review items for this market.</Text>
+            ) : null}
           </View>
 
           {tonightPick ? (
@@ -3745,6 +3798,38 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 18,
     marginTop: spacing.xs
+  },
+  freshnessQueuePanel: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md
+  },
+  freshnessQueueHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    justifyContent: "space-between"
+  },
+  freshnessQueueMeta: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  freshnessQueueRow: {
+    alignItems: "center",
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    justifyContent: "space-between",
+    paddingTop: spacing.sm
   },
   tonightPick: {
     alignItems: "flex-end",
@@ -4994,6 +5079,43 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
+  },
+  routeMapActionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm
+  },
+  routeMapPrimaryAction: {
+    alignItems: "center",
+    backgroundColor: colors.ink,
+    borderRadius: radii.md,
+    flexDirection: "row",
+    gap: spacing.xs,
+    minHeight: 34,
+    paddingHorizontal: spacing.md
+  },
+  routeMapPrimaryActionText: {
+    color: colors.paper,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  routeMapSecondaryAction: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.xs,
+    minHeight: 34,
+    paddingHorizontal: spacing.md
+  },
+  routeMapSecondaryActionText: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "900"
   },
   walkStops: {
     gap: spacing.sm,

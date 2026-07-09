@@ -112,6 +112,7 @@ import {
 } from "../src/services/galleryWalkSharing";
 import {
   createGalleryFreshnessAudit,
+  createGalleryFreshnessReview,
   getGalleryFreshnessState
 } from "../src/services/galleryFreshness";
 import { createGalleryRouteMapModel } from "../src/services/galleryRouteMap";
@@ -425,16 +426,21 @@ async function main() {
   const septemberSource = gallerySourceCandidates.find(
     (source) => source.id === "source-september-hudson"
   );
+  const newTribecaVerifiedIds = [
+    "verified-andrew-kreps-see-you-tomorrow",
+    "verified-artists-space-richard-hunt",
+    "verified-nicelle-beauchene-invincible-summer"
+  ];
 
   assert(
     nycTrust.exhibitionCount >= 30 &&
-      nycTrust.verifiedExhibitionCount >= 45 &&
+      nycTrust.verifiedExhibitionCount >= 48 &&
       laTrust.exhibitionCount >= 8 &&
       hudsonTrust.exhibitionCount >= 6,
     "Gallery source trust should report expanded verified NYC inventory while preserving LA and Hudson coverage."
   );
   assert(
-    nycVerifiedInventory.length >= 45 &&
+    nycVerifiedInventory.length >= 48 &&
       hudsonVerifiedInventory.length >= 1 &&
       fixtureInventory.length > 0,
     "Verified inventory should materially increase NYC while leaving fixture/demo records explicitly identifiable."
@@ -442,8 +448,11 @@ async function main() {
   assert(
     nycChinatownVerifiedInventory.length >= 3 &&
       nycLowerEastSideVerifiedInventory.length >= 3 &&
-      nycTribecaVerifiedInventory.length >= 8 &&
-      nycUpperEastSideVerifiedInventory.length >= 4,
+      nycTribecaVerifiedInventory.length >= 11 &&
+      nycUpperEastSideVerifiedInventory.length >= 4 &&
+      newTribecaVerifiedIds.every((id) =>
+        nycTribecaVerifiedInventory.some((exhibition) => exhibition.id === id)
+      ),
     "Verified NYC inventory should add route-useful Lower East Side, Chinatown, Tribeca, and Upper East Side depth."
   );
   assert(
@@ -1127,7 +1136,13 @@ async function main() {
     }),
     galleryReferenceNow
   );
+  const freshnessReviewQueue = createGalleryFreshnessReview({
+    areaId: "nyc",
+    exhibitions: galleryExhibitions,
+    referenceNow: galleryReferenceNow
+  });
   const routeMapModel = createGalleryRouteMapModel(socialEventPlan, completedWalkSession);
+  const activeRouteMapModel = createGalleryRouteMapModel(chelseaTwoHourWalk, visitedWalkSession);
   const recapBadges = getGalleryPassportBadges(
     [completedWalkSession],
     galleryExhibitions.map((exhibition) => ({
@@ -1177,18 +1192,24 @@ async function main() {
   );
   assert(
     freshnessAudit.verifiedCount >= 30 &&
+      freshnessAudit.verifiedRecentlyCount > 0 &&
+      freshnessAudit.verifiedAgingCount === 0 &&
       freshnessAudit.officialLinkCount >= freshnessAudit.verifiedCount &&
+      freshnessAudit.needsReviewNext.length > 0 &&
+      ["high", "medium"].includes(freshnessReviewQueue[0]?.priority ?? "") &&
       verifiedFreshnessState.isVerified &&
       verifiedFreshnessState.label.includes("Verified") &&
       fixtureFreshnessState.kind === "fixture-demo",
-    "Gallery freshness lite should distinguish recent verified official links from fixture/demo inventory."
+    "Gallery freshness lite should distinguish recent verified official links from fixture/demo inventory and expose a review queue."
   );
   assert(
     routeMapModel.pins.length === socialEventPlan.stops.length &&
       routeMapModel.segments.length === Math.max(0, socialEventPlan.stops.length - 1) &&
       routeMapModel.routeMapUrl === socialEventPlan.routeMapUrl &&
-      routeMapModel.pins.every((pin) => pin.mapUrl.includes("google.com/maps")),
-    "Gallery route map model should expose ordered pins, walking segments, and external map links."
+      routeMapModel.pins.every((pin) => pin.mapUrl.includes("google.com/maps")) &&
+      activeRouteMapModel.currentPin?.progress === "current" &&
+      activeRouteMapModel.nextPin?.progress === "next",
+    "Gallery route map model should expose ordered pins, walking segments, current/next state, and external map links."
   );
   assert(
     shareCard.shareText.includes(socialEventPlan.title) &&
@@ -1902,6 +1923,15 @@ async function main() {
   const magentaPlainsSource = gallerySourceCandidates.find(
     (source) => source.id === "source-magenta-plains-chinatown"
   );
+  const andrewKrepsSource = gallerySourceCandidates.find(
+    (source) => source.id === "source-andrew-kreps-tribeca"
+  );
+  const artistsSpaceSource = gallerySourceCandidates.find(
+    (source) => source.id === "source-artists-space-tribeca"
+  );
+  const nicelleBeaucheneSource = gallerySourceCandidates.find(
+    (source) => source.id === "source-nicelle-beauchene-tribeca"
+  );
 
   assert(staleMiguelAbreuSource, "Stale source fixture should exist.");
   assert(jamesCohanSource, "James Cohan source fixture should exist.");
@@ -1912,6 +1942,9 @@ async function main() {
   assert(skarstedtSource, "Skarstedt source fixture should exist.");
   assert(ppowSource, "PPOW source fixture should exist.");
   assert(magentaPlainsSource, "Magenta Plains source fixture should exist.");
+  assert(andrewKrepsSource, "Andrew Kreps source fixture should exist.");
+  assert(artistsSpaceSource, "Artists Space source fixture should exist.");
+  assert(nicelleBeaucheneSource, "Nicelle Beauchene source fixture should exist.");
   assert(
     getGallerySourceEffectiveFreshness(staleMiguelAbreuSource, galleryReferenceNow) ===
       "stale-risk",
@@ -1929,7 +1962,10 @@ async function main() {
       derekEllerSource,
       skarstedtSource,
       ppowSource,
-      magentaPlainsSource
+      magentaPlainsSource,
+      andrewKrepsSource,
+      artistsSpaceSource,
+      nicelleBeaucheneSource
     ].every(
       (source) =>
         source?.preferredImportLane === "official-page-ready" &&

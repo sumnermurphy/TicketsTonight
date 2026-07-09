@@ -26,6 +26,13 @@ const tueSat12To6: GalleryHoursInterval[] = [
   { day: 6, opens: "12:00", closes: "18:00" }
 ];
 
+const wedSat12To6: GalleryHoursInterval[] = [
+  { day: 3, opens: "12:00", closes: "18:00" },
+  { day: 4, opens: "12:00", closes: "18:00" },
+  { day: 5, opens: "12:00", closes: "18:00" },
+  { day: 6, opens: "12:00", closes: "18:00" }
+];
+
 const tueFri10To6: GalleryHoursInterval[] = [
   { day: 2, opens: "10:00", closes: "18:00" },
   { day: 3, opens: "10:00", closes: "18:00" },
@@ -952,6 +959,72 @@ export const verifiedGalleryExhibitions: GalleryExhibition[] = [
     imageTone: "#C2A36D",
     description: "A second verified Bortolami current show in The Upstairs at 39 Walker, adding same-building Tribeca depth without pretending it is a separate stop.",
     whyGoSignals: ["tribeca", "same-building", "painting"]
+  }),
+  createVerifiedExhibition({
+    id: "verified-andrew-kreps-see-you-tomorrow",
+    sourceCandidateId: "source-andrew-kreps-tribeca",
+    importRecordId: "verified-record-andrew-kreps-see-you-tomorrow",
+    title: "See You Tomorrow",
+    artists: ["Group exhibition"],
+    galleryName: "Andrew Kreps Gallery",
+    galleryKind: "blue-chip",
+    areaId: "nyc",
+    neighborhood: "Tribeca",
+    address: "394 Broadway, New York, NY",
+    coordinates: { latitude: 40.7186, longitude: -74.003 },
+    distanceMiles: 0.62,
+    mediums: ["painting", "sculpture", "mixed-media"],
+    opensAt: "2026-06-26T10:00:00-04:00",
+    closesAt: "2026-08-07T18:00:00-04:00",
+    hours: tueSat10To6,
+    externalUrl: "https://www.andrewkreps.com/exhibitions",
+    imageTone: "#6D6659",
+    description: "A verified Andrew Kreps summer group exhibition listed at 394 Broadway and 22 Cortlandt Alley.",
+    whyGoSignals: ["tribeca", "downtown-anchor", "verified-official"]
+  }),
+  createVerifiedExhibition({
+    id: "verified-artists-space-richard-hunt",
+    sourceCandidateId: "source-artists-space-tribeca",
+    importRecordId: "verified-record-artists-space-richard-hunt",
+    title: "Richard Hunt",
+    artists: ["Richard Hunt"],
+    galleryName: "Artists Space",
+    galleryKind: "nonprofit",
+    areaId: "nyc",
+    neighborhood: "Tribeca",
+    address: "11 Cortlandt Alley, New York, NY",
+    coordinates: { latitude: 40.7188, longitude: -74.0022 },
+    distanceMiles: 0.56,
+    mediums: ["sculpture"],
+    opensAt: "2026-06-05T12:00:00-04:00",
+    closesAt: "2026-08-01T18:00:00-04:00",
+    hours: wedSat12To6,
+    externalUrl: "https://artistsspace.org/exhibitions",
+    imageTone: "#58665E",
+    description: "A verified Artists Space exhibition from the nonprofit's official exhibitions and visit pages.",
+    whyGoSignals: ["tribeca", "nonprofit", "sculpture"]
+  }),
+  createVerifiedExhibition({
+    id: "verified-nicelle-beauchene-invincible-summer",
+    sourceCandidateId: "source-nicelle-beauchene-tribeca",
+    importRecordId: "verified-record-nicelle-beauchene-invincible-summer",
+    title: "Invincible Summer",
+    artists: ["Joshua Abelow"],
+    galleryName: "Nicelle Beauchene Gallery",
+    galleryKind: "emerging",
+    areaId: "nyc",
+    neighborhood: "Tribeca",
+    address: "7 Franklin Place, New York, NY",
+    coordinates: { latitude: 40.7198, longitude: -74.0054 },
+    distanceMiles: 0.42,
+    mediums: ["painting"],
+    opensAt: "2026-06-27T10:00:00-04:00",
+    closesAt: "2026-08-15T18:00:00-04:00",
+    hours: tueSat10To6,
+    externalUrl: "https://nicellebeauchene.com/exhibitions/",
+    imageTone: "#9D7756",
+    description: "A verified Franklin Place show from Nicelle Beauchene's official exhibitions page.",
+    whyGoSignals: ["tribeca", "painting", "verified-official"]
   }),
   createVerifiedExhibition({
     id: "verified-ppow-strip",

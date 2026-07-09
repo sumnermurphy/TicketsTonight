@@ -3,6 +3,7 @@ import { getGalleryInventoryTrust } from "./galleryDiscovery";
 
 export type GalleryFreshnessKind =
   | "verified-recently"
+  | "verified-aging"
   | "verified"
   | "needs-review"
   | "fixture-demo";
@@ -23,11 +24,33 @@ export type GalleryFreshnessSummary = {
   totalCount: number;
   verifiedRecentlyCount: number;
   verifiedCount: number;
+  verifiedAgingCount: number;
   needsReviewCount: number;
   fixtureDemoCount: number;
   officialLinkCount: number;
+  needsReviewNext: GalleryFreshnessReviewItem[];
   summaryLabel: string;
   nextAction: string;
+};
+
+export type GalleryFreshnessReviewReason =
+  | "stale-source"
+  | "needs-review-source"
+  | "fixture-demo"
+  | "aging-verification"
+  | "missing-official-link";
+
+export type GalleryFreshnessReviewItem = {
+  exhibitionId: string;
+  title: string;
+  galleryName: string;
+  areaId: GalleryAreaId;
+  neighborhood: string;
+  freshness: GalleryFreshnessState;
+  reasons: GalleryFreshnessReviewReason[];
+  priority: "high" | "medium" | "low";
+  actionLabel: string;
+  officialUrl?: string;
 };
 
 const dayMs = 24 * 60 * 60 * 1000;
@@ -127,6 +150,19 @@ export function getGalleryFreshnessState(
     };
   }
 
+  if (daysSinceCheck !== undefined && daysSinceCheck >= 30) {
+    return {
+      kind: "verified-aging",
+      label: "Verified but aging",
+      detail: `Verified as of ${formatFreshnessDate(checkedAt)}; schedule a source re-check.`,
+      checkedAt,
+      hasOfficialLink: true,
+      isVerified: true,
+      isFixture: false,
+      daysSinceCheck
+    };
+  }
+
   return {
     kind: "verified",
     label: `Verified as of ${formatFreshnessDate(checkedAt)}`,
@@ -137,6 +173,96 @@ export function getGalleryFreshnessState(
     isFixture: false,
     daysSinceCheck
   };
+}
+
+function createReviewItem(
+  exhibition: GalleryExhibition,
+  freshness: GalleryFreshnessState
+): GalleryFreshnessReviewItem | undefined {
+  const reasons: GalleryFreshnessReviewReason[] = [];
+
+  if (freshness.kind === "fixture-demo") {
+    reasons.push("fixture-demo");
+  }
+
+  if (freshness.kind === "verified-aging") {
+    reasons.push("aging-verification");
+  }
+
+  if (freshness.kind === "needs-review") {
+    if (exhibition.sourceFreshness === "stale-risk") {
+      reasons.push("stale-source");
+    } else {
+      reasons.push("needs-review-source");
+    }
+  }
+
+  if (!freshness.hasOfficialLink) {
+    reasons.push("missing-official-link");
+  }
+
+  if (reasons.length === 0) {
+    return undefined;
+  }
+
+  const priority =
+    reasons.includes("stale-source") || reasons.includes("missing-official-link")
+      ? "high"
+      : reasons.includes("needs-review-source") || reasons.includes("fixture-demo")
+        ? "medium"
+        : "low";
+  const actionLabel =
+    freshness.kind === "fixture-demo"
+      ? "Replace demo record"
+      : freshness.kind === "verified-aging"
+        ? "Re-check official page"
+        : "Review source freshness";
+
+  return {
+    exhibitionId: exhibition.id,
+    title: exhibition.title,
+    galleryName: exhibition.galleryName,
+    areaId: exhibition.areaId,
+    neighborhood: exhibition.neighborhood,
+    freshness,
+    reasons,
+    priority,
+    actionLabel,
+    officialUrl: freshness.hasOfficialLink ? exhibition.externalUrl : undefined
+  };
+}
+
+export function createGalleryFreshnessReview(input: {
+  areaId: GalleryAreaId;
+  exhibitions: GalleryExhibition[];
+  referenceNow: string;
+  limit?: number;
+}): GalleryFreshnessReviewItem[] {
+  const priorityRank: Record<GalleryFreshnessReviewItem["priority"], number> = {
+    high: 0,
+    medium: 1,
+    low: 2
+  };
+
+  return input.exhibitions
+    .filter((exhibition) => exhibition.areaId === input.areaId)
+    .map((exhibition) =>
+      createReviewItem(exhibition, getGalleryFreshnessState(exhibition, input.referenceNow))
+    )
+    .filter((item): item is GalleryFreshnessReviewItem => Boolean(item))
+    .sort((left, right) => {
+      const priorityDelta = priorityRank[left.priority] - priorityRank[right.priority];
+
+      if (priorityDelta !== 0) {
+        return priorityDelta;
+      }
+
+      return (
+        (right.freshness.daysSinceCheck ?? 0) - (left.freshness.daysSinceCheck ?? 0) ||
+        left.galleryName.localeCompare(right.galleryName)
+      );
+    })
+    .slice(0, input.limit ?? 5);
 }
 
 export function createGalleryFreshnessAudit(input: {
@@ -152,9 +278,14 @@ export function createGalleryFreshnessAudit(input: {
   );
   const verifiedRecentlyCount = states.filter((state) => state.kind === "verified-recently").length;
   const verifiedCount = states.filter((state) => state.isVerified).length;
+  const verifiedAgingCount = states.filter((state) => state.kind === "verified-aging").length;
   const needsReviewCount = states.filter((state) => state.kind === "needs-review").length;
   const fixtureDemoCount = states.filter((state) => state.kind === "fixture-demo").length;
   const officialLinkCount = states.filter((state) => state.hasOfficialLink).length;
+  const needsReviewNext = createGalleryFreshnessReview({
+    ...input,
+    limit: 5
+  });
   const totalCount = states.length;
   const summaryLabel =
     verifiedCount >= 30 && input.areaId === "nyc"
@@ -174,9 +305,11 @@ export function createGalleryFreshnessAudit(input: {
     totalCount,
     verifiedRecentlyCount,
     verifiedCount,
+    verifiedAgingCount,
     needsReviewCount,
     fixtureDemoCount,
     officialLinkCount,
+    needsReviewNext,
     summaryLabel,
     nextAction
   };
