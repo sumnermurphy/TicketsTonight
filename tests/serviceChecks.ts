@@ -84,6 +84,16 @@ import {
   markGalleryWalkStopVisited,
   skipGalleryWalkStop
 } from "../src/services/galleryWalkSession";
+import { galleryQuizArtworks } from "../src/data/galleryQuizArtworks";
+import {
+  createGalleryQuests,
+  createPersonalizedGalleryWalkPlan,
+  deriveTastePassportFromBehavior,
+  deriveTastePassportFromQuiz,
+  getGalleryPassportBadges,
+  rankGalleryExhibitionsForTaste,
+  type GalleryQuizAnswer
+} from "../src/services/galleryTastePassport";
 import { createTicketmasterProviderDiagnostics } from "../src/services/providerDiagnostics";
 import { checkoutBackend } from "../src/services/checkoutBackend";
 import {
@@ -700,6 +710,18 @@ async function main() {
     "Active walk test note.",
     galleryReferenceNow
   );
+  const persistedQuizAnswers: GalleryQuizAnswer[] = [
+    {
+      artworkId: galleryQuizArtworks[0]?.id ?? "artic-111628",
+      response: "love",
+      answeredAt: galleryReferenceNow
+    }
+  ];
+  const persistedTastePassport = deriveTastePassportFromQuiz(
+    persistedQuizAnswers,
+    galleryQuizArtworks,
+    galleryReferenceNow
+  );
   const persistedState = {
     version: 1 as const,
     selectedAreaId: "nyc" as const,
@@ -713,7 +735,12 @@ async function main() {
     savedAlertGalleries: ["Tanya Bonakdar Gallery"],
     savedAlertNeighborhoods: ["Chelsea"],
     savedAlertMediums: ["sculpture" as const],
-    activeWalkSession: completedWalkSession
+    activeWalkSession: completedWalkSession,
+    quizAnswers: persistedQuizAnswers,
+    tastePassport: persistedTastePassport,
+    earnedBadges: [],
+    completedQuestIds: ["complete-market-walk"],
+    completedWalkSessions: [completedWalkSession]
   };
   const serializedGalleryState = serializeGalleryAppPersistedState(persistedState);
 
@@ -725,9 +752,190 @@ async function main() {
       "completed" &&
       persistedRoundTrip?.verifiedOnly === true &&
       persistedRoundTrip.alertWindowDays === 7 &&
-      persistedRoundTrip.activeWalkSession?.completedAt === "2026-07-09T16:30:00-04:00",
-    "Gallery app persistence should round-trip completed walk, filters, alerts, and art log state."
+      persistedRoundTrip.activeWalkSession?.completedAt === "2026-07-09T16:30:00-04:00" &&
+      persistedRoundTrip.quizAnswers.length === 1 &&
+      persistedRoundTrip.tastePassport?.likedMediums.includes("painting") &&
+      persistedRoundTrip.completedQuestIds.includes("complete-market-walk") &&
+      persistedRoundTrip.completedWalkSessions.length === 1,
+    "Gallery app persistence should round-trip completed walk, filters, alerts, art log, and taste passport state."
   );
+
+  const quizTasteAnswers: GalleryQuizAnswer[] = [
+    {
+      artworkId: "artic-72442",
+      response: "love",
+      answeredAt: galleryReferenceNow
+    },
+    {
+      artworkId: "artic-185184",
+      response: "curious",
+      answeredAt: galleryReferenceNow
+    },
+    {
+      artworkId: "artic-6565",
+      response: "not-for-me",
+      answeredAt: galleryReferenceNow
+    }
+  ];
+  const quizTastePassport = deriveTastePassportFromQuiz(
+    quizTasteAnswers,
+    galleryQuizArtworks,
+    galleryReferenceNow
+  );
+  const behaviorTastePassport = deriveTastePassportFromBehavior(
+    [
+      {
+        exhibitionId: "taste-behavior-photo",
+        status: "visited",
+        updatedAt: galleryReferenceNow
+      },
+      {
+        exhibitionId: "taste-behavior-print",
+        status: "skipped",
+        updatedAt: galleryReferenceNow
+      }
+    ],
+    [],
+    { mediums: ["sculpture"] },
+    [
+      createSyntheticGalleryExhibition({
+        id: "taste-behavior-photo",
+        title: "Behavior Photo",
+        mediums: ["photography"],
+        coordinates: { latitude: 40.747, longitude: -74.006 }
+      }),
+      createSyntheticGalleryExhibition({
+        id: "taste-behavior-print",
+        title: "Behavior Print",
+        mediums: ["prints"],
+        coordinates: { latitude: 40.748, longitude: -74.006 }
+      })
+    ],
+    galleryReferenceNow
+  );
+
+  assert(
+    quizTastePassport.likedMediums.includes("photography") &&
+      quizTastePassport.likedMediums.includes("sculpture") &&
+      quizTastePassport.avoidedMediums.includes("painting") &&
+      quizTastePassport.signals.some((signal) => signal.label === "Pictures Generation"),
+    "Gallery quiz answers should derive stable medium, style, and negative taste signals."
+  );
+  assert(
+    behaviorTastePassport.likedMediums.includes("photography") &&
+      behaviorTastePassport.likedMediums.includes("sculpture") &&
+      behaviorTastePassport.avoidedMediums.includes("prints"),
+    "Gallery behavior should strengthen visited/saved media and lower skipped media."
+  );
+
+  const tasteVerifiedPhoto = createSyntheticGalleryExhibition({
+    id: "taste-verified-photo",
+    title: "Verified Photo",
+    galleryName: "Verified Photo Gallery",
+    mediums: ["photography"],
+    distanceMiles: 0.75,
+    coordinates: { latitude: 40.754, longitude: -74.006 },
+    externalUrl: "https://verified-photo.test/current"
+  });
+  const tasteFixturePhoto = createSyntheticGalleryExhibition({
+    id: "taste-fixture-photo",
+    title: "Fixture Photo",
+    galleryName: "Fixture Photo Gallery",
+    mediums: ["photography"],
+    source: "seed-fixture",
+    distanceMiles: 0.05,
+    coordinates: { latitude: 40.7471, longitude: -74.006 },
+    externalUrl: "https://example.org/fixture-photo"
+  });
+  const tasteVerifiedPainting = createSyntheticGalleryExhibition({
+    id: "taste-verified-painting",
+    title: "Verified Painting",
+    galleryName: "Verified Painting Gallery",
+    mediums: ["painting"],
+    distanceMiles: 0.01,
+    coordinates: { latitude: 40.747, longitude: -74.006 },
+    externalUrl: "https://verified-painting.test/current"
+  });
+  const tasteVerifiedSculpture = createSyntheticGalleryExhibition({
+    id: "taste-verified-sculpture",
+    title: "Verified Sculpture",
+    galleryName: "Verified Sculpture Gallery",
+    mediums: ["sculpture"],
+    distanceMiles: 0.8,
+    coordinates: { latitude: 40.756, longitude: -74.005 },
+    externalUrl: "https://verified-sculpture.test/current"
+  });
+  const rankedTastePicks = rankGalleryExhibitionsForTaste(
+    [tasteFixturePhoto, tasteVerifiedPhoto, tasteVerifiedPainting, tasteVerifiedSculpture],
+    quizTastePassport,
+    galleryReferenceNow
+  );
+  const quickTasteWalk = createGalleryWalkPlan({
+    areaId: "nyc",
+    mode: "quick-loop",
+    neighborhood: "Chelsea",
+    referenceNow: galleryReferenceNow,
+    exhibitions: [tasteVerifiedPainting, tasteVerifiedPhoto, tasteVerifiedSculpture]
+  });
+  const personalizedTasteWalk = createPersonalizedGalleryWalkPlan({
+    areaId: "nyc",
+    neighborhood: "Chelsea",
+    passport: quizTastePassport,
+    referenceNow: galleryReferenceNow,
+    exhibitions: [tasteVerifiedPainting, tasteVerifiedPhoto, tasteVerifiedSculpture]
+  });
+
+  assert(
+    rankedTastePicks[0]?.exhibition.id === "taste-verified-photo" &&
+      rankedTastePicks[0]?.reasons.includes("Verified official source") &&
+      rankedTastePicks.findIndex((pick) => pick.exhibition.id === "taste-verified-photo") <
+        rankedTastePicks.findIndex((pick) => pick.exhibition.id === "taste-fixture-photo"),
+    "Personalized picks should rank verified/source-backed matches ahead of fixture/demo matches."
+  );
+  assert(
+    quickTasteWalk.stops[0]?.exhibition.id === "taste-verified-painting" &&
+      personalizedTasteWalk.mode === "for-you" &&
+      personalizedTasteWalk.stops[0]?.exhibition.id === "taste-verified-photo" &&
+      personalizedTasteWalk.selectionReasons.includes("Personalized pick"),
+    "For-you gallery routes should use taste scores and differ from the nearest quick loop when taste data exists."
+  );
+
+  const passportBadges = getGalleryPassportBadges(
+    [completedWalkSession],
+    persistedLogEntries,
+    galleryExhibitions,
+    galleryReferenceNow
+  );
+  const nycQuests = createGalleryQuests({
+    areaId: "nyc",
+    exhibitions: galleryExhibitions,
+    logEntries: persistedLogEntries,
+    passport: quizTastePassport,
+    completedWalks: [completedWalkSession],
+    referenceNow: galleryReferenceNow
+  });
+  const hudsonQuests = createGalleryQuests({
+    areaId: "hudson",
+    exhibitions: galleryExhibitions,
+    logEntries: [],
+    passport: quizTastePassport,
+    completedWalks: [],
+    referenceNow: galleryReferenceNow
+  });
+
+  assert(
+    passportBadges.some((badge) => badge.id === "first-walk") &&
+      passportBadges.some((badge) => badge.id === "chelsea-loop"),
+    "Completed gallery walks should earn passport badges."
+  );
+  assert(
+    nycQuests.some((quest) => quest.id === "complete-market-walk" && quest.completed) &&
+      hudsonQuests.some(
+        (quest) => quest.id === "verified-warren-street" && quest.targetCount <= 2
+      ),
+    "Gallery quests should adapt to completed NYC walks and thinner Hudson verified supply."
+  );
+
   const routeOrderingWalk = createGalleryWalkPlan({
     areaId: "nyc",
     mode: "quick-loop",

@@ -16,6 +16,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import {
   ImageBackground,
+  type DimensionValue,
   type ImageSourcePropType,
   Linking,
   Pressable,
@@ -33,6 +34,7 @@ import {
   galleryExhibitions,
   galleryNeighborhoods
 } from "./data/galleryCatalog";
+import { galleryQuizArtworks } from "./data/galleryQuizArtworks";
 import { gallerySourceCandidates } from "./data/gallerySources";
 import {
   createGallerySourceTrustSummary,
@@ -74,6 +76,24 @@ import {
   type GalleryWalkSession,
   type GalleryWalkStopProgress
 } from "./services/galleryWalkSession";
+import {
+  createGalleryQuests,
+  createPersonalizedGalleryWalkPlan,
+  deriveTastePassportFromBehavior,
+  deriveTastePassportFromQuiz,
+  getGalleryPassportBadges,
+  getGalleryPassportStamps,
+  mergeGalleryTastePassports,
+  rankGalleryExhibitionsForTaste,
+  type GalleryPassportBadge,
+  type GalleryPassportStamp,
+  type GalleryPersonalizedPick,
+  type GalleryQuest,
+  type GalleryQuizAnswer,
+  type GalleryQuizArtwork,
+  type GalleryQuizResponse,
+  type GalleryTastePassport
+} from "./services/galleryTastePassport";
 import { colors, radii, shadows, spacing } from "./theme";
 import type {
   GalleryAreaId,
@@ -130,14 +150,16 @@ const walkModeOptions: GalleryWalkMode[] = [
   "quick-loop",
   "two-hour",
   "opening-night",
-  "last-chance"
+  "last-chance",
+  "for-you"
 ];
 const lensOptions: GalleryLens[] = ["all", "open-now", "opening-tonight", "last-chance"];
 const walkModeDetails: Record<GalleryWalkMode, string> = {
   "quick-loop": "Fastest good loop",
   "two-hour": "Deeper neighborhood pass",
   "opening-night": "Timed around receptions",
-  "last-chance": "Closing soon first"
+  "last-chance": "Closing soon first",
+  "for-you": "Taste-ranked stops"
 };
 
 function getDatePart(iso: string, index: number): string {
@@ -226,6 +248,60 @@ function getRouteProgressLabel(progress?: GalleryWalkStopProgress): string {
   }
 
   return "Planned";
+}
+
+const quizResponseLabels: Record<GalleryQuizResponse, string> = {
+  love: "Love",
+  curious: "Curious",
+  "not-for-me": "Not for me"
+};
+
+const quizResponseOptions: GalleryQuizResponse[] = ["love", "curious", "not-for-me"];
+
+function upsertQuizAnswer(
+  answers: GalleryQuizAnswer[],
+  artworkId: string,
+  response: GalleryQuizResponse,
+  answeredAt: string
+): GalleryQuizAnswer[] {
+  const nextAnswer = { artworkId, response, answeredAt };
+  const existingIndex = answers.findIndex((answer) => answer.artworkId === artworkId);
+
+  if (existingIndex === -1) {
+    return [...answers, nextAnswer];
+  }
+
+  return answers.map((answer, index) => (index === existingIndex ? nextAnswer : answer));
+}
+
+function rememberCompletedWalkSession(
+  sessions: GalleryWalkSession[],
+  session: GalleryWalkSession
+): GalleryWalkSession[] {
+  if (session.status !== "completed") {
+    return sessions;
+  }
+
+  const existingIndex = sessions.findIndex((candidate) => candidate.id === session.id);
+
+  if (existingIndex === -1) {
+    return [...sessions, session];
+  }
+
+  if (sessions[existingIndex]?.updatedAt === session.updatedAt) {
+    return sessions;
+  }
+
+  return sessions.map((candidate, index) => (index === existingIndex ? session : candidate));
+}
+
+function getNewBadgeCount(
+  earnedBadges: GalleryPassportBadge[],
+  computedBadges: GalleryPassportBadge[]
+): number {
+  const earnedIds = new Set(earnedBadges.map((badge) => badge.id));
+
+  return computedBadges.filter((badge) => !earnedIds.has(badge.id)).length;
 }
 
 function getRouteProgressDetail(progress?: GalleryWalkStopProgress): string {
@@ -431,6 +507,7 @@ function RouteCommandPanel({
   onMarkCurrentVisited,
   onSkipCurrent,
   onEndWalk,
+  walkRecapRewardCopy,
   compact = false
 }: {
   walkPlan: GalleryWalkPlan;
@@ -455,6 +532,7 @@ function RouteCommandPanel({
   onMarkCurrentVisited: () => void;
   onSkipCurrent: () => void;
   onEndWalk: () => void;
+  walkRecapRewardCopy?: string;
   compact?: boolean;
 }) {
   const showingActiveWalk =
@@ -599,6 +677,9 @@ function RouteCommandPanel({
           <Text style={styles.walkRecapCopy}>
             {activeWalkRecap.visitedStopCount} visited, {activeWalkRecap.skippedStopCount} skipped, {activeWalkRecap.notedStopCount} notes saved.
           </Text>
+          {walkRecapRewardCopy ? (
+            <Text style={styles.walkRecapRewardCopy}>{walkRecapRewardCopy}</Text>
+          ) : null}
           <View style={styles.activeWalkProgressRow}>
             <Text style={[styles.activeWalkProgressPill, styles.walkRecapPill]}>{activeWalkRecap.totalStopCount} stops</Text>
             <Text style={[styles.activeWalkProgressPill, styles.walkRecapPill]}>{activeWalkRecap.remainingStopCount} left open</Text>
@@ -873,6 +954,248 @@ function RoutePreview({ walkPlan }: { walkPlan: GalleryWalkPlan }) {
           );
         })}
       </ScrollView>
+    </View>
+  );
+}
+
+function TasteQuizArtworkCard({
+  artwork,
+  answer,
+  onAnswer
+}: {
+  artwork: GalleryQuizArtwork;
+  answer?: GalleryQuizAnswer;
+  onAnswer: (artworkId: string, response: GalleryQuizResponse) => void;
+}) {
+  return (
+    <View style={styles.quizArtworkCard}>
+      <ImageBackground
+        source={{ uri: artwork.imageUrl }}
+        accessibilityLabel={`${artwork.title} by ${artwork.artist}`}
+        imageStyle={styles.quizArtworkImage}
+        style={styles.quizArtworkVisual}
+      >
+        <View style={styles.cardImageShade} />
+        <View style={styles.quizArtworkTopRow}>
+          <Text style={styles.visualBadge}>{artwork.mediums.map((medium) => mediumLabels[medium]).join(", ")}</Text>
+          {answer ? <Text style={styles.visualBadge}>{quizResponseLabels[answer.response]}</Text> : null}
+        </View>
+        <View style={styles.cardVisualCopy}>
+          <Text style={styles.cardVisualGallery}>{artwork.artist}</Text>
+          <Text style={styles.quizArtworkTitle} numberOfLines={2}>{artwork.title}</Text>
+        </View>
+      </ImageBackground>
+      <View style={styles.quizArtworkBody}>
+        <Text style={styles.quizArtworkMeta}>{artwork.dateDisplay} - Art Institute of Chicago</Text>
+        <View style={styles.quizAnswerRow}>
+          {quizResponseOptions.map((response) => (
+            <Pressable
+              key={response}
+              accessibilityRole="button"
+              accessibilityLabel={`${quizResponseLabels[response]} ${artwork.title}`}
+              onPress={() => onAnswer(artwork.id, response)}
+              style={[
+                styles.quizAnswerButton,
+                answer?.response === response ? styles.activeQuizAnswerButton : null
+              ]}
+            >
+              <Text
+                style={[
+                  styles.quizAnswerButtonText,
+                  answer?.response === response ? styles.activeQuizAnswerButtonText : null
+                ]}
+              >
+                {quizResponseLabels[response]}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function PersonalizedPickRow({
+  pick,
+  onOpenDetails
+}: {
+  pick: GalleryPersonalizedPick;
+  onOpenDetails: () => void;
+}) {
+  const status = getGalleryVisitStatus(pick.exhibition, referenceNow);
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Open details for personalized pick ${pick.exhibition.title}`}
+      onPress={onOpenDetails}
+      style={styles.personalPickRow}
+    >
+      <View style={styles.personalPickScore}>
+        <Sparkles size={14} color={colors.paper} />
+        <Text style={styles.personalPickScoreText}>{Math.round(pick.score)}</Text>
+      </View>
+      <View style={styles.personalPickCopy}>
+        <Text style={styles.personalPickTitle}>{pick.exhibition.title}</Text>
+        <Text style={styles.personalPickMeta}>
+          {pick.exhibition.galleryName} - {pick.exhibition.neighborhood} - {galleryVisitStatusLabels[status]}
+        </Text>
+        <View style={styles.routeReasonRow}>
+          {pick.reasons.slice(0, 3).map((reason) => (
+            <Text key={reason} style={styles.walkStopReason}>{reason}</Text>
+          ))}
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+function QuestRow({ quest }: { quest: GalleryQuest }) {
+  const progressWidth: DimensionValue = `${Math.min(
+    100,
+    Math.round((quest.progressCount / quest.targetCount) * 100)
+  )}%`;
+
+  return (
+    <View style={styles.questRow}>
+      <View style={styles.questHeader}>
+        <Text style={styles.questTitle}>{quest.title}</Text>
+        <Text style={styles.questProgress}>{quest.progressCount}/{quest.targetCount}</Text>
+      </View>
+      <Text style={styles.questDescription}>{quest.description}</Text>
+      <View style={styles.questProgressTrack}>
+        <View style={[styles.questProgressFill, { width: progressWidth }]} />
+      </View>
+      <Text style={styles.questReason}>{quest.completed ? "Completed" : quest.reason}</Text>
+    </View>
+  );
+}
+
+function GalleryPassportPanel({
+  quizAnswers,
+  passport,
+  picks,
+  badges,
+  stamps,
+  quests,
+  newBadgeCount,
+  activeWalkMode,
+  onQuizAnswer,
+  onOpenPick,
+  onUseForYouRoute
+}: {
+  quizAnswers: GalleryQuizAnswer[];
+  passport: GalleryTastePassport;
+  picks: GalleryPersonalizedPick[];
+  badges: GalleryPassportBadge[];
+  stamps: GalleryPassportStamp[];
+  quests: GalleryQuest[];
+  newBadgeCount: number;
+  activeWalkMode: GalleryWalkMode;
+  onQuizAnswer: (artworkId: string, response: GalleryQuizResponse) => void;
+  onOpenPick: (exhibitionId: string) => void;
+  onUseForYouRoute: () => void;
+}) {
+  const answerByArtworkId = new Map(quizAnswers.map((answer) => [answer.artworkId, answer]));
+  const topSignals = passport.signals.filter((signal) => signal.weight > 0).slice(0, 5);
+
+  return (
+    <View style={styles.passportBand}>
+      <View style={styles.sectionHeader}>
+        <View>
+          <Text style={styles.sectionTitle}>Art Taste Passport</Text>
+          <Text style={styles.sectionSubtitle}>
+            {quizAnswers.length}/{galleryQuizArtworks.length} quiz cards answered - {passport.summary}
+          </Text>
+        </View>
+        <Sparkles size={20} color={colors.ink} />
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.quizRail}
+      >
+        {galleryQuizArtworks.map((artwork) => (
+          <TasteQuizArtworkCard
+            key={artwork.id}
+            artwork={artwork}
+            answer={answerByArtworkId.get(artwork.id)}
+            onAnswer={onQuizAnswer}
+          />
+        ))}
+      </ScrollView>
+
+      <View style={styles.passportGrid}>
+        <View style={styles.passportSummaryPanel}>
+          <Text style={styles.routeFirstKicker}>Taste signal</Text>
+          <Text style={styles.passportSummaryTitle}>{passport.confidence === "empty" ? "Quiz not tuned yet" : passport.summary}</Text>
+          <View style={styles.routeReasonRow}>
+            {(topSignals.length > 0 ? topSignals : [{ id: "starter", label: "Answer the visual quiz", weight: 0, kind: "mood", matchedCount: 0, source: "quiz" }]).map((signal) => (
+              <Text key={signal.id} style={styles.passportSignalPill}>{signal.label}</Text>
+            ))}
+          </View>
+          <View style={styles.passportBadgeRow}>
+            {badges.slice(0, 5).map((badge) => (
+              <Text key={badge.id} style={styles.passportBadge}>{badge.label}</Text>
+            ))}
+            {newBadgeCount > 0 ? (
+              <Text style={styles.newBadgePill}>{newBadgeCount} new</Text>
+            ) : null}
+            {badges.length === 0 ? <Text style={styles.passportBadge}>No badges yet</Text> : null}
+          </View>
+          <View style={styles.passportBadgeRow}>
+            {stamps.slice(0, 4).map((stamp) => (
+              <Text key={stamp.id} style={styles.passportStamp}>{stamp.label}</Text>
+            ))}
+            {stamps.length === 0 ? <Text style={styles.passportStamp}>No stamps yet</Text> : null}
+          </View>
+        </View>
+
+        <View style={styles.forYouPanel}>
+          <View style={styles.forYouHeader}>
+            <View>
+              <Text style={styles.routeFirstKicker}>For You Tonight</Text>
+              <Text style={styles.forYouTitle}>Taste-ranked verified picks</Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Use personalized route mode"
+              onPress={onUseForYouRoute}
+              style={[
+                styles.primaryLightButton,
+                activeWalkMode === "for-you" ? styles.activeForYouButton : null
+              ]}
+            >
+              <Text style={styles.primaryLightButtonText}>
+                {activeWalkMode === "for-you" ? "Using For you" : "Use route"}
+              </Text>
+            </Pressable>
+          </View>
+          {picks.slice(0, 4).map((pick) => (
+            <PersonalizedPickRow
+              key={pick.exhibition.id}
+              pick={pick}
+              onOpenDetails={() => onOpenPick(pick.exhibition.id)}
+            />
+          ))}
+          {picks.length === 0 ? (
+            <Text style={styles.emptyText}>Answer a few quiz cards to tune personalized picks.</Text>
+          ) : null}
+        </View>
+      </View>
+
+      <View style={styles.questPanel}>
+        <View style={styles.questPanelHeader}>
+          <Text style={styles.sectionTitle}>Gallery Quests</Text>
+          <Text style={styles.sectionSubtitle}>Light goals that adapt to verified supply.</Text>
+        </View>
+        <View style={styles.questGrid}>
+          {quests.map((quest) => (
+            <QuestRow key={quest.id} quest={quest} />
+          ))}
+        </View>
+      </View>
     </View>
   );
 }
@@ -1225,6 +1548,18 @@ export function GalleryApp() {
   const [savedAlertMediums, setSavedAlertMediums] = useState<GalleryMedium[]>(
     persistedState?.savedAlertMediums ?? []
   );
+  const [quizAnswers, setQuizAnswers] = useState<GalleryQuizAnswer[]>(
+    persistedState?.quizAnswers ?? []
+  );
+  const [earnedBadges, setEarnedBadges] = useState<GalleryPassportBadge[]>(
+    persistedState?.earnedBadges ?? []
+  );
+  const [completedQuestIds, setCompletedQuestIds] = useState<string[]>(
+    persistedState?.completedQuestIds ?? []
+  );
+  const [completedWalkSessions, setCompletedWalkSessions] = useState<GalleryWalkSession[]>(
+    persistedState?.completedWalkSessions ?? []
+  );
   const selectedArea = galleryAreas.find((area) => area.id === selectedAreaId) ?? galleryAreas[0];
   const isCompactLayout = viewportWidth < 720;
   const areaInventory = useMemo(
@@ -1270,6 +1605,44 @@ export function GalleryApp() {
     () => new Map(logEntries.map((entry) => [entry.exhibitionId, entry])),
     [logEntries]
   );
+  const quizTastePassport = useMemo(
+    () => deriveTastePassportFromQuiz(quizAnswers, galleryQuizArtworks, referenceNow),
+    [quizAnswers]
+  );
+  const behaviorTastePassport = useMemo(
+    () =>
+      deriveTastePassportFromBehavior(
+        logEntries,
+        completedWalkSessions,
+        {
+          artists: savedAlertArtists,
+          galleries: savedAlertGalleries,
+          neighborhoods: savedAlertNeighborhoods,
+          mediums: savedAlertMediums
+        },
+        galleryExhibitions,
+        referenceNow
+      ),
+    [
+      completedWalkSessions,
+      logEntries,
+      savedAlertArtists,
+      savedAlertGalleries,
+      savedAlertMediums,
+      savedAlertNeighborhoods
+    ]
+  );
+  const tastePassport = useMemo(() => {
+    const derivedPassport = mergeGalleryTastePassports(
+      quizTastePassport,
+      behaviorTastePassport,
+      referenceNow
+    );
+
+    return derivedPassport.confidence === "empty" && persistedState?.tastePassport
+      ? persistedState.tastePassport
+      : derivedPassport;
+  }, [behaviorTastePassport, persistedState, quizTastePassport]);
   const openingTonight = useMemo(
     () =>
       filterGalleryExhibitions(galleryExhibitions, {
@@ -1307,27 +1680,43 @@ export function GalleryApp() {
   );
   const walkPlan = useMemo(
     () =>
-      createGalleryWalkPlan({
-        areaId: selectedAreaId,
-        mode: walkMode,
-        neighborhood: selectedNeighborhood,
-        savedIds,
-        referenceNow
-      }),
-    [savedIds, selectedAreaId, selectedNeighborhood, walkMode]
+      walkMode === "for-you"
+        ? createPersonalizedGalleryWalkPlan({
+            areaId: selectedAreaId,
+            passport: tastePassport,
+            neighborhood: selectedNeighborhood,
+            savedIds,
+            referenceNow
+          })
+        : createGalleryWalkPlan({
+            areaId: selectedAreaId,
+            mode: walkMode,
+            neighborhood: selectedNeighborhood,
+            savedIds,
+            referenceNow
+          }),
+    [savedIds, selectedAreaId, selectedNeighborhood, tastePassport, walkMode]
   );
   const activeWalkPlan = useMemo(
     () =>
       activeWalkSession
-        ? createGalleryWalkPlan({
-            areaId: activeWalkSession.areaId,
-            mode: activeWalkSession.mode,
-            neighborhood: activeWalkSession.neighborhood,
-            savedIds,
-            referenceNow
-          })
+        ? activeWalkSession.mode === "for-you"
+          ? createPersonalizedGalleryWalkPlan({
+              areaId: activeWalkSession.areaId,
+              passport: tastePassport,
+              neighborhood: activeWalkSession.neighborhood,
+              savedIds,
+              referenceNow
+            })
+          : createGalleryWalkPlan({
+              areaId: activeWalkSession.areaId,
+              mode: activeWalkSession.mode,
+              neighborhood: activeWalkSession.neighborhood,
+              savedIds,
+              referenceNow
+            })
         : undefined,
-    [activeWalkSession, savedIds]
+    [activeWalkSession, savedIds, tastePassport]
   );
   const activeWalkProgress = useMemo(
     () =>
@@ -1450,6 +1839,64 @@ export function GalleryApp() {
   const selectedActiveWalkProgress = selectedActiveWalkStop
     ? activeWalkProgress?.stopProgressById[selectedActiveWalkStop.exhibition.id]
     : undefined;
+  const personalizedPicks = useMemo(
+    () =>
+      rankGalleryExhibitionsForTaste(areaInventory, tastePassport, referenceNow)
+        .filter((pick) => {
+          const status = getGalleryVisitStatus(pick.exhibition, referenceNow);
+
+          return status === "open-now" || status === "opens-later";
+        })
+        .slice(0, 6),
+    [areaInventory, tastePassport]
+  );
+  const passportBadges = useMemo(
+    () =>
+      getGalleryPassportBadges(
+        completedWalkSessions,
+        logEntries,
+        galleryExhibitions,
+        referenceNow
+      ),
+    [completedWalkSessions, logEntries]
+  );
+  const passportStamps = useMemo(
+    () => getGalleryPassportStamps(completedWalkSessions),
+    [completedWalkSessions]
+  );
+  const galleryQuests = useMemo(
+    () =>
+      createGalleryQuests({
+        areaId: selectedAreaId,
+        exhibitions: galleryExhibitions,
+        logEntries,
+        passport: tastePassport,
+        completedWalks: completedWalkSessions,
+        referenceNow
+      }),
+    [completedWalkSessions, logEntries, selectedAreaId, tastePassport]
+  );
+  const newBadgeCount = getNewBadgeCount(earnedBadges, passportBadges);
+  const completedQuestIdSet = new Set(completedQuestIds);
+  const freshCompletedQuestIds = galleryQuests
+    .filter((quest) => quest.completed && !completedQuestIdSet.has(quest.id))
+    .map((quest) => quest.id);
+  const walkRecapRewardCopy =
+    activeWalkSession?.status === "completed"
+      ? [
+          passportBadges
+            .filter((badge) => badge.earnedFromSessionId === activeWalkSession.id)
+            .map((badge) => badge.label)
+            .slice(0, 2)
+            .join(", "),
+          passportStamps.find((stamp) => stamp.earnedAt === activeWalkSession.completedAt)?.label,
+          tastePassport.likedMediums[0]
+            ? `Learned: ${mediumLabels[tastePassport.likedMediums[0]]} is a stronger signal.`
+            : undefined
+        ]
+          .filter(Boolean)
+          .join(" - ")
+      : undefined;
 
   function resetMarket(areaId: GalleryAreaId) {
     setSelectedAreaId(areaId);
@@ -1481,6 +1928,10 @@ export function GalleryApp() {
         referenceNow
       )
     );
+  }
+
+  function answerQuizCard(artworkId: string, response: GalleryQuizResponse) {
+    setQuizAnswers((answers) => upsertQuizAnswer(answers, artworkId, response, referenceNow));
   }
 
   function startWalk() {
@@ -1555,6 +2006,26 @@ export function GalleryApp() {
     savedAlertMediums.length;
 
   useEffect(() => {
+    if (activeWalkSession?.status === "completed") {
+      setCompletedWalkSessions((sessions) =>
+        rememberCompletedWalkSession(sessions, activeWalkSession)
+      );
+    }
+  }, [activeWalkSession]);
+
+  useEffect(() => {
+    if (passportBadges.length > earnedBadges.length || newBadgeCount > 0) {
+      setEarnedBadges(passportBadges);
+    }
+  }, [earnedBadges.length, newBadgeCount, passportBadges]);
+
+  useEffect(() => {
+    if (freshCompletedQuestIds.length > 0) {
+      setCompletedQuestIds((questIds) => Array.from(new Set([...questIds, ...freshCompletedQuestIds])));
+    }
+  }, [freshCompletedQuestIds]);
+
+  useEffect(() => {
     writeGalleryAppPersistedState({
       version: 1,
       selectedAreaId,
@@ -1569,13 +2040,22 @@ export function GalleryApp() {
       savedAlertGalleries,
       savedAlertNeighborhoods,
       savedAlertMediums,
-      activeWalkSession
+      activeWalkSession,
+      quizAnswers,
+      tastePassport,
+      earnedBadges,
+      completedQuestIds,
+      completedWalkSessions
     });
   }, [
     activeLens,
     activeWalkSession,
     alertWindowDays,
+    completedQuestIds,
+    completedWalkSessions,
+    earnedBadges,
     logEntries,
+    quizAnswers,
     savedAlertArtists,
     savedAlertGalleries,
     savedAlertMediums,
@@ -1583,6 +2063,7 @@ export function GalleryApp() {
     selectedAreaId,
     selectedMedium,
     selectedNeighborhood,
+    tastePassport,
     verifiedOnly,
     walkMode
   ]);
@@ -1654,6 +2135,7 @@ export function GalleryApp() {
               skipRouteStop(activeWalkProgress?.currentStopId, activeWalkCurrentStop?.exhibition.id)
             }
             onEndWalk={endActiveWalk}
+            walkRecapRewardCopy={walkRecapRewardCopy}
             compact={isCompactLayout}
           />
 
@@ -1745,6 +2227,20 @@ export function GalleryApp() {
               </Pressable>
             </ImageBackground>
           ) : null}
+
+          <GalleryPassportPanel
+            quizAnswers={quizAnswers}
+            passport={tastePassport}
+            picks={personalizedPicks}
+            badges={passportBadges}
+            stamps={passportStamps}
+            quests={galleryQuests}
+            newBadgeCount={newBadgeCount}
+            activeWalkMode={walkMode}
+            onQuizAnswer={answerQuizCard}
+            onOpenPick={(exhibitionId) => setSelectedExhibitionId(exhibitionId)}
+            onUseForYouRoute={() => setWalkMode("for-you")}
+          />
         </View>
 
         <View style={styles.sectionHeader}>
@@ -2358,6 +2854,285 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900"
   },
+  passportBand: {
+    gap: spacing.md,
+    paddingTop: spacing.md
+  },
+  quizRail: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md
+  },
+  quizArtworkCard: {
+    backgroundColor: colors.paper,
+    borderColor: "rgba(17, 17, 17, 0.08)",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    overflow: "hidden",
+    width: 246,
+    ...shadows.card
+  },
+  quizArtworkVisual: {
+    height: 220,
+    justifyContent: "space-between",
+    overflow: "hidden",
+    padding: spacing.md
+  },
+  quizArtworkImage: {
+    height: "100%",
+    resizeMode: "cover",
+    width: "100%"
+  },
+  quizArtworkTopRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    justifyContent: "space-between"
+  },
+  quizArtworkTitle: {
+    color: colors.paper,
+    fontSize: 20,
+    fontWeight: "900",
+    lineHeight: 25
+  },
+  quizArtworkBody: {
+    gap: spacing.sm,
+    padding: spacing.md
+  },
+  quizArtworkMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17
+  },
+  quizAnswerRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  quizAnswerButton: {
+    alignItems: "center",
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    minHeight: 32,
+    paddingHorizontal: spacing.sm
+  },
+  activeQuizAnswerButton: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink
+  },
+  quizAnswerButtonText: {
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    lineHeight: 30
+  },
+  activeQuizAnswerButtonText: {
+    color: colors.paper
+  },
+  passportGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg
+  },
+  passportSummaryPanel: {
+    backgroundColor: colors.ink,
+    borderRadius: radii.md,
+    flexGrow: 1,
+    gap: spacing.md,
+    minWidth: 280,
+    padding: spacing.lg
+  },
+  passportSummaryTitle: {
+    color: colors.paper,
+    fontSize: 24,
+    fontWeight: "900",
+    lineHeight: 29
+  },
+  passportSignalPill: {
+    backgroundColor: "rgba(255, 253, 248, 0.12)",
+    borderColor: "rgba(255, 253, 248, 0.2)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.paper,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  passportBadgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  passportBadge: {
+    backgroundColor: colors.paper,
+    borderRadius: radii.pill,
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  newBadgePill: {
+    backgroundColor: colors.gold,
+    borderRadius: radii.pill,
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  passportStamp: {
+    backgroundColor: "rgba(255, 253, 248, 0.1)",
+    borderColor: "rgba(255, 253, 248, 0.18)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.paper,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  forYouPanel: {
+    backgroundColor: colors.paper,
+    borderColor: "rgba(17, 17, 17, 0.08)",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexGrow: 2,
+    gap: spacing.sm,
+    minWidth: 300,
+    padding: spacing.lg,
+    ...shadows.card
+  },
+  forYouHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+    justifyContent: "space-between"
+  },
+  forYouTitle: {
+    color: colors.ink,
+    fontSize: 20,
+    fontWeight: "900",
+    lineHeight: 25,
+    marginTop: spacing.xs
+  },
+  activeForYouButton: {
+    backgroundColor: colors.tealSoft,
+    borderColor: colors.ink
+  },
+  personalPickRow: {
+    alignItems: "flex-start",
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: spacing.md,
+    paddingTop: spacing.md
+  },
+  personalPickScore: {
+    alignItems: "center",
+    backgroundColor: colors.ink,
+    borderRadius: radii.md,
+    gap: 2,
+    justifyContent: "center",
+    minHeight: 46,
+    width: 46
+  },
+  personalPickScoreText: {
+    color: colors.paper,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  personalPickCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  personalPickTitle: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "900",
+    lineHeight: 20
+  },
+  personalPickMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17,
+    marginTop: spacing.xs
+  },
+  questPanel: {
+    backgroundColor: "transparent",
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg
+  },
+  questPanelHeader: {
+    paddingTop: spacing.sm
+  },
+  questGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md
+  },
+  questRow: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexGrow: 1,
+    gap: spacing.sm,
+    minWidth: 240,
+    padding: spacing.md
+  },
+  questHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: spacing.sm,
+    justifyContent: "space-between"
+  },
+  questTitle: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "900",
+    lineHeight: 19
+  },
+  questProgress: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  questDescription: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17
+  },
+  questProgressTrack: {
+    backgroundColor: colors.fog,
+    borderRadius: radii.pill,
+    height: 6,
+    overflow: "hidden"
+  },
+  questProgressFill: {
+    backgroundColor: colors.ink,
+    borderRadius: radii.pill,
+    height: 6
+  },
+  questReason: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
   routeFirstPanel: {
     backgroundColor: colors.paper,
     borderColor: "rgba(17, 17, 17, 0.08)",
@@ -2600,6 +3375,12 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 13,
     fontWeight: "800",
+    lineHeight: 18
+  },
+  walkRecapRewardCopy: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "900",
     lineHeight: 18
   },
   walkRecapPill: {

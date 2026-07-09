@@ -22,7 +22,8 @@ export type GalleryWalkMode =
   | "quick-loop"
   | "two-hour"
   | "opening-night"
-  | "last-chance";
+  | "last-chance"
+  | "for-you";
 
 export type GalleryDiscoveryFilters = {
   areaId: GalleryAreaId;
@@ -44,6 +45,8 @@ export type GalleryWalkPlanInput = {
   referenceNow?: string;
   timeBudgetMinutes?: number;
   exhibitions?: GalleryExhibition[];
+  personalizedScores?: Record<string, number>;
+  personalizedReasons?: Record<string, string[]>;
 };
 
 export type GalleryWalkStop = {
@@ -212,7 +215,8 @@ const walkModeConfig: Record<
   "quick-loop": { label: "45-minute quick loop", minutes: 45, maxStops: 2 },
   "two-hour": { label: "2-hour Saturday walk", minutes: 120, maxStops: 5 },
   "opening-night": { label: "opening-night crawl", minutes: 95, maxStops: 4 },
-  "last-chance": { label: "last-chance route", minutes: 95, maxStops: 4, lastChanceDays: 14 }
+  "last-chance": { label: "last-chance route", minutes: 95, maxStops: 4, lastChanceDays: 14 },
+  "for-you": { label: "personalized walk", minutes: 105, maxStops: 4 }
 };
 
 export const galleryVisitStatusLabels: Record<GalleryVisitStatus, string> = {
@@ -228,7 +232,8 @@ export const galleryWalkModeLabels: Record<GalleryWalkMode, string> = {
   "quick-loop": "Quick loop",
   "two-hour": "2-hour walk",
   "opening-night": "Opening-night crawl",
-  "last-chance": "Last-chance route"
+  "last-chance": "Last-chance route",
+  "for-you": "For you"
 };
 
 function getIsoMatch(iso: string): RegExpMatchArray | null {
@@ -829,6 +834,7 @@ function getRouteCandidateScore(input: {
   savedIdSet: Set<string>;
   selectedGalleryNames?: Set<string>;
   mode: GalleryWalkMode;
+  personalizedScores?: Map<string, number>;
 }): number {
   const status = getGalleryVisitStatus(input.candidate, input.referenceNow);
   const distance = input.previous
@@ -838,10 +844,13 @@ function getRouteCandidateScore(input: {
     input.selectedGalleryNames?.has(getGalleryRouteNameKey(input.candidate)) ?? false;
   const savedScore = input.savedIdSet.has(input.candidate.id) ? -1000 : 0;
   const duplicatePenalty = isDuplicateGallery ? 90 : 0;
+  const personalizedScore =
+    input.mode === "for-you" ? input.personalizedScores?.get(input.candidate.id) ?? 0 : 0;
 
   return (
     savedScore +
     duplicatePenalty +
+    personalizedScore * -2 +
     visitStatusPriority[status] * 45 +
     getRouteTrustPriority(input.candidate) * 18 +
     getRouteModeScore(input.candidate, input.referenceNow, input.mode) +
@@ -853,7 +862,8 @@ function sortRouteGroupExhibitions(
   exhibitions: GalleryExhibition[],
   referenceNow: string,
   savedIdSet: Set<string>,
-  mode: GalleryWalkMode
+  mode: GalleryWalkMode,
+  personalizedScores?: Map<string, number>
 ): GalleryExhibition[] {
   return [...exhibitions].sort((left, right) => {
     const savedDelta = Number(savedIdSet.has(right.id)) - Number(savedIdSet.has(left.id));
@@ -867,13 +877,15 @@ function sortRouteGroupExhibitions(
         candidate: left,
         referenceNow,
         savedIdSet,
-        mode
+        mode,
+        personalizedScores
       }) -
       getRouteCandidateScore({
         candidate: right,
         referenceNow,
         savedIdSet,
-        mode
+        mode,
+        personalizedScores
       });
 
     if (scoreDelta !== 0) {
@@ -889,7 +901,8 @@ function createGalleryRouteGroups(
   groupSourceCandidates: GalleryExhibition[],
   referenceNow: string,
   savedIdSet: Set<string>,
-  mode: GalleryWalkMode
+  mode: GalleryWalkMode,
+  personalizedScores?: Map<string, number>
 ): GalleryRouteGroup[] {
   const sourceGroups = new Map<string, GalleryExhibition[]>();
   const routeGroups = new Map<string, GalleryExhibition[]>();
@@ -915,7 +928,8 @@ function createGalleryRouteGroups(
       groupRouteCandidates,
       referenceNow,
       savedIdSet,
-      mode
+      mode,
+      personalizedScores
     );
     const exhibition = sortedRouteCandidates[0] ?? groupRouteCandidates[0];
 
@@ -927,11 +941,15 @@ function createGalleryRouteGroups(
     const groupedExhibitions = exhibition
       ? [
           exhibition,
-          ...sortRouteGroupExhibitions(sourceGroup, referenceNow, savedIdSet, mode).filter(
-            (candidate) => candidate.id !== exhibition.id
-          )
+          ...sortRouteGroupExhibitions(
+            sourceGroup,
+            referenceNow,
+            savedIdSet,
+            mode,
+            personalizedScores
+          ).filter((candidate) => candidate.id !== exhibition.id)
         ]
-      : sortRouteGroupExhibitions(sourceGroup, referenceNow, savedIdSet, mode);
+      : sortRouteGroupExhibitions(sourceGroup, referenceNow, savedIdSet, mode, personalizedScores);
 
     return [{
       key,
@@ -993,6 +1011,10 @@ function getRouteReasonSet(
     reasons.push("Best opening-time sequence");
   }
 
+  if (options.mode === "for-you") {
+    reasons.push("Personalized pick");
+  }
+
   if (trust.isVerified) {
     reasons.push("Verified official source");
   } else if (trust.isFixture) {
@@ -1008,7 +1030,8 @@ function getFirstRouteCandidate(
   candidates: GalleryExhibition[],
   referenceNow: string,
   savedIdSet: Set<string> = new Set(),
-  mode: GalleryWalkMode = "quick-loop"
+  mode: GalleryWalkMode = "quick-loop",
+  personalizedScores?: Map<string, number>
 ): GalleryExhibition | undefined {
   return [...candidates].sort((left, right) => {
     const scoreDelta =
@@ -1016,13 +1039,15 @@ function getFirstRouteCandidate(
         candidate: left,
         referenceNow,
         savedIdSet,
-        mode
+        mode,
+        personalizedScores
       }) -
       getRouteCandidateScore({
         candidate: right,
         referenceNow,
         savedIdSet,
-        mode
+        mode,
+        personalizedScores
       });
 
     if (scoreDelta !== 0) {
@@ -1037,9 +1062,16 @@ function orderGalleryWalkCandidates(
   candidates: GalleryExhibition[],
   referenceNow: string,
   savedIdSet: Set<string> = new Set(),
-  mode: GalleryWalkMode = "quick-loop"
+  mode: GalleryWalkMode = "quick-loop",
+  personalizedScores?: Map<string, number>
 ): GalleryExhibition[] {
-  const firstCandidate = getFirstRouteCandidate(candidates, referenceNow, savedIdSet, mode);
+  const firstCandidate = getFirstRouteCandidate(
+    candidates,
+    referenceNow,
+    savedIdSet,
+    mode,
+    personalizedScores
+  );
 
   if (!firstCandidate) {
     return [];
@@ -1065,7 +1097,8 @@ function orderGalleryWalkCandidates(
             referenceNow,
             savedIdSet,
             selectedGalleryNames,
-            mode
+            mode,
+            personalizedScores
           }) -
           getRouteCandidateScore({
             candidate: right.candidate,
@@ -1073,7 +1106,8 @@ function orderGalleryWalkCandidates(
             referenceNow,
             savedIdSet,
             selectedGalleryNames,
-            mode
+            mode,
+            personalizedScores
           });
 
         if (scoreDelta !== 0) {
@@ -1254,6 +1288,9 @@ export function createGalleryWalkPlan(input: GalleryWalkPlanInput): GalleryWalkP
   const referenceNow = input.referenceNow ?? defaultReferenceNow;
   const config = walkModeConfig[input.mode];
   const sourceExhibitions = input.exhibitions ?? galleryExhibitions;
+  const personalizedScores = new Map(
+    Object.entries(input.personalizedScores ?? {}).map(([id, score]) => [id, Number(score)] as const)
+  );
   const intelligence = createNeighborhoodIntelligence(input.areaId, sourceExhibitions, referenceNow);
   const neighborhood =
     input.neighborhood ??
@@ -1336,7 +1373,8 @@ export function createGalleryWalkPlan(input: GalleryWalkPlanInput): GalleryWalkP
     onViewCandidates,
     referenceNow,
     savedIdSet,
-    input.mode
+    input.mode,
+    personalizedScores
   );
   const routeGroupByPrimaryId = new Map(
     routeGroups.map((group) => [group.exhibition.id, group] as const)
@@ -1345,7 +1383,8 @@ export function createGalleryWalkPlan(input: GalleryWalkPlanInput): GalleryWalkP
     routeGroups.map((group) => group.exhibition),
     referenceNow,
     savedIdSet,
-    input.mode
+    input.mode,
+    personalizedScores
   )
     .slice(0, maxStops)
     .map((exhibition) => routeGroupByPrimaryId.get(exhibition.id))
@@ -1357,6 +1396,7 @@ export function createGalleryWalkPlan(input: GalleryWalkPlanInput): GalleryWalkP
       groupedExhibitionCount: group.exhibitions.length,
       mode: input.mode
     });
+    const personalizedReasons = input.personalizedReasons?.[exhibition.id] ?? [];
     const whyGoReasons = getGalleryWhyGoReasons(
       exhibition,
       sourceExhibitions,
@@ -1372,10 +1412,9 @@ export function createGalleryWalkPlan(input: GalleryWalkPlanInput): GalleryWalkP
       exhibitions: group.exhibitions,
       groupedExhibitionCount: group.exhibitions.length,
       status: getGalleryVisitStatus(exhibition, referenceNow),
-      reasons: Array.from(new Set([...savedReasons, ...routeReasons, ...whyGoReasons])).slice(
-        0,
-        5
-      ),
+      reasons: Array.from(
+        new Set([...savedReasons, ...personalizedReasons, ...routeReasons, ...whyGoReasons])
+      ).slice(0, 5),
       isSaved,
       minutesAtStop: stopMinutesAtStop,
       stopNumber: index + 1,

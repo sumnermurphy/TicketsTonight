@@ -4,6 +4,11 @@ import type {
   GalleryMedium
 } from "../types";
 import type { GalleryWalkMode } from "./galleryDiscovery";
+import type {
+  GalleryPassportBadge,
+  GalleryQuizAnswer,
+  GalleryTastePassport
+} from "./galleryTastePassport";
 import type { GalleryWalkSession } from "./galleryWalkSession";
 
 export type GalleryPersistedLens = "all" | "open-now" | "opening-tonight" | "last-chance";
@@ -23,6 +28,11 @@ export type GalleryAppPersistedState = {
   savedAlertNeighborhoods: string[];
   savedAlertMediums: GalleryMedium[];
   activeWalkSession?: GalleryWalkSession;
+  quizAnswers: GalleryQuizAnswer[];
+  tastePassport?: GalleryTastePassport;
+  earnedBadges: GalleryPassportBadge[];
+  completedQuestIds: string[];
+  completedWalkSessions: GalleryWalkSession[];
 };
 
 export type GalleryStorageAdapter = {
@@ -84,7 +94,8 @@ function sanitizeState(value: unknown): GalleryAppPersistedState | undefined {
     walkMode:
       value.walkMode === "two-hour" ||
       value.walkMode === "opening-night" ||
-      value.walkMode === "last-chance"
+      value.walkMode === "last-chance" ||
+      value.walkMode === "for-you"
         ? value.walkMode
         : "quick-loop",
     alertWindowDays:
@@ -100,7 +111,20 @@ function sanitizeState(value: unknown): GalleryAppPersistedState | undefined {
       : [],
     activeWalkSession: isObject(value.activeWalkSession)
       ? (value.activeWalkSession as GalleryWalkSession)
-      : undefined
+      : undefined,
+    quizAnswers: Array.isArray(value.quizAnswers)
+      ? (value.quizAnswers as GalleryQuizAnswer[])
+      : [],
+    tastePassport: isObject(value.tastePassport)
+      ? (value.tastePassport as GalleryTastePassport)
+      : undefined,
+    earnedBadges: Array.isArray(value.earnedBadges)
+      ? (value.earnedBadges as GalleryPassportBadge[])
+      : [],
+    completedQuestIds: isStringArray(value.completedQuestIds) ? value.completedQuestIds : [],
+    completedWalkSessions: Array.isArray(value.completedWalkSessions)
+      ? (value.completedWalkSessions as GalleryWalkSession[])
+      : []
   };
 }
 
