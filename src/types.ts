@@ -363,6 +363,24 @@ export type GallerySourceLegalStatus =
 
 export type GallerySourceFreshness = "fresh" | "needs-review" | "stale-risk";
 
+export type GallerySourceCandidateType =
+  | "commercial-gallery"
+  | "nonprofit"
+  | "artist-run"
+  | "project-space"
+  | "museum"
+  | "partner-submission";
+
+export type GalleryImportLane = "manual-seed" | "partner-submission" | "official-page-ready";
+
+export type GalleryImportRecordKind = "manual-seed" | "partner-submission";
+
+export type GallerySubmissionReviewStatus =
+  | "needs-review"
+  | "approved"
+  | "rejected"
+  | "needs-more-info";
+
 export type GalleryHoursInterval = {
   day: 0 | 1 | 2 | 3 | 4 | 5 | 6;
   opens: string;
@@ -397,6 +415,8 @@ export type GalleryNeighborhood = {
 
 export type GalleryExhibition = {
   id: string;
+  sourceCandidateId?: string;
+  importRecordId?: string;
   title: string;
   artists: string[];
   galleryName: string;
@@ -447,4 +467,67 @@ export type GallerySubmissionDraft = {
   sourceLegalStatus: "partner-submission";
   status: "ready-for-review" | "needs-required-fields";
   createdAt: string;
+};
+
+export type GallerySourceCandidate = {
+  id: string;
+  galleryName: string;
+  galleryKind: GalleryKind;
+  areaId: GalleryAreaId;
+  neighborhood: string;
+  city: string;
+  address: string;
+  coordinates: Coordinates;
+  websiteUrl: string;
+  exhibitionsUrl: string;
+  hoursUrl?: string;
+  submissionUrl?: string;
+  contactUrl?: string;
+  sourceType: GallerySourceCandidateType;
+  preferredImportLane: GalleryImportLane;
+  sourceLegalStatus: GallerySourceLegalStatus;
+  sourceFreshness: GallerySourceFreshness;
+  lastCheckedAt: string;
+  confidence: number;
+  defaultHours: GalleryHoursInterval[];
+  notes: string;
+};
+
+export type GalleryImportPayload = {
+  title: string;
+  artists: string[];
+  mediums: GalleryMedium[];
+  opensAt: string;
+  closesAt: string;
+  receptionAt?: string;
+  externalUrl: string;
+  description: string;
+  imageTone?: string;
+};
+
+export type GalleryImportRecord = {
+  id: string;
+  sourceCandidateId: string;
+  kind: GalleryImportRecordKind;
+  sourceUrl: string;
+  sourceCheckedAt: string;
+  sourceFreshness: GallerySourceFreshness;
+  sourceLegalStatus: GallerySourceLegalStatus;
+  confidence: number;
+  payload: GalleryImportPayload;
+  normalizedExhibitionId?: string;
+  errors: string[];
+};
+
+export type GallerySubmissionQueueItem = {
+  id: string;
+  draft: GallerySubmissionDraft;
+  sourceCandidateId?: string;
+  status: GallerySubmissionReviewStatus;
+  submittedAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  reviewNotes?: string;
+  approvedImportRecordId?: string;
+  approvedExhibitionId?: string;
 };

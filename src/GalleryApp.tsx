@@ -29,6 +29,7 @@ import {
   galleryExhibitions,
   galleryNeighborhoods
 } from "./data/galleryCatalog";
+import { gallerySourceCandidates } from "./data/gallerySources";
 import {
   createGallerySourceTrustSummary,
   createGalleryWalkPlan,
@@ -45,6 +46,7 @@ import {
   upsertGalleryLogEntry,
   type GalleryWalkMode
 } from "./services/galleryDiscovery";
+import { createGalleryMarketDataAudit } from "./services/galleryDataFoundation";
 import { colors, radii, shadows, spacing } from "./theme";
 import type {
   GalleryAreaId,
@@ -149,6 +151,10 @@ function getTonightEvent(exhibition: GalleryExhibition) {
 }
 
 function getFreshnessCopy(exhibition: GalleryExhibition): string {
+  if (exhibition.externalUrl.includes("example.org")) {
+    return "Fixture source";
+  }
+
   if (exhibition.sourceFreshness === "fresh") {
     return "Fresh source";
   }
@@ -161,6 +167,14 @@ function getFreshnessCopy(exhibition: GalleryExhibition): string {
 }
 
 function getSourceCopy(exhibition: GalleryExhibition): string {
+  if (exhibition.externalUrl.includes("example.org")) {
+    return "Needs live source";
+  }
+
+  if (exhibition.importRecordId) {
+    return "Imported record";
+  }
+
   if (exhibition.sourceLegalStatus === "official-public-page") {
     return "Official page";
   }
@@ -466,6 +480,15 @@ export function GalleryApp() {
     () => createGallerySourceTrustSummary(selectedAreaId, galleryExhibitions, referenceNow),
     [selectedAreaId]
   );
+  const dataAudit = useMemo(
+    () =>
+      createGalleryMarketDataAudit(selectedAreaId, {
+        sources: gallerySourceCandidates,
+        exhibitions: galleryExhibitions,
+        referenceNow
+      }),
+    [selectedAreaId]
+  );
   const savedIds = useMemo(() => getSavedGalleryIdsFromLog(logEntries), [logEntries]);
   const logEntryById = useMemo(
     () => new Map(logEntries.map((entry) => [entry.exhibitionId, entry])),
@@ -613,6 +636,7 @@ export function GalleryApp() {
 
         <View style={styles.marketSnapshot}>
           <Metric label="exhibitions" value={sourceTrust.exhibitionCount} tone="good" />
+          <Metric label="gallery sources" value={dataAudit.sourceCount} tone="good" />
           <Metric label="openings tonight" value={sourceTrust.openingCount} tone="good" />
           <Metric label="hours coverage" value={`${sourceTrust.hoursCoveragePercent}%`} />
           <Metric
@@ -625,7 +649,7 @@ export function GalleryApp() {
         <View style={styles.statusLine}>
           <Check size={16} color={colors.teal} />
           <Text style={styles.statusLineText}>
-            {sourceTrust.externalLinkCoveragePercent}% external links - {sourceTrust.addressCoveragePercent}% addresses - {sourceTrust.recommendedNextAction}
+            Source directory ready: {dataAudit.officialLinkCoveragePercent}% official links, {dataAudit.hoursCoveragePercent}% source hours. Inventory still includes {dataAudit.seedExhibitionCount} seed fixtures needing live replacement.
           </Text>
         </View>
 

@@ -4,6 +4,7 @@ import {
   galleryExhibitions,
   galleryNeighborhoods
 } from "../src/data/galleryCatalog";
+import { gallerySourceCandidates } from "../src/data/gallerySources";
 import { discoveryMarketPlans } from "../src/data/discoveryPlans";
 import { localSourceCandidates } from "../src/data/localSourceCandidates";
 import {
@@ -53,6 +54,16 @@ import {
   getSavedGalleryIdsFromLog,
   upsertGalleryLogEntry
 } from "../src/services/galleryDiscovery";
+import {
+  approveGallerySubmissionQueueItem,
+  createGalleryImportRecord,
+  createGalleryMarketDataAudit,
+  createGallerySubmissionQueueItem,
+  convertImportRecordToExhibition,
+  getGallerySourceCandidates,
+  getGallerySourceEffectiveFreshness,
+  reviewGallerySubmissionQueueItem
+} from "../src/services/galleryDataFoundation";
 import { createTicketmasterProviderDiagnostics } from "../src/services/providerDiagnostics";
 import { checkoutBackend } from "../src/services/checkoutBackend";
 import {
@@ -489,6 +500,249 @@ async function main() {
     incompleteSubmission.errors.length > 0 &&
       incompleteSubmission.draft.status === "needs-required-fields",
     "Gallery submission drafts should report missing required fields."
+  );
+
+  const requiredSourceCoverage: Array<{
+    areaId: "nyc" | "la" | "hudson";
+    neighborhoods: string[];
+    minimumSources: number;
+  }> = [
+    {
+      areaId: "nyc",
+      neighborhoods: ["Chelsea", "Tribeca", "Lower East Side", "Chinatown", "Brooklyn/Bushwick"],
+      minimumSources: 10
+    },
+    {
+      areaId: "la",
+      neighborhoods: ["Culver City", "Hollywood/Sycamore", "DTLA", "Chinatown", "West Hollywood"],
+      minimumSources: 10
+    },
+    {
+      areaId: "hudson",
+      neighborhoods: ["Warren Street", "Beacon", "Kingston"],
+      minimumSources: 6
+    }
+  ];
+
+  for (const coverage of requiredSourceCoverage) {
+    const marketSources = getGallerySourceCandidates(gallerySourceCandidates, {
+      areaId: coverage.areaId
+    });
+    const marketSourceNeighborhoods = new Set(marketSources.map((source) => source.neighborhood));
+
+    assert(
+      marketSources.length >= coverage.minimumSources,
+      `Gallery source directory should have enough ${coverage.areaId} source candidates.`
+    );
+
+    for (const neighborhood of coverage.neighborhoods) {
+      assert(
+        marketSourceNeighborhoods.has(neighborhood),
+        `Gallery source directory should cover ${coverage.areaId} ${neighborhood}.`
+      );
+    }
+
+    assert(
+      marketSources.every(
+        (source) =>
+          source.websiteUrl.length > 0 &&
+          source.exhibitionsUrl.length > 0 &&
+          source.city.length > 0 &&
+          source.lastCheckedAt.length > 0 &&
+          source.confidence > 0
+      ),
+      `Gallery source directory should track structured source fields for ${coverage.areaId}.`
+    );
+  }
+
+  const staleMiguelAbreuSource = gallerySourceCandidates.find(
+    (source) => source.id === "source-miguel-abreu-les"
+  );
+  const jamesCohanSource = gallerySourceCandidates.find(
+    (source) => source.id === "source-james-cohan-tribeca"
+  );
+
+  assert(staleMiguelAbreuSource, "Stale source fixture should exist.");
+  assert(jamesCohanSource, "James Cohan source fixture should exist.");
+  assert(
+    getGallerySourceEffectiveFreshness(staleMiguelAbreuSource, galleryReferenceNow) ===
+      "stale-risk",
+    "Gallery data foundation should flag stale source candidates."
+  );
+  assert(
+    getGallerySourceEffectiveFreshness(jamesCohanSource, galleryReferenceNow) === "fresh",
+    "Gallery data foundation should preserve fresh official source candidates."
+  );
+
+  const manualImportRecord = createGalleryImportRecord(
+    jamesCohanSource,
+    {
+      title: "Manual Import Show",
+      artists: ["Manual Artist"],
+      mediums: ["painting"],
+      opensAt: "2026-07-09T10:00:00-04:00",
+      closesAt: "2026-08-09T18:00:00-04:00",
+      externalUrl: "https://www.jamescohan.com/exhibitions/manual-import-show",
+      description: "Manual import record for service checks."
+    },
+    {
+      kind: "manual-seed",
+      sourceCheckedAt: galleryReferenceNow
+    }
+  );
+  const manualImportExhibition = convertImportRecordToExhibition(
+    manualImportRecord,
+    jamesCohanSource
+  );
+
+  assert(
+    manualImportRecord.errors.length === 0 &&
+      manualImportExhibition.source === "manual-review" &&
+      manualImportExhibition.importRecordId === manualImportRecord.id,
+    "Manual seed import records should normalize into import-tracked gallery exhibitions."
+  );
+
+  const hudsonKingstonSource = gallerySourceCandidates.find(
+    (source) => source.id === "source-lockwood-kingston"
+  );
+
+  assert(hudsonKingstonSource, "Kingston source fixture should exist.");
+
+  const kingstonReadinessBefore = createNeighborhoodIntelligence(
+    "hudson",
+    galleryExhibitions,
+    galleryReferenceNow
+  ).find((neighborhood) => neighborhood.neighborhood === "Kingston");
+
+  assert(
+    kingstonReadinessBefore && !kingstonReadinessBefore.canSupportWalk,
+    "Kingston should start below walk-ready threshold before approved import inventory."
+  );
+
+  const kingstonSubmission = createGallerySubmissionDraft({
+    galleryName: hudsonKingstonSource.galleryName,
+    areaId: "hudson",
+    title: "Submitted Kingston Show",
+    artists: ["Review Queue Artist"],
+    opensAt: "2026-07-09T11:00:00-04:00",
+    closesAt: "2026-08-09T17:00:00-04:00",
+    receptionAt: "2026-07-10T18:00:00-04:00",
+    externalUrl: "https://www.thelockwoodgallery.com/exhibitions/submitted-kingston-show",
+    createdAt: galleryReferenceNow
+  });
+  const kingstonQueueItem = createGallerySubmissionQueueItem(kingstonSubmission.draft, {
+    sourceCandidateId: hudsonKingstonSource.id,
+    submittedAt: galleryReferenceNow
+  });
+  const moreInfoItem = reviewGallerySubmissionQueueItem(kingstonQueueItem, {
+    status: "needs-more-info",
+    reviewedAt: galleryReferenceNow,
+    reviewNotes: "Ask gallery for artist list confirmation."
+  });
+  const approval = approveGallerySubmissionQueueItem(kingstonQueueItem, hudsonKingstonSource, {
+    reviewedAt: galleryReferenceNow,
+    reviewedBy: "service-check",
+    reviewNotes: "Approved after source URL review.",
+    mediums: ["photography"],
+    description: "Approved partner submission used to test inventory conversion."
+  });
+  const secondKingstonSubmission = createGallerySubmissionDraft({
+    galleryName: hudsonKingstonSource.galleryName,
+    areaId: "hudson",
+    title: "Second Kingston Submission",
+    artists: ["Second Review Artist"],
+    opensAt: "2026-07-09T11:00:00-04:00",
+    closesAt: "2026-08-12T17:00:00-04:00",
+    externalUrl: "https://www.thelockwoodgallery.com/exhibitions/second-kingston-submission",
+    createdAt: galleryReferenceNow
+  });
+  const secondKingstonQueueItem = createGallerySubmissionQueueItem(
+    secondKingstonSubmission.draft,
+    {
+      sourceCandidateId: hudsonKingstonSource.id,
+      submittedAt: galleryReferenceNow
+    }
+  );
+  const secondApproval = approveGallerySubmissionQueueItem(
+    secondKingstonQueueItem,
+    hudsonKingstonSource,
+    {
+      reviewedAt: galleryReferenceNow,
+      reviewedBy: "service-check",
+      reviewNotes: "Approved to make Kingston walk-ready.",
+      mediums: ["painting"],
+      description: "Second approved partner submission used to test walk readiness."
+    }
+  );
+
+  assert(
+    kingstonQueueItem.status === "needs-review" &&
+      moreInfoItem.status === "needs-more-info" &&
+      approval.queueItem.status === "approved" &&
+      approval.queueItem.approvedExhibitionId === approval.exhibition.id &&
+      approval.importRecord.kind === "partner-submission" &&
+      approval.exhibition.source === "gallery-submission",
+    "Gallery submission queue should support review statuses and approval into inventory."
+  );
+
+  const hudsonWithApprovedSubmission = [
+    ...galleryExhibitions,
+    approval.exhibition,
+    secondApproval.exhibition
+  ];
+  const kingstonReadinessAfter = createNeighborhoodIntelligence(
+    "hudson",
+    hudsonWithApprovedSubmission,
+    galleryReferenceNow
+  ).find((neighborhood) => neighborhood.neighborhood === "Kingston");
+
+  assert(
+    kingstonReadinessAfter?.canSupportWalk,
+    "Approved submission inventory should be able to change neighborhood walk readiness."
+  );
+
+  const nycDataAudit = createGalleryMarketDataAudit("nyc", {
+    sources: gallerySourceCandidates,
+    exhibitions: galleryExhibitions,
+    importRecords: [manualImportRecord],
+    referenceNow: galleryReferenceNow
+  });
+  const laDataAudit = createGalleryMarketDataAudit("la", {
+    sources: gallerySourceCandidates,
+    exhibitions: galleryExhibitions,
+    referenceNow: galleryReferenceNow
+  });
+  const hudsonDataAudit = createGalleryMarketDataAudit("hudson", {
+    sources: gallerySourceCandidates,
+    exhibitions: hudsonWithApprovedSubmission,
+    importRecords: [approval.importRecord, secondApproval.importRecord],
+    referenceNow: galleryReferenceNow
+  });
+
+  assert(
+    nycDataAudit.sourceCount >= 10 &&
+      laDataAudit.sourceCount >= 10 &&
+      hudsonDataAudit.sourceCount >= 6,
+    "Gallery market data audits should report source counts for NYC, LA, and Hudson."
+  );
+  assert(
+      nycDataAudit.seedExhibitionCount > 0 &&
+      nycDataAudit.manualSeedImportCount === 1 &&
+      hudsonDataAudit.partnerSubmissionImportCount === 2 &&
+      hudsonDataAudit.importedExhibitionCount === 2,
+    "Gallery market data audits should distinguish seed, manual-import, submitted, and imported data."
+  );
+  assert(
+    nycDataAudit.officialLinkCoveragePercent === 100 &&
+      laDataAudit.hoursCoveragePercent === 100 &&
+      hudsonDataAudit.walkReadyNeighborhoods.includes("Kingston"),
+    "Gallery market data audits should report coverage and walk-ready neighborhoods."
+  );
+  assert(
+    nycDataAudit.needsReviewSourceIds.length > 0 &&
+      laDataAudit.staleSourceCount > 0 &&
+      hudsonDataAudit.staleListingCount > 0,
+    "Gallery market data audits should expose stale-source and stale-listing risk."
   );
 
   const visibilityShows = Array.from({ length: 130 }, (_, index): Show => ({

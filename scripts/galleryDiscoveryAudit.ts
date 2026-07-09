@@ -1,4 +1,6 @@
 import { galleryAreas, galleryExhibitions } from "../src/data/galleryCatalog";
+import { gallerySourceCandidates } from "../src/data/gallerySources";
+import { createGalleryMarketDataAudit } from "../src/services/galleryDataFoundation";
 import {
   createGallerySourceTrustSummary,
   createGalleryWalkPlan,
@@ -10,6 +12,11 @@ const referenceNow = "2026-07-09T15:30:00-04:00";
 
 for (const area of galleryAreas) {
   const trust = createGallerySourceTrustSummary(area.id, galleryExhibitions, referenceNow);
+  const dataAudit = createGalleryMarketDataAudit(area.id, {
+    sources: gallerySourceCandidates,
+    exhibitions: galleryExhibitions,
+    referenceNow
+  });
   const neighborhoods = createNeighborhoodIntelligence(area.id, galleryExhibitions, referenceNow);
   const defaultNeighborhood =
     neighborhoods.find((neighborhood) => neighborhood.canSupportWalk)?.neighborhood ??
@@ -36,10 +43,22 @@ for (const area of galleryAreas) {
     `Inventory: ${trust.exhibitionCount} exhibitions, ${trust.openingCount} opening/social events tonight`
   );
   console.log(
+    `Source directory: ${dataAudit.sourceCount} sources, ${dataAudit.officialPageReadySourceCount} official-page-ready, ${dataAudit.needsReviewSourceIds.length} needing review`
+  );
+  console.log(
     `Coverage: hours ${trust.hoursCoveragePercent}%, addresses ${trust.addressCoveragePercent}%, links ${trust.externalLinkCoveragePercent}%`
   );
   console.log(
+    `Source coverage: official links ${dataAudit.officialLinkCoveragePercent}%, source hours ${dataAudit.hoursCoveragePercent}%`
+  );
+  console.log(
     `Freshness: ${trust.freshSourceCount} fresh, ${trust.staleSourceRiskCount} stale-risk, ${trust.officialOrSubmissionCount} official/submission-safe`
+  );
+  console.log(
+    `Data origin: ${dataAudit.seedExhibitionCount} seed/fixture, ${dataAudit.submittedExhibitionCount} submitted, ${dataAudit.importedExhibitionCount} imported`
+  );
+  console.log(
+    `Source freshness: ${dataAudit.sourceFreshness.fresh} fresh, ${dataAudit.sourceFreshness["needs-review"]} needs-review, ${dataAudit.sourceFreshness["stale-risk"]} stale-risk`
   );
   console.log(`Next action: ${trust.recommendedNextAction}`);
   console.log(
