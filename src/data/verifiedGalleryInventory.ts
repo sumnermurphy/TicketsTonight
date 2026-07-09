@@ -726,6 +726,7 @@ export const verifiedGalleryExhibitions: GalleryExhibition[] = [
   }),
   createVerifiedExhibition({
     id: "verified-510-warren-similarities",
+    sourceCandidateId: "source-510-warren-hudson",
     importRecordId: "verified-record-510-warren-similarities",
     title: "Similarities: Monotypes+",
     artists: ["Peggy Reeves"],

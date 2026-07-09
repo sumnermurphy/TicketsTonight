@@ -58,6 +58,7 @@ import type {
 } from "./types";
 
 type GalleryLens = "all" | "open-now" | "opening-tonight" | "last-chance";
+type GalleryWalkPlan = ReturnType<typeof createGalleryWalkPlan>;
 
 const referenceNow = "2026-07-09T15:30:00-04:00";
 
@@ -238,8 +239,8 @@ function WalkStopRow({
   isStart,
   isNext
 }: {
-  stop: ReturnType<typeof createGalleryWalkPlan>["stops"][number];
-  leg?: ReturnType<typeof createGalleryWalkPlan>["legs"][number];
+  stop: GalleryWalkPlan["stops"][number];
+  leg?: GalleryWalkPlan["legs"][number];
   isStart: boolean;
   isNext: boolean;
 }) {
@@ -290,6 +291,63 @@ function WalkStopRow({
       >
         <MapPin size={16} color={colors.ink} />
       </Pressable>
+    </View>
+  );
+}
+
+function RoutePreview({ walkPlan }: { walkPlan: GalleryWalkPlan }) {
+  if (walkPlan.stops.length === 0) {
+    return null;
+  }
+
+  return (
+    <View style={styles.routePreview}>
+      <View style={styles.routePreviewHeader}>
+        <MapPin size={15} color={colors.teal} />
+        <Text style={styles.routePreviewTitle}>Route preview</Text>
+        <Text style={styles.routePreviewMeta}>
+          {walkPlan.totalMinutes} min - {walkPlan.totalDistanceMiles.toFixed(1)} mi
+        </Text>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.routePreviewScroll}
+        contentContainerStyle={styles.routePreviewStrip}
+      >
+        {walkPlan.stops.map((stop, index) => {
+          const nextLeg = walkPlan.legs[index];
+          const isStart = walkPlan.startStopId === stop.exhibition.id;
+          const isNext = walkPlan.nextStopId === stop.exhibition.id;
+
+          return (
+            <View key={stop.exhibition.id} style={styles.routePreviewStop}>
+              <View style={styles.routePreviewNodeRow}>
+                <View
+                  style={[
+                    styles.routePreviewNode,
+                    isStart || isNext ? styles.routePreviewNodeActive : undefined
+                  ]}
+                >
+                  <Text style={styles.routePreviewNodeText}>{stop.stopNumber}</Text>
+                </View>
+                {index < walkPlan.stops.length - 1 ? (
+                  <View style={styles.routePreviewLine} />
+                ) : null}
+              </View>
+              <Text style={styles.routePreviewGallery} numberOfLines={1}>
+                {stop.exhibition.galleryName}
+              </Text>
+              <Text style={styles.routePreviewStatus} numberOfLines={1}>
+                {isStart ? "Start here" : isNext ? "Next stop" : galleryVisitStatusLabels[stop.status]}
+              </Text>
+              <Text style={styles.routePreviewLeg}>
+                {nextLeg ? `${nextLeg.walkingMinutes} min to next` : "Finish"}
+              </Text>
+            </View>
+          );
+        })}
+      </ScrollView>
     </View>
   );
 }
@@ -777,6 +835,7 @@ export function GalleryApp() {
               </Pressable>
             ) : null}
           </View>
+          <RoutePreview walkPlan={walkPlan} />
           <View style={styles.walkStops}>
             {walkPlan.stops.map((stop, index) => (
               <WalkStopRow
@@ -1143,6 +1202,89 @@ const styles = StyleSheet.create({
     color: colors.paper,
     fontSize: 12,
     fontWeight: "900"
+  },
+  routePreview: {
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    paddingVertical: spacing.md
+  },
+  routePreviewHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md
+  },
+  routePreviewTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  routePreviewMeta: {
+    color: colors.mutedInk,
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "800",
+    marginLeft: spacing.sm,
+    textAlign: "right"
+  },
+  routePreviewScroll: {
+    marginTop: spacing.md
+  },
+  routePreviewStrip: {
+    paddingHorizontal: spacing.md,
+    paddingRight: spacing.lg
+  },
+  routePreviewStop: {
+    marginRight: spacing.md,
+    width: 132
+  },
+  routePreviewNodeRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    minHeight: 30
+  },
+  routePreviewNode: {
+    alignItems: "center",
+    backgroundColor: colors.ink,
+    borderRadius: radii.pill,
+    height: 28,
+    justifyContent: "center",
+    width: 28
+  },
+  routePreviewNodeActive: {
+    backgroundColor: colors.teal
+  },
+  routePreviewNodeText: {
+    color: colors.paper,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  routePreviewLine: {
+    backgroundColor: colors.line,
+    flex: 1,
+    height: 2,
+    marginLeft: spacing.xs
+  },
+  routePreviewGallery: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "900",
+    marginTop: spacing.sm
+  },
+  routePreviewStatus: {
+    color: colors.teal,
+    fontSize: 11,
+    fontWeight: "900",
+    marginTop: spacing.xs
+  },
+  routePreviewLeg: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "800",
+    marginTop: spacing.xs
   },
   walkStops: {
     gap: spacing.sm,

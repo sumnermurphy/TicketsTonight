@@ -344,6 +344,15 @@ async function main() {
     galleryExhibitions.find((exhibition) => exhibition.id === "verified-pace-julian-schnabel") ??
       galleryExhibitions[0]
   );
+  const warren510Source = gallerySourceCandidates.find(
+    (source) => source.id === "source-510-warren-hudson"
+  );
+  const warren510Exhibition = verifiedInventory.find(
+    (exhibition) => exhibition.id === "verified-510-warren-similarities"
+  );
+  const septemberSource = gallerySourceCandidates.find(
+    (source) => source.id === "source-september-hudson"
+  );
 
   assert(
     nycTrust.exhibitionCount >= 30 &&
@@ -373,6 +382,19 @@ async function main() {
         getGalleryInventoryTrust(exhibition).sourceLabel === "Official gallery link"
     ),
     "Verified gallery inventory should carry real official links instead of example URLs."
+  );
+  assert(
+    warren510Source?.preferredImportLane === "official-page-ready" &&
+      warren510Source.sourceFreshness === "fresh" &&
+      warren510Exhibition?.sourceCandidateId === warren510Source.id &&
+      warren510Exhibition.externalUrl === warren510Source.exhibitionsUrl,
+    "Hudson verified inventory should link 510 Warren to its official-page-ready source candidate."
+  );
+  assert(
+    septemberSource?.neighborhood === "Kinderhook" &&
+      septemberSource.sourceFreshness === "needs-review" &&
+      septemberSource.notes.includes("keep out of Warren Street live inventory"),
+    "Hudson source QA should avoid counting SEPTEMBER as a verified Warren Street current show."
   );
   assert(
     nycTrust.openingCount >= 3 && laTrust.openingCount >= 1 && hudsonTrust.openingCount >= 1,

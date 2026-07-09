@@ -36,6 +36,14 @@ Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ball
 
 Requires Node.js `20.19.4` or newer.
 
+On this Codex desktop workspace, the default shell can resolve an older Node. Prefix local checks with the bundled Node 20 runtime when needed:
+
+```bash
+PATH=/Users/s/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH npm run typecheck
+PATH=/Users/s/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH npm run test:services
+PATH=/Users/s/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH npm run audit:galleries
+```
+
 ```bash
 npm install
 npm run web

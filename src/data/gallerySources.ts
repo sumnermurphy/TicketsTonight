@@ -30,6 +30,12 @@ const hudsonThuSun: GalleryHoursInterval[] = [
   { day: 0, opens: "12:00", closes: "17:00" }
 ];
 
+const hudsonFriSun12To6: GalleryHoursInterval[] = [
+  { day: 5, opens: "12:00", closes: "18:00" },
+  { day: 6, opens: "12:00", closes: "18:00" },
+  { day: 0, opens: "12:00", closes: "17:00" }
+];
+
 export const gallerySourceCandidates: GallerySourceCandidate[] = [
   {
     id: "source-david-zwirner-chelsea",
@@ -520,10 +526,10 @@ export const gallerySourceCandidates: GallerySourceCandidate[] = [
     galleryName: "SEPTEMBER",
     galleryKind: "emerging",
     areaId: "hudson",
-    neighborhood: "Warren Street",
-    city: "Hudson",
-    address: "449 Warren St, Hudson, NY",
-    coordinates: { latitude: 42.2507, longitude: -73.7866 },
+    neighborhood: "Kinderhook",
+    city: "Kinderhook",
+    address: "4 Hudson St #3, Kinderhook, NY",
+    coordinates: { latitude: 42.3959, longitude: -73.6974 },
     websiteUrl: "https://www.septembergallery.com",
     exhibitionsUrl: "https://www.septembergallery.com/exhibitions",
     hoursUrl: "https://www.septembergallery.com/visit",
@@ -532,10 +538,32 @@ export const gallerySourceCandidates: GallerySourceCandidate[] = [
     preferredImportLane: "manual-seed",
     sourceLegalStatus: "official-public-page",
     sourceFreshness: "needs-review",
-    lastCheckedAt: "2026-06-26T09:00:00-04:00",
-    confidence: 0.76,
+    lastCheckedAt: "2026-07-09T12:35:00-04:00",
+    confidence: 0.68,
     defaultHours: hudsonThuSun,
-    notes: "Warren Street source candidate for small-market coverage."
+    notes: "Official site now points to Kinderhook and the visible current listing ended June 28, 2026; keep out of Warren Street live inventory until a fresh current show is verified."
+  },
+  {
+    id: "source-510-warren-hudson",
+    galleryName: "510 Warren Street Gallery",
+    galleryKind: "artist-run",
+    areaId: "hudson",
+    neighborhood: "Warren Street",
+    city: "Hudson",
+    address: "510 Warren St, Hudson, NY",
+    coordinates: { latitude: 42.2504, longitude: -73.7858 },
+    websiteUrl: "https://www.510warrenstreetgallery.com",
+    exhibitionsUrl: "https://www.510warrenstreetgallery.com/current-show.html",
+    hoursUrl: "https://www.510warrenstreetgallery.com/contact.html",
+    contactUrl: "https://www.510warrenstreetgallery.com/contact.html",
+    sourceType: "artist-run",
+    preferredImportLane: "official-page-ready",
+    sourceLegalStatus: "official-public-page",
+    sourceFreshness: "fresh",
+    lastCheckedAt: "2026-07-09T12:40:00-04:00",
+    confidence: 0.92,
+    defaultHours: hudsonFriSun12To6,
+    notes: "Official current-show and contact pages verify Similarities: Monotypes+ by Peggy Reeves, July 3-26, 2026, plus Fri/Sat/Sun public hours."
   },
   {
     id: "source-pamela-salisbury-hudson",
@@ -575,11 +603,11 @@ export const gallerySourceCandidates: GallerySourceCandidate[] = [
     sourceType: "commercial-gallery",
     preferredImportLane: "manual-seed",
     sourceLegalStatus: "official-public-page",
-    sourceFreshness: "stale-risk",
-    lastCheckedAt: "2026-05-30T09:00:00-04:00",
+    sourceFreshness: "needs-review",
+    lastCheckedAt: "2026-07-09T12:45:00-04:00",
     confidence: 0.62,
     defaultHours: hudsonThuSun,
-    notes: "Hudson source candidate; stale until reviewed."
+    notes: "Official site confirms a gallery presence but exposes no current exhibition title in this pass; keep needs-review before importing."
   },
   {
     id: "source-bau-beacon",
