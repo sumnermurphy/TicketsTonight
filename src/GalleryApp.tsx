@@ -79,6 +79,11 @@ import {
   type GalleryWalkStopProgress
 } from "./services/galleryWalkSession";
 import {
+  applyGalleryConciergeSuggestion,
+  createGalleryConciergeSuggestions,
+  type GalleryConciergeSuggestion
+} from "./services/galleryConcierge";
+import {
   createGalleryEventSignals,
   createOpeningNightConciergePlan,
   type GalleryEventRouteIntent,
@@ -556,6 +561,71 @@ function TonightStat({
       <Text style={[styles.tonightStatDetail, dark ? styles.darkTonightStatDetail : null]}>
         {detail}
       </Text>
+    </View>
+  );
+}
+
+function GalleryConciergePanel({
+  suggestions,
+  onSuggestion
+}: {
+  suggestions: GalleryConciergeSuggestion[];
+  onSuggestion: (suggestion: GalleryConciergeSuggestion) => void;
+}) {
+  if (suggestions.length === 0) {
+    return null;
+  }
+
+  const primarySuggestion = suggestions[0];
+
+  return (
+    <View style={styles.conciergePanel}>
+      <View style={styles.conciergeHeader}>
+        <View style={styles.conciergeTitleBlock}>
+          <Text style={styles.routeFirstKicker}>Concierge</Text>
+          <Text style={styles.conciergeTitle}>{primarySuggestion?.title ?? "What to do next"}</Text>
+          <Text style={styles.conciergeCopy}>
+            {primarySuggestion?.body ?? "A few source-aware moves for tonight."}
+          </Text>
+        </View>
+        {primarySuggestion ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={primarySuggestion.ctaLabel}
+            onPress={() => onSuggestion(primarySuggestion)}
+            style={styles.primaryLightButton}
+          >
+            <Text style={styles.primaryLightButtonText}>{primarySuggestion.ctaLabel}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.conciergeRail}
+      >
+        {suggestions.slice(1).map((suggestion) => (
+          <Pressable
+            key={suggestion.id}
+            accessibilityRole="button"
+            accessibilityLabel={suggestion.title}
+            onPress={() => onSuggestion(suggestion)}
+            style={styles.conciergeSuggestionCard}
+          >
+            <Text style={styles.conciergeSuggestionTitle}>{suggestion.title}</Text>
+            <Text style={styles.conciergeSuggestionBody} numberOfLines={3}>
+              {suggestion.body}
+            </Text>
+            <View style={styles.routeReasonRow}>
+              {suggestion.reasons.slice(0, 3).map((reason) => (
+                <Text key={reason} style={styles.walkStopReason}>{reason}</Text>
+              ))}
+            </View>
+            <Text style={styles.conciergeSuggestionCta}>{suggestion.ctaLabel}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
     </View>
   );
 }
@@ -1782,6 +1852,13 @@ function ExhibitionDetailSheet({
 
         <Text style={styles.cardDescription}>{exhibition.description}</Text>
 
+        {conciergeReasons.length > 0 ? (
+          <View style={styles.conciergeDetailBlock}>
+            <Text style={styles.guidanceTitle}>Concierge says</Text>
+            <Text style={styles.guidanceCopy}>{conciergeReasons.slice(0, 2).join(" - ")}</Text>
+          </View>
+        ) : null}
+
         <View style={styles.conciergeDetailBlock}>
           <Text style={styles.guidanceTitle}>Worth it if you like</Text>
           <View style={styles.routeReasonRow}>
@@ -2355,6 +2432,32 @@ export function GalleryApp() {
       }),
     [eventRouteIntent, savedIds, selectedAreaId, selectedNeighborhood]
   );
+  const conciergeSuggestions = useMemo(
+    () =>
+      createGalleryConciergeSuggestions({
+        areaId: selectedAreaId,
+        selectedNeighborhood,
+        walkPlan,
+        activeWalkSession,
+        activeWalkProgress,
+        activeWalkPlan,
+        eventSignals,
+        personalizedPicks,
+        logEntries,
+        referenceNow
+      }),
+    [
+      activeWalkPlan,
+      activeWalkProgress,
+      activeWalkSession,
+      eventSignals,
+      logEntries,
+      personalizedPicks,
+      selectedAreaId,
+      selectedNeighborhood,
+      walkPlan
+    ]
+  );
   const passportBadges = useMemo(
     () =>
       getGalleryPassportBadges(
@@ -2522,6 +2625,50 @@ export function GalleryApp() {
     }
 
     setShareStatus(shared ? "Exhibition shared." : "Exhibition details copied.");
+  }
+
+  function handleConciergeSuggestion(suggestion: GalleryConciergeSuggestion) {
+    const intent = applyGalleryConciergeSuggestion(suggestion);
+
+    if (intent.type === "open-exhibition") {
+      setSelectedExhibitionId(intent.exhibitionId);
+      setShareStatus("Concierge opened the best-fit detail.");
+      return;
+    }
+
+    if (intent.type === "switch-route-mode") {
+      setWalkMode(intent.mode);
+      setSelectedNeighborhood(intent.neighborhood);
+      setShareStatus(`Concierge switched to ${galleryWalkModeLabels[intent.mode]}.`);
+      return;
+    }
+
+    if (intent.type === "start-walk") {
+      startWalk();
+      setShareStatus("Concierge started this walk.");
+      return;
+    }
+
+    if (intent.type === "save-walk") {
+      saveCurrentWalk();
+      return;
+    }
+
+    if (intent.type === "copy-itinerary") {
+      void copyCurrentItinerary();
+      return;
+    }
+
+    if (intent.type === "mark-current-visited") {
+      markRouteStopVisited(intent.stopId, intent.exhibitionId);
+      setShareStatus("Concierge advanced your walk.");
+      return;
+    }
+
+    if (intent.type === "skip-current") {
+      skipRouteStop(intent.stopId, intent.exhibitionId);
+      setShareStatus("Concierge skipped that stop and advanced the walk.");
+    }
   }
 
   function startWalk() {
@@ -2736,6 +2883,11 @@ export function GalleryApp() {
             onSaveWalk={saveCurrentWalk}
             walkRecapRewardCopy={walkRecapRewardCopy}
             compact={isCompactLayout}
+          />
+
+          <GalleryConciergePanel
+            suggestions={conciergeSuggestions}
+            onSuggestion={handleConciergeSuggestion}
           />
 
           {shareStatus ? (
@@ -3799,6 +3951,74 @@ const styles = StyleSheet.create({
     color: colors.mutedInk,
     fontSize: 11,
     fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  conciergePanel: {
+    backgroundColor: colors.paper,
+    borderColor: "rgba(17, 17, 17, 0.08)",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.md,
+    marginHorizontal: spacing.lg,
+    padding: spacing.lg,
+    ...shadows.card
+  },
+  conciergeHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+    justifyContent: "space-between"
+  },
+  conciergeTitleBlock: {
+    flex: 1,
+    minWidth: 220
+  },
+  conciergeTitle: {
+    color: colors.ink,
+    fontSize: 21,
+    fontWeight: "900",
+    lineHeight: 26,
+    marginTop: spacing.xs
+  },
+  conciergeCopy: {
+    color: colors.mutedInk,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
+    marginTop: spacing.xs
+  },
+  conciergeRail: {
+    gap: spacing.sm,
+    paddingRight: spacing.lg
+  },
+  conciergeSuggestionCard: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.sm,
+    minHeight: 154,
+    padding: spacing.md,
+    width: 238
+  },
+  conciergeSuggestionTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "900",
+    lineHeight: 19
+  },
+  conciergeSuggestionBody: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17
+  },
+  conciergeSuggestionCta: {
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    marginTop: "auto",
     textTransform: "uppercase"
   },
   routeFirstPanel: {

@@ -101,6 +101,10 @@ import {
   createOpeningNightConciergePlan
 } from "../src/services/galleryEventIntelligence";
 import {
+  applyGalleryConciergeSuggestion,
+  createGalleryConciergeSuggestions
+} from "../src/services/galleryConcierge";
+import {
   createGalleryWalkItineraryText,
   createGalleryWalkShareSummary,
   createSavedGalleryWalk
@@ -1107,6 +1111,141 @@ async function main() {
       sharePayload.text.includes(socialEventPlan.guidance) &&
       savedWalk.itineraryText === itineraryText,
     "Gallery walk sharing should export ordered stops with trust labels, map/source links, and saved itinerary text."
+  );
+
+  const activeConciergeSuggestions = createGalleryConciergeSuggestions({
+    areaId: "nyc",
+    walkPlan: chelseaTwoHourWalk,
+    activeWalkSession: walkSession,
+    activeWalkProgress: walkSessionProgress,
+    activeWalkPlan: chelseaTwoHourWalk,
+    personalizedPicks: rankedTastePicks,
+    eventSignals,
+    logEntries: persistedLogEntries,
+    referenceNow: galleryReferenceNow
+  });
+  const tasteConciergeSuggestions = createGalleryConciergeSuggestions({
+    areaId: "nyc",
+    walkPlan: quickTasteWalk,
+    personalizedPicks: rankedTastePicks,
+    eventSignals,
+    logEntries: [
+      {
+        exhibitionId: "taste-fixture-photo",
+        status: "skipped",
+        updatedAt: galleryReferenceNow
+      }
+    ],
+    referenceNow: galleryReferenceNow
+  });
+  const closedConciergeExhibition = createSyntheticGalleryExhibition({
+    id: "concierge-closed-stop",
+    title: "Closed Stop",
+    galleryName: "Closed Stop Gallery",
+    coordinates: { latitude: 40.747, longitude: -74.006 },
+    hours: [{ day: 1, opens: "10:00", closes: "18:00" }]
+  });
+  const closedWalkPlan = createGalleryWalkPlan({
+    areaId: "nyc",
+    mode: "quick-loop",
+    neighborhood: "Chelsea",
+    referenceNow: galleryReferenceNow,
+    exhibitions: [
+      closedConciergeExhibition,
+      createSyntheticGalleryExhibition({
+        id: "concierge-open-stop",
+        title: "Open Stop",
+        galleryName: "Open Stop Gallery",
+        coordinates: { latitude: 40.748, longitude: -74.006 }
+      })
+    ]
+  });
+  const closedActiveWalkPlan = {
+    ...closedWalkPlan,
+    stops: [
+      {
+        exhibition: closedConciergeExhibition,
+        exhibitions: [closedConciergeExhibition],
+        groupedExhibitionCount: 1,
+        status: "closed-today" as const,
+        reasons: ["Closed now"],
+        isSaved: false,
+        minutesAtStop: 18,
+        stopNumber: 1,
+        mapUrl: "https://www.google.com/maps/search/?api=1&query=Closed%20Stop%20Gallery"
+      },
+      ...closedWalkPlan.stops.map((stop, index) => ({
+        ...stop,
+        stopNumber: index + 2
+      }))
+    ]
+  };
+  const closedWalkSession = {
+    ...createGalleryWalkSession(closedActiveWalkPlan, galleryReferenceNow),
+    currentStopId: "concierge-closed-stop",
+    orderedStopIds: ["concierge-closed-stop", "concierge-open-stop"]
+  };
+  const closedWalkProgress = getActiveWalkProgress(closedWalkSession, closedActiveWalkPlan);
+  const closedConciergeSuggestions = createGalleryConciergeSuggestions({
+    areaId: "nyc",
+    walkPlan: closedActiveWalkPlan,
+    activeWalkSession: closedWalkSession,
+    activeWalkProgress: closedWalkProgress,
+    activeWalkPlan: closedActiveWalkPlan,
+    referenceNow: galleryReferenceNow
+  });
+  const thinConciergeWalk = createGalleryWalkPlan({
+    areaId: "hudson",
+    mode: "two-hour",
+    neighborhood: "Kingston",
+    exhibitions: [],
+    referenceNow: galleryReferenceNow
+  });
+  const thinConciergeSuggestions = createGalleryConciergeSuggestions({
+    areaId: "hudson",
+    selectedNeighborhood: "Kingston",
+    walkPlan: thinConciergeWalk,
+    eventSignals: [],
+    personalizedPicks: [],
+    referenceNow: galleryReferenceNow
+  });
+  const conciergeIntent = activeConciergeSuggestions[0]
+    ? applyGalleryConciergeSuggestion(activeConciergeSuggestions[0])
+    : undefined;
+
+  assert(
+    activeConciergeSuggestions[0]?.kind === "active-current" &&
+      conciergeIntent?.type === "mark-current-visited" &&
+      conciergeIntent.sourceSuggestionId === activeConciergeSuggestions[0]?.id,
+    "Gallery concierge should prioritize the active current stop and expose a deterministic visited action."
+  );
+  assert(
+    tasteConciergeSuggestions.some(
+      (suggestion) =>
+        suggestion.kind === "taste-match" &&
+        suggestion.exhibitionId === "taste-verified-photo" &&
+        suggestion.trustLabel === "Manually verified"
+    ) &&
+      !tasteConciergeSuggestions.some(
+        (suggestion) =>
+          suggestion.kind === "taste-match" && suggestion.exhibitionId === "taste-fixture-photo"
+      ),
+    "Gallery concierge should surface verified personalized picks while lowering skipped fixture/demo records."
+  );
+  assert(
+    tasteConciergeSuggestions.some((suggestion) => suggestion.kind === "opening-soon") &&
+      tasteConciergeSuggestions.some((suggestion) => suggestion.kind === "last-look"),
+    "Gallery concierge should include opening-soon and last-look suggestions from event intelligence."
+  );
+  assert(
+    closedConciergeSuggestions[0]?.kind === "active-skip" &&
+      closedConciergeSuggestions[0].action.type === "skip-current",
+    "Gallery concierge should recommend skipping an active stop that is closed now."
+  );
+  assert(
+    thinConciergeSuggestions[0]?.kind === "thin-supply" &&
+      thinConciergeSuggestions[0].body.includes("does not have enough verified"),
+    "Gallery concierge should produce an honest thin-market fallback when verified walk supply is not ready."
   );
 
   const routeOrderingWalk = createGalleryWalkPlan({
