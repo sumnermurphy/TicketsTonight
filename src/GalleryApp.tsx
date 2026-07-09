@@ -14,6 +14,8 @@ import {
 } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import {
+  ImageBackground,
+  type ImageSourcePropType,
   Linking,
   Pressable,
   SafeAreaView,
@@ -49,6 +51,11 @@ import {
   type GalleryWalkMode
 } from "./services/galleryDiscovery";
 import { createGalleryMarketDataAudit } from "./services/galleryDataFoundation";
+import {
+  getGalleryHeroVisual,
+  getGalleryVisual,
+  type GalleryVisualKey
+} from "./services/galleryVisuals";
 import { colors, radii, shadows, spacing } from "./theme";
 import type {
   GalleryAreaId,
@@ -62,6 +69,15 @@ type GalleryLens = "all" | "open-now" | "opening-tonight" | "last-chance";
 type GalleryWalkPlan = ReturnType<typeof createGalleryWalkPlan>;
 
 const referenceNow = "2026-07-09T15:30:00-04:00";
+
+declare const require: (path: string) => ImageSourcePropType;
+
+const galleryVisualSources: Record<GalleryVisualKey, ImageSourcePropType> = {
+  hero: require("../assets/gallery/gallery-hero.png"),
+  painting: require("../assets/gallery/gallery-painting.png"),
+  sculpture: require("../assets/gallery/gallery-sculpture.png"),
+  "photo-video": require("../assets/gallery/gallery-photo-video.png")
+};
 
 const lensLabels: Record<GalleryLens, string> = {
   all: "All",
@@ -274,39 +290,26 @@ function Metric({
   );
 }
 
-function SignalCard({
+function TonightStat({
   label,
   value,
   detail,
-  compact = false,
-  compactWidth,
-  tone = "neutral"
+  dark = false
 }: {
   label: string;
   value: string | number;
   detail: string;
-  compact?: boolean;
-  compactWidth?: number;
-  tone?: "neutral" | "good" | "warn" | "dark";
+  dark?: boolean;
 }) {
   return (
-    <View
-      style={[
-        styles.signalCard,
-        compact ? styles.compactSignalCard : null,
-        compact && compactWidth ? { flexBasis: compactWidth, maxWidth: compactWidth, width: compactWidth } : null,
-        tone === "good" ? styles.goodSignalCard : null,
-        tone === "warn" ? styles.warnSignalCard : null,
-        tone === "dark" ? styles.darkSignalCard : null
-      ]}
-    >
-      <Text style={[styles.signalValue, tone === "dark" ? styles.darkSignalText : null]}>
+    <View style={[styles.tonightStat, dark ? styles.darkTonightStat : null]}>
+      <Text style={[styles.tonightStatValue, dark ? styles.darkTonightStatText : null]}>
         {value}
       </Text>
-      <Text style={[styles.signalLabel, tone === "dark" ? styles.darkSignalText : null]}>
+      <Text style={[styles.tonightStatLabel, dark ? styles.darkTonightStatText : null]}>
         {label}
       </Text>
-      <Text style={[styles.signalDetail, tone === "dark" ? styles.darkSignalDetail : null]}>
+      <Text style={[styles.tonightStatDetail, dark ? styles.darkTonightStatDetail : null]}>
         {detail}
       </Text>
     </View>
@@ -540,20 +543,35 @@ function ExhibitionCard({
   const primaryArtist = exhibition.artists[0];
   const primaryMedium = exhibition.mediums[0];
   const trust = getGalleryInventoryTrust(exhibition);
+  const visual = getGalleryVisual(exhibition);
 
   return (
     <View style={styles.exhibitionCard}>
-      <View style={[styles.toneRail, { backgroundColor: exhibition.imageTone }]} />
+      <ImageBackground
+        source={galleryVisualSources[visual.assetKey]}
+        accessibilityLabel={visual.alt}
+        imageStyle={styles.cardImage}
+        style={styles.cardVisual}
+      >
+        <View style={styles.cardImageShade} />
+        <View style={styles.cardVisualTopRow}>
+          <Text style={styles.visualBadge}>{trust.label}</Text>
+          <Text style={styles.visualBadge}>{galleryVisitStatusLabels[status]}</Text>
+        </View>
+        <View style={styles.cardVisualCopy}>
+          <Text style={styles.cardVisualGallery}>{exhibition.galleryName}</Text>
+          <Text style={styles.cardVisualTitle} numberOfLines={2}>{exhibition.title}</Text>
+        </View>
+      </ImageBackground>
       <View style={styles.cardBody}>
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleBlock}>
-            <Text style={styles.cardGalleryName}>{exhibition.galleryName}</Text>
-            <Text style={styles.cardTitle}>{exhibition.title}</Text>
+            <Text style={styles.cardGalleryName}>{exhibition.neighborhood}</Text>
             <Text style={styles.cardMeta}>{exhibition.artists.join(", ")}</Text>
           </View>
           <View style={styles.statusBadge}>
-            <Clock size={13} color={colors.teal} />
-            <Text style={styles.statusBadgeText}>{galleryVisitStatusLabels[status]}</Text>
+            <Clock size={13} color={colors.ink} />
+            <Text style={styles.statusBadgeText}>{getClosingCopy(exhibition)}</Text>
           </View>
         </View>
 
@@ -669,9 +687,6 @@ export function GalleryApp() {
   const [savedAlertMediums, setSavedAlertMediums] = useState<GalleryMedium[]>([]);
   const selectedArea = galleryAreas.find((area) => area.id === selectedAreaId) ?? galleryAreas[0];
   const isCompactLayout = viewportWidth < 720;
-  const compactSignalCardWidth = isCompactLayout
-    ? Math.min(175, Math.max(120, Math.floor((viewportWidth - spacing.lg * 2 - spacing.sm) / 2)))
-    : undefined;
   const areaInventory = useMemo(
     () => galleryExhibitions.filter((exhibition) => exhibition.areaId === selectedAreaId),
     [selectedAreaId]
@@ -760,10 +775,6 @@ export function GalleryApp() {
       }),
     [savedIds, selectedAreaId, selectedNeighborhood, walkMode]
   );
-  const neighborhoods = useMemo(
-    () => galleryNeighborhoods.filter((neighborhood) => neighborhood.areaId === selectedAreaId),
-    [selectedAreaId]
-  );
   const mediumOptions = useMemo(
     () => Array.from(new Set(areaInventory.flatMap((exhibition) => exhibition.mediums))),
     [areaInventory]
@@ -822,10 +833,11 @@ export function GalleryApp() {
   ]
     .filter(Boolean)
     .join(" - ");
-  const discoveryLead = selectedNeighborhoodInsight
-    ? `${selectedNeighborhoodInsight.exhibitionCount} shows, ${selectedNeighborhoodInsight.openNowCount} open now`
-    : `${walkReadyCount} walkable clusters`;
   const tonightPick = openingTonight[0] ?? visibleExhibitions[0];
+  const heroVisual = getGalleryHeroVisual(selectedAreaId);
+  const tonightPickVisual = tonightPick ? getGalleryVisual(tonightPick) : heroVisual;
+  const startStop = walkPlan.stops.find((stop) => stop.exhibition.id === walkPlan.startStopId);
+  const nextStop = walkPlan.stops.find((stop) => stop.exhibition.id === walkPlan.nextStopId);
 
   function resetMarket(areaId: GalleryAreaId) {
     setSelectedAreaId(areaId);
@@ -880,116 +892,107 @@ export function GalleryApp() {
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.headerBand}>
-          <View style={[styles.headerTopline, isCompactLayout ? styles.compactHeaderTopline : null]}>
-            <Text style={styles.heroEyebrow}>{getAreaRoleCopy(selectedAreaId)}</Text>
-            <Text style={[styles.marketClock, isCompactLayout ? styles.compactMarketClock : null]}>Demo clock {formatShortDate(referenceNow)}, {formatShortTime(referenceNow)}</Text>
-          </View>
-          <View style={styles.heroTitleRow}>
-            <View style={styles.heroTitleBlock}>
-              <Text style={styles.title}>Tonight in {selectedArea?.name ?? "the city"}</Text>
-              <Text style={styles.subtitle}>
-                Open-now gallery discovery, verified source trust, and a practical walk route for {routeScopeLabel}.
-              </Text>
+          <ImageBackground
+            source={galleryVisualSources[heroVisual.assetKey]}
+            accessibilityLabel={heroVisual.alt}
+            imageStyle={styles.heroImage}
+            style={styles.heroImageCard}
+          >
+            <View style={styles.heroImageShade} />
+            <View style={styles.heroContent}>
+              <View style={[styles.headerTopline, isCompactLayout ? styles.compactHeaderTopline : null]}>
+                <Text style={styles.heroEyebrow}>{getAreaRoleCopy(selectedAreaId)}</Text>
+                <Text style={[styles.marketClock, isCompactLayout ? styles.compactMarketClock : null]}>
+                  Demo clock {formatShortDate(referenceNow)}, {formatShortTime(referenceNow)}
+                </Text>
+              </View>
+              <View style={styles.heroTitleBlock}>
+                <Text style={[styles.title, isCompactLayout ? styles.compactTitle : null]}>
+                  Tonight in {selectedArea?.name ?? "the city"}
+                </Text>
+                <Text style={styles.subtitle}>
+                  {walkPlan.title} for {routeScopeLabel}. Open now, nearby, and source-labeled.
+                </Text>
+              </View>
+              <View style={styles.heroRouteCard}>
+                <View>
+                  <Text style={styles.heroRouteLabel}>Suggested route</Text>
+                  <Text style={styles.heroRouteTitle}>{walkPlan.summary}</Text>
+                </View>
+                <Text style={styles.heroRouteMeta}>{walkPlan.totalMinutes} min - {walkPlan.totalDistanceMiles.toFixed(1)} mi</Text>
+              </View>
             </View>
-            <View style={styles.heroRouteCard}>
-              <Text style={styles.heroRouteLabel}>Suggested route</Text>
-              <Text style={styles.heroRouteTitle}>{walkPlan.title}</Text>
-              <Text style={styles.heroRouteMeta}>{walkPlan.summary}</Text>
-            </View>
-          </View>
+          </ImageBackground>
 
-          <View style={styles.areaRow}>
-            {galleryAreas.map((area) => (
-              <ChipButton
-                key={area.id}
-                label={area.name}
-                active={selectedAreaId === area.id}
-                onPress={() => resetMarket(area.id)}
+          <View style={styles.discoveryControls}>
+            <View style={styles.areaRow}>
+              {galleryAreas.map((area) => (
+                <ChipButton
+                  key={area.id}
+                  label={area.name}
+                  active={selectedAreaId === area.id}
+                  onPress={() => resetMarket(area.id)}
+                />
+              ))}
+            </View>
+
+            <View style={styles.searchBox}>
+              <Search size={18} color={colors.mutedInk} />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Artist, gallery, medium, neighborhood"
+                placeholderTextColor={colors.mutedInk}
+                style={styles.searchInput}
               />
-            ))}
+            </View>
+
+            <View style={styles.filterRow}>
+              {lensOptions.map((lens) => (
+                <ChipButton
+                  key={lens}
+                  label={lensLabels[lens]}
+                  active={activeLens === lens}
+                  onPress={() => setActiveLens(lens)}
+                  compact
+                />
+              ))}
+            </View>
           </View>
 
-          <View style={styles.searchBox}>
-            <Search size={18} color={colors.mutedInk} />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Artist, gallery, medium, neighborhood"
-              placeholderTextColor={colors.mutedInk}
-              style={styles.searchInput}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tonightStatsRail}
+          >
+            <TonightStat label="Open now" value={openNowCount} detail={`${sourceTrust.exhibitionCount} listings`} dark />
+            <TonightStat label="Verified" value={sourceTrust.verifiedExhibitionCount} detail="Official-page checked" />
+            <TonightStat
+              label="Demo"
+              value={sourceTrust.fixtureExhibitionCount}
+              detail={`${sourceTrust.needsReviewExhibitionCount} needs review`}
             />
-          </View>
-
-          <View style={styles.tonightBrief}>
-            <SignalCard
-              label="Open now"
-              value={openNowCount}
-              detail={`${sourceTrust.exhibitionCount} total listings`}
-              compact={isCompactLayout}
-              compactWidth={compactSignalCardWidth}
-              tone="dark"
-            />
-            <SignalCard
-              label="Verified"
-              value={sourceTrust.verifiedExhibitionCount}
-              detail="Official-page checked"
-              compact={isCompactLayout}
-              compactWidth={compactSignalCardWidth}
-              tone="good"
-            />
-            <SignalCard
-              label="Demo/review"
-              value={sourceTrust.fixtureExhibitionCount + sourceTrust.needsReviewExhibitionCount}
-              detail={`${sourceTrust.fixtureExhibitionCount} demo, ${sourceTrust.needsReviewExhibitionCount} review`}
-              compact={isCompactLayout}
-              compactWidth={compactSignalCardWidth}
-              tone={sourceTrust.fixtureExhibitionCount + sourceTrust.needsReviewExhibitionCount > 0 ? "warn" : "good"}
-            />
-            <SignalCard
-              label="Walkable"
-              value={walkReadyCount}
-              detail={discoveryLead}
-              compact={isCompactLayout}
-              compactWidth={compactSignalCardWidth}
-              tone="good"
-            />
-            <SignalCard
-              label="Opening"
-              value={sourceTrust.openingCount}
-              detail="Social signals tonight"
-              compact={isCompactLayout}
-              compactWidth={compactSignalCardWidth}
-              tone={sourceTrust.openingCount > 0 ? "warn" : "neutral"}
-            />
-            <SignalCard
-              label="Closing soon"
-              value={closingSoonCount}
-              detail="Within 7 days"
-              compact={isCompactLayout}
-              compactWidth={compactSignalCardWidth}
-              tone={closingSoonCount > 0 ? "warn" : "neutral"}
-            />
-          </View>
+            <TonightStat label="Sources" value={dataAudit.sourceCount} detail={`${dataAudit.officialLinkCoveragePercent}% official links`} />
+            <TonightStat label="Closing soon" value={closingSoonCount} detail="Within 7 days" />
+          </ScrollView>
 
           <View style={styles.trustBrief}>
-            <View style={styles.trustBriefIcon}>
-              <Check size={16} color={colors.teal} />
-            </View>
-            <View style={styles.trustBriefCopy}>
-              <Text style={styles.trustBriefStatus}>{marketReadinessCopy}</Text>
-              <Text style={styles.trustBriefText}>
-                {isCompactLayout
-                  ? `${sourceTrust.verifiedExhibitionCount} verified official-page. ${sourceTrust.fixtureExhibitionCount} demo. ${dataAudit.sourceCount} sources.`
-                  : selectedAreaId === "nyc"
-                    ? `NYC mixes ${sourceTrust.verifiedExhibitionCount} manually verified official-page listings with ${sourceTrust.fixtureExhibitionCount} fixture/demo listings still marked as demo. Source directory: ${dataAudit.sourceCount} candidates, ${dataAudit.officialLinkCoveragePercent}% official links.`
-                    : `${selectedArea?.name ?? "Market"} has ${sourceTrust.verifiedExhibitionCount} verified listings and ${sourceTrust.fixtureExhibitionCount} fixture/demo listings; thin walks are labeled honestly. Source directory: ${dataAudit.sourceCount} candidates, ${dataAudit.officialLinkCoveragePercent}% official links.`}
-              </Text>
-            </View>
+            <Check size={16} color={colors.ink} />
+            <Text style={styles.trustBriefStatus}>{marketReadinessCopy}</Text>
+            <Text style={styles.trustBriefText}>
+              {sourceTrust.verifiedExhibitionCount} verified - {sourceTrust.fixtureExhibitionCount} demo - {dataAudit.sourceCount} sources
+            </Text>
           </View>
 
           {tonightPick ? (
-            <View style={[styles.tonightPick, isCompactLayout ? styles.compactTonightPick : null]}>
-              <View style={[styles.tonightPickCopy, isCompactLayout ? styles.compactTonightPickCopy : null]}>
+            <ImageBackground
+              source={galleryVisualSources[tonightPickVisual.assetKey]}
+              accessibilityLabel={tonightPickVisual.alt}
+              imageStyle={styles.tonightPickImage}
+              style={[styles.tonightPick, isCompactLayout ? styles.compactTonightPick : null]}
+            >
+              <View style={styles.tonightPickShade} />
+              <View style={styles.tonightPickCopy}>
                 <Text style={styles.tonightPickLabel}>Start browsing here</Text>
                 <Text style={styles.tonightPickTitle}>{tonightPick.title}</Text>
                 <Text style={styles.tonightPickMeta}>
@@ -1005,9 +1008,9 @@ export function GalleryApp() {
                 style={[styles.heroLinkButton, isCompactLayout ? styles.compactHeroLinkButton : null]}
               >
                 <ExternalLink size={14} color={colors.paper} />
-                <Text style={styles.heroLinkButtonText}>Open link</Text>
+                <Text style={styles.heroLinkButtonText}>Official link</Text>
               </Pressable>
-            </View>
+            </ImageBackground>
           ) : null}
         </View>
 
@@ -1028,39 +1031,44 @@ export function GalleryApp() {
             style={[styles.neighborhoodCard, !selectedNeighborhood ? styles.selectedNeighborhoodCard : null]}
           >
             {!selectedNeighborhood ? <Text style={styles.selectedMiniLabel}>Active view</Text> : null}
-            <Text style={styles.neighborhoodName}>All clusters</Text>
-            <Text style={styles.neighborhoodMeta}>{areaInventory.length} listings - {openNowCount} open now</Text>
-            <Text style={styles.neighborhoodTrustMeta}>
-              {sourceTrust.verifiedExhibitionCount} verified - {sourceTrust.fixtureExhibitionCount} demo - {uniqueGalleryCount} galleries
-            </Text>
-            <Text style={styles.neighborhoodReason}>Scan the full market</Text>
+            <Text style={[styles.neighborhoodName, !selectedNeighborhood ? styles.selectedNeighborhoodText : null]}>All clusters</Text>
+            <View style={styles.neighborhoodStatRow}>
+              <Text style={[styles.neighborhoodMeta, !selectedNeighborhood ? styles.selectedNeighborhoodSubtext : null]}>{sourceTrust.verifiedExhibitionCount} verified</Text>
+              <Text style={[styles.neighborhoodMeta, !selectedNeighborhood ? styles.selectedNeighborhoodSubtext : null]}>{openNowCount} open</Text>
+            </View>
+            <Text style={[styles.neighborhoodReason, !selectedNeighborhood ? styles.selectedNeighborhoodSubtext : null]}>{marketReadinessCopy}</Text>
           </Pressable>
           {neighborhoodIntelligence.map((item) => (
+            (() => {
+              const selected = selectedNeighborhood === item.neighborhood;
+              return (
             <Pressable
               key={item.neighborhood}
               onPress={() => setSelectedNeighborhood(item.neighborhood)}
               style={[
                 styles.neighborhoodCard,
-                selectedNeighborhood === item.neighborhood ? styles.selectedNeighborhoodCard : null
+                selected ? styles.selectedNeighborhoodCard : null
               ]}
             >
-              {selectedNeighborhood === item.neighborhood ? (
+              {selected ? (
                 <Text style={styles.selectedMiniLabel}>Planning here</Text>
               ) : null}
-              <Text style={styles.neighborhoodName}>{item.neighborhood}</Text>
-              <Text style={styles.neighborhoodMeta}>
-                {item.exhibitionCount} shows - {item.openNowCount} open now
+              <Text style={[styles.neighborhoodName, selected ? styles.selectedNeighborhoodText : null]}>{item.neighborhood}</Text>
+              <View style={styles.neighborhoodStatRow}>
+                <Text style={[styles.neighborhoodMeta, selected ? styles.selectedNeighborhoodSubtext : null]}>{item.verifiedCount} verified</Text>
+                <Text style={[styles.neighborhoodMeta, selected ? styles.selectedNeighborhoodSubtext : null]}>{item.openNowCount} open</Text>
+              </View>
+              <Text style={[styles.neighborhoodTrustMeta, selected ? styles.selectedNeighborhoodSubtext : null]}>
+                {item.fixtureCount + item.needsReviewCount} demo/review - {item.uniqueGalleryCount} galleries
               </Text>
-              <Text style={styles.neighborhoodTrustMeta}>
-                {item.verifiedCount} verified - {item.fixtureCount + item.needsReviewCount} review/demo - {item.uniqueGalleryCount} galleries
-              </Text>
-              <Text style={styles.neighborhoodReason}>{item.topReason}</Text>
               <View style={styles.neighborhoodFooter}>
-                <Text style={styles.neighborhoodFooterText}>
+                <Text style={[styles.neighborhoodFooterText, selected ? styles.selectedNeighborhoodSubtext : null]}>
                   {getNeighborhoodReadinessCopy(item)}
                 </Text>
               </View>
             </Pressable>
+              );
+            })()
           ))}
         </ScrollView>
 
@@ -1069,17 +1077,6 @@ export function GalleryApp() {
             <Text style={styles.activeFilterText}>
               Showing {activeFilterCopy || "all shows"} in {selectedNeighborhood ?? selectedArea?.name ?? "this market"}
             </Text>
-          </View>
-          <View style={styles.filterRow}>
-            {lensOptions.map((lens) => (
-              <ChipButton
-                key={lens}
-                label={lensLabels[lens]}
-                active={activeLens === lens}
-                onPress={() => setActiveLens(lens)}
-                compact
-              />
-            ))}
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mediumRow}>
             <ChipButton
@@ -1114,6 +1111,10 @@ export function GalleryApp() {
             <View style={styles.routeCommandCopy}>
               <Text style={styles.routeCommandKicker}>Recommended walk</Text>
               <Text style={styles.routeCommandTitle}>{walkPlan.summary}</Text>
+              <View style={styles.routeStartRow}>
+                <Text style={styles.routeStartPill}>Start {startStop?.exhibition.galleryName ?? "where open"}</Text>
+                <Text style={styles.routeStartPill}>Next {nextStop?.exhibition.galleryName ?? "best nearby stop"}</Text>
+              </View>
               <Text style={styles.routeCommandMeta}>{walkPlan.guidance}</Text>
             </View>
             <View style={styles.routeQualityStack}>
@@ -1277,13 +1278,29 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl
   },
   headerBand: {
-    backgroundColor: "#FBF7F2",
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
+    backgroundColor: colors.fog,
+    paddingBottom: spacing.xl,
+    gap: spacing.md
+  },
+  heroImageCard: {
+    minHeight: 372,
+    overflow: "hidden"
+  },
+  heroImage: {
+    height: "100%",
+    width: "100%",
+    resizeMode: "cover"
+  },
+  heroImageShade: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(0, 0, 0, 0.34)"
+  },
+  heroContent: {
+    flex: 1,
+    justifyContent: "space-between",
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.lg,
-    paddingTop: spacing.lg,
-    gap: spacing.md
+    paddingTop: spacing.lg
   },
   headerTopline: {
     alignItems: "center",
@@ -1297,7 +1314,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start"
   },
   heroEyebrow: {
-    color: colors.coralDark,
+    color: colors.paper,
     fontSize: 11,
     fontWeight: "900",
     letterSpacing: 0,
@@ -1311,7 +1328,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase"
   },
   marketClock: {
-    color: colors.mutedInk,
+    color: "#F0ECE4",
     flexShrink: 1,
     fontSize: 12,
     fontWeight: "700",
@@ -1329,45 +1346,52 @@ const styles = StyleSheet.create({
   },
   heroTitleBlock: {
     flex: 1,
-    minWidth: 280
+    justifyContent: "flex-end",
+    maxWidth: 760,
+    minWidth: 0,
+    paddingTop: spacing.xxl
   },
   title: {
-    color: colors.ink,
-    fontSize: 36,
+    color: colors.paper,
+    fontSize: 44,
     fontWeight: "900",
     letterSpacing: 0,
-    lineHeight: 40
+    lineHeight: 48
+  },
+  compactTitle: {
+    fontSize: 34,
+    lineHeight: 38
   },
   subtitle: {
-    color: colors.mutedInk,
+    color: "#F0ECE4",
     fontSize: 15,
     lineHeight: 21,
     marginTop: spacing.sm,
     maxWidth: 680
   },
   heroRouteCard: {
-    backgroundColor: colors.ink,
+    alignItems: "flex-end",
+    backgroundColor: "rgba(17, 17, 17, 0.72)",
     borderRadius: radii.md,
-    flexGrow: 1,
-    flexShrink: 1,
-    justifyContent: "center",
-    minWidth: 250,
-    padding: spacing.lg
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    padding: spacing.md
   },
   heroRouteLabel: {
-    color: "#DEB6B2",
+    color: "#D9D2C6",
     fontSize: 11,
     fontWeight: "900",
     textTransform: "uppercase"
   },
   heroRouteTitle: {
     color: colors.paper,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "900",
     marginTop: spacing.sm
   },
   heroRouteMeta: {
-    color: "#DAD8D0",
+    color: "#F0ECE4",
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 18,
@@ -1380,7 +1404,8 @@ const styles = StyleSheet.create({
   },
   chip: {
     alignItems: "center",
-    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    borderColor: "transparent",
     borderRadius: radii.pill,
     borderWidth: 1,
     flexDirection: "row",
@@ -1406,7 +1431,7 @@ const styles = StyleSheet.create({
   },
   searchBox: {
     alignItems: "center",
-    backgroundColor: colors.fog,
+    backgroundColor: colors.paper,
     borderColor: colors.line,
     borderRadius: radii.md,
     borderWidth: 1,
@@ -1427,79 +1452,60 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: spacing.sm
   },
-  signalCard: {
+  discoveryControls: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg
+  },
+  tonightStatsRail: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg
+  },
+  tonightStat: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
     borderRadius: radii.md,
     borderWidth: 1,
-    flexBasis: 160,
-    flexGrow: 1,
-    flexShrink: 1,
-    minWidth: 132,
-    padding: spacing.md
+    minWidth: 118,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
   },
-  compactSignalCard: {
-    flexGrow: 0,
-    minWidth: 0
-  },
-  goodSignalCard: {
-    backgroundColor: colors.tealSoft,
-    borderColor: "#A6D5CF"
-  },
-  warnSignalCard: {
-    backgroundColor: "#FFF2D7",
-    borderColor: "#E8C77A"
-  },
-  darkSignalCard: {
+  darkTonightStat: {
     backgroundColor: colors.ink,
     borderColor: colors.ink
   },
-  signalValue: {
+  tonightStatValue: {
     color: colors.ink,
-    fontSize: 25,
+    fontSize: 22,
     fontWeight: "900"
   },
-  signalLabel: {
-    color: colors.mutedInk,
+  tonightStatLabel: {
+    color: colors.ink,
     fontSize: 11,
     fontWeight: "900",
-    marginTop: spacing.xs,
+    marginTop: 2,
     textTransform: "uppercase"
   },
-  signalDetail: {
+  tonightStatDetail: {
     color: colors.mutedInk,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
-    lineHeight: 16,
-    marginTop: spacing.xs
+    marginTop: 2
   },
-  darkSignalText: {
+  darkTonightStatText: {
     color: colors.paper
   },
-  darkSignalDetail: {
-    color: "#DAD8D0"
+  darkTonightStatDetail: {
+    color: "#D9D2C6"
   },
   trustBrief: {
     alignItems: "center",
-    backgroundColor: colors.paper,
-    borderColor: colors.line,
+    backgroundColor: "transparent",
+    borderColor: "transparent",
     borderRadius: radii.md,
-    borderWidth: 1,
+    borderWidth: 0,
     flexDirection: "row",
     gap: spacing.sm,
-    padding: spacing.md
-  },
-  trustBriefIcon: {
-    alignItems: "center",
-    backgroundColor: colors.tealSoft,
-    borderRadius: radii.pill,
-    height: 30,
-    justifyContent: "center",
-    width: 30
-  },
-  trustBriefCopy: {
-    flex: 1,
-    minWidth: 0
+    paddingHorizontal: spacing.lg
   },
   trustBriefStatus: {
     color: colors.ink,
@@ -1509,51 +1515,57 @@ const styles = StyleSheet.create({
   },
   trustBriefText: {
     color: colors.mutedInk,
+    flexShrink: 1,
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 18,
     marginTop: spacing.xs
   },
   tonightPick: {
-    alignItems: "center",
-    backgroundColor: "#F1E8DC",
-    borderColor: "#D8C4AA",
+    alignItems: "flex-end",
     borderRadius: radii.md,
-    borderWidth: 1,
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.md,
-    justifyContent: "flex-start",
+    justifyContent: "space-between",
+    marginHorizontal: spacing.lg,
+    minHeight: 166,
+    overflow: "hidden",
     padding: spacing.md
   },
   compactTonightPick: {
     alignItems: "flex-start",
     flexDirection: "column",
-    justifyContent: "flex-start"
+    justifyContent: "flex-end"
+  },
+  tonightPickImage: {
+    height: "100%",
+    width: "100%",
+    resizeMode: "cover"
+  },
+  tonightPickShade: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(0, 0, 0, 0.42)"
   },
   tonightPickCopy: {
     flex: 1,
-    flexShrink: 1,
-    minWidth: 0
-  },
-  compactTonightPickCopy: {
-    minWidth: 0,
-    width: "100%"
+    minWidth: 190
   },
   tonightPickLabel: {
-    color: colors.coralDark,
+    color: "#E9E2D7",
     fontSize: 11,
     fontWeight: "900",
     textTransform: "uppercase"
   },
   tonightPickTitle: {
-    color: colors.ink,
-    fontSize: 16,
+    color: colors.paper,
+    fontSize: 22,
     fontWeight: "900",
+    lineHeight: 27,
     marginTop: spacing.xs
   },
   tonightPickMeta: {
-    color: colors.mutedInk,
+    color: "#F0ECE4",
     fontSize: 12,
     fontWeight: "800",
     lineHeight: 17,
@@ -1562,7 +1574,7 @@ const styles = StyleSheet.create({
   heroLinkButton: {
     alignItems: "center",
     backgroundColor: colors.ink,
-    borderRadius: radii.md,
+    borderRadius: radii.pill,
     flexDirection: "row",
     gap: spacing.xs,
     minHeight: 36,
@@ -1657,23 +1669,22 @@ const styles = StyleSheet.create({
   },
   neighborhoodCard: {
     backgroundColor: colors.paper,
-    borderColor: colors.line,
+    borderColor: "rgba(17, 17, 17, 0.08)",
     borderRadius: radii.md,
     borderWidth: 1,
     minHeight: 122,
     padding: spacing.md,
-    width: 206
+    width: 196
   },
   selectedNeighborhoodCard: {
-    borderColor: colors.teal,
-    borderWidth: 2,
-    backgroundColor: colors.tealSoft
+    backgroundColor: colors.ink,
+    borderColor: colors.ink
   },
   selectedMiniLabel: {
     alignSelf: "flex-start",
-    backgroundColor: colors.ink,
+    backgroundColor: colors.paper,
     borderRadius: radii.pill,
-    color: colors.paper,
+    color: colors.ink,
     fontSize: 10,
     fontWeight: "900",
     marginBottom: spacing.sm,
@@ -1687,11 +1698,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "900"
   },
+  selectedNeighborhoodText: {
+    color: colors.paper
+  },
+  selectedNeighborhoodSubtext: {
+    color: "#E7E0D5"
+  },
+  neighborhoodStatRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginTop: spacing.sm
+  },
   neighborhoodMeta: {
     color: colors.mutedInk,
     fontSize: 12,
     fontWeight: "800",
-    marginTop: spacing.sm
   },
   neighborhoodTrustMeta: {
     color: colors.mutedInk,
@@ -1701,7 +1723,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs
   },
   neighborhoodReason: {
-    color: colors.teal,
+    color: colors.ink,
     fontSize: 13,
     fontWeight: "800",
     lineHeight: 18,
@@ -1749,7 +1771,7 @@ const styles = StyleSheet.create({
   },
   walkBand: {
     backgroundColor: colors.paper,
-    borderColor: colors.line,
+    borderColor: "rgba(17, 17, 17, 0.08)",
     borderRadius: radii.md,
     borderWidth: 1,
     marginHorizontal: spacing.lg,
@@ -1758,8 +1780,10 @@ const styles = StyleSheet.create({
   },
   routeCommand: {
     alignItems: "stretch",
-    backgroundColor: colors.ink,
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
     borderRadius: radii.md,
+    borderWidth: 1,
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.md,
@@ -1773,28 +1797,28 @@ const styles = StyleSheet.create({
     minWidth: 240
   },
   routeCommandKicker: {
-    color: "#DEB6B2",
+    color: colors.mutedInk,
     fontSize: 11,
     fontWeight: "900",
     textTransform: "uppercase"
   },
   routeCommandTitle: {
-    color: colors.paper,
+    color: colors.ink,
     fontSize: 22,
     fontWeight: "900",
     lineHeight: 27,
     marginTop: spacing.sm
   },
   routeCommandMeta: {
-    color: "#DAD8D0",
+    color: colors.mutedInk,
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 19,
     marginTop: spacing.sm
   },
   routeQualityStack: {
-    backgroundColor: "#252C35",
-    borderColor: "#3B4652",
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
     borderRadius: radii.md,
     borderWidth: 1,
     justifyContent: "center",
@@ -1812,6 +1836,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     marginTop: spacing.xs
+  },
+  routeStartRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginTop: spacing.sm
+  },
+  routeStartPill: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
   },
   routeModeGrid: {
     flexDirection: "row",
@@ -1831,8 +1873,8 @@ const styles = StyleSheet.create({
     padding: spacing.md
   },
   activeRouteModeButton: {
-    backgroundColor: colors.teal,
-    borderColor: colors.teal
+    backgroundColor: colors.ink,
+    borderColor: colors.ink
   },
   routeModeLabel: {
     color: colors.ink,
@@ -1850,7 +1892,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs
   },
   activeRouteModeDetail: {
-    color: "#E6F3F1"
+    color: "#E7E0D5"
   },
   walkStats: {
     flexDirection: "row",
@@ -1860,14 +1902,15 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md
   },
   routeGuidance: {
-    backgroundColor: colors.fog,
-    borderColor: colors.line,
+    backgroundColor: "transparent",
+    borderColor: "transparent",
     borderRadius: radii.md,
     borderWidth: 1,
     gap: spacing.sm,
     marginHorizontal: spacing.lg,
     marginTop: spacing.md,
-    padding: spacing.md
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
   },
   guidanceTitle: {
     color: colors.ink,
@@ -1882,7 +1925,7 @@ const styles = StyleSheet.create({
     lineHeight: 18
   },
   routeConfidenceText: {
-    color: colors.teal,
+    color: colors.ink,
     fontSize: 13,
     fontWeight: "900",
     lineHeight: 18
@@ -1903,9 +1946,8 @@ const styles = StyleSheet.create({
     fontWeight: "900"
   },
   routePreview: {
-    borderColor: colors.line,
-    borderRadius: radii.md,
-    borderWidth: 1,
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
     marginHorizontal: spacing.lg,
     marginTop: spacing.md,
     paddingVertical: spacing.md
@@ -1955,7 +1997,7 @@ const styles = StyleSheet.create({
     width: 28
   },
   routePreviewNodeActive: {
-    backgroundColor: colors.teal
+    backgroundColor: colors.gold
   },
   routePreviewNodeText: {
     color: colors.paper,
@@ -1975,7 +2017,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm
   },
   routePreviewStatus: {
-    color: colors.teal,
+    color: colors.ink,
     fontSize: 11,
     fontWeight: "900",
     marginTop: spacing.xs
@@ -2005,14 +2047,13 @@ const styles = StyleSheet.create({
     lineHeight: 18
   },
   walkStop: {
-    alignItems: "center",
-    borderColor: colors.line,
-    borderRadius: radii.md,
-    borderWidth: 1,
+    alignItems: "flex-start",
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
     flexDirection: "row",
     gap: spacing.md,
     minHeight: 72,
-    padding: spacing.md
+    paddingVertical: spacing.md
   },
   stopLabelRow: {
     flexDirection: "row",
@@ -2023,7 +2064,7 @@ const styles = StyleSheet.create({
   routePill: {
     backgroundColor: colors.tealSoft,
     borderRadius: radii.pill,
-    color: colors.teal,
+    color: colors.ink,
     fontSize: 10,
     fontWeight: "900",
     overflow: "hidden",
@@ -2078,7 +2119,7 @@ const styles = StyleSheet.create({
   walkStopReason: {
     backgroundColor: colors.tealSoft,
     borderRadius: radii.pill,
-    color: colors.teal,
+    color: colors.ink,
     fontSize: 12,
     fontWeight: "800",
     overflow: "hidden",
@@ -2217,15 +2258,57 @@ const styles = StyleSheet.create({
   },
   exhibitionCard: {
     backgroundColor: colors.paper,
-    borderColor: colors.line,
+    borderColor: "rgba(17, 17, 17, 0.08)",
     borderRadius: radii.md,
     borderWidth: 1,
-    flexDirection: "row",
     overflow: "hidden",
     ...shadows.card
   },
-  toneRail: {
-    width: 8
+  cardVisual: {
+    height: 220,
+    justifyContent: "space-between",
+    overflow: "hidden",
+    padding: spacing.md
+  },
+  cardImage: {
+    height: "100%",
+    width: "100%",
+    resizeMode: "cover"
+  },
+  cardImageShade: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(0, 0, 0, 0.28)"
+  },
+  cardVisualTopRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    justifyContent: "space-between"
+  },
+  visualBadge: {
+    backgroundColor: "rgba(255, 253, 248, 0.92)",
+    borderRadius: radii.pill,
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  cardVisualCopy: {
+    gap: spacing.xs
+  },
+  cardVisualGallery: {
+    color: "#F0ECE4",
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  cardVisualTitle: {
+    color: colors.paper,
+    fontSize: 24,
+    fontWeight: "900",
+    lineHeight: 29
   },
   cardBody: {
     flex: 1,
@@ -2244,7 +2327,7 @@ const styles = StyleSheet.create({
     minWidth: 0
   },
   cardGalleryName: {
-    color: colors.coralDark,
+    color: colors.mutedInk,
     fontSize: 12,
     fontWeight: "900",
     textTransform: "uppercase"
@@ -2264,7 +2347,7 @@ const styles = StyleSheet.create({
   },
   statusBadge: {
     alignItems: "center",
-    backgroundColor: colors.tealSoft,
+    backgroundColor: colors.fog,
     borderRadius: radii.pill,
     flexDirection: "row",
     gap: spacing.xs,
@@ -2272,7 +2355,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs
   },
   statusBadgeText: {
-    color: colors.teal,
+    color: colors.ink,
     fontSize: 11,
     fontWeight: "900"
   },
@@ -2302,13 +2385,13 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs
   },
   urgentFactText: {
-    backgroundColor: "#FFE8E2",
-    color: colors.coralDark
+    backgroundColor: colors.tealSoft,
+    color: colors.ink
   },
   openingFactText: {
-    backgroundColor: "#EFE8F4",
+    backgroundColor: colors.ink,
     borderRadius: radii.pill,
-    color: colors.plum,
+    color: colors.paper,
     fontSize: 12,
     fontWeight: "900",
     overflow: "hidden",
@@ -2332,7 +2415,7 @@ const styles = StyleSheet.create({
   },
   reasonPill: {
     alignItems: "center",
-    backgroundColor: "#EFE8F4",
+    backgroundColor: colors.fog,
     borderRadius: radii.pill,
     flexDirection: "row",
     gap: spacing.xs,
@@ -2340,7 +2423,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs
   },
   reasonText: {
-    color: colors.plum,
+    color: colors.ink,
     fontSize: 12,
     fontWeight: "900"
   },

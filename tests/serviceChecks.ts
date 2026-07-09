@@ -67,6 +67,7 @@ import {
   getGallerySourceEffectiveFreshness,
   reviewGallerySubmissionQueueItem
 } from "../src/services/galleryDataFoundation";
+import { getGalleryHeroVisual, getGalleryVisual } from "../src/services/galleryVisuals";
 import { createTicketmasterProviderDiagnostics } from "../src/services/providerDiagnostics";
 import { checkoutBackend } from "../src/services/checkoutBackend";
 import {
@@ -356,6 +357,14 @@ async function main() {
     galleryExhibitions.find((exhibition) => exhibition.id === "verified-pace-julian-schnabel") ??
       galleryExhibitions[0]
   );
+  const sampleFixtureExhibition =
+    galleryExhibitions.find((exhibition) => exhibition.id === "nyc-afterimage-index") ??
+    galleryExhibitions[0];
+  const sampleVerifiedExhibition =
+    galleryExhibitions.find((exhibition) => exhibition.id === "verified-pace-julian-schnabel") ??
+    galleryExhibitions[0];
+  const sampleFixtureVisual = getGalleryVisual(sampleFixtureExhibition);
+  const sampleVerifiedVisual = getGalleryVisual(sampleVerifiedExhibition);
   const warren510Source = gallerySourceCandidates.find(
     (source) => source.id === "source-510-warren-hudson"
   );
@@ -392,6 +401,19 @@ async function main() {
       sampleVerifiedTrust.kind === "manual-verified" &&
       sampleVerifiedTrust.checkedLabel === "Verified as of Jul 9",
     "Gallery trust labels should distinguish fixture/demo inventory from manually verified official-page records."
+  );
+  assert(
+    sampleFixtureVisual.assetKey === getGalleryVisual(sampleFixtureExhibition).assetKey &&
+      sampleVerifiedVisual.assetKey === getGalleryVisual(sampleVerifiedExhibition).assetKey &&
+      sampleFixtureVisual.alt.includes(sampleFixtureExhibition.galleryName) &&
+      sampleVerifiedVisual.alt.includes(sampleVerifiedExhibition.galleryName),
+    "Gallery visual helper should return stable, meaningful assets for fixture and verified records."
+  );
+  assert(
+    getGalleryHeroVisual("nyc").assetKey === "hero" &&
+      getGalleryHeroVisual("hudson").assetKey === "sculpture" &&
+      ["hero", "painting", "sculpture", "photo-video"].includes(sampleVerifiedVisual.assetKey),
+    "Gallery visual helper should expose predictable hero and card asset keys for the redesign."
   );
   assert(
     verifiedInventory.every(

@@ -224,10 +224,10 @@ export const galleryVisitStatusLabels: Record<GalleryVisitStatus, string> = {
 };
 
 export const galleryWalkModeLabels: Record<GalleryWalkMode, string> = {
-  "quick-loop": "45-minute loop",
+  "quick-loop": "Quick loop",
   "two-hour": "2-hour walk",
-  "opening-night": "Opening crawl",
-  "last-chance": "Last chance"
+  "opening-night": "Opening-night crawl",
+  "last-chance": "Last-chance route"
 };
 
 function getIsoMatch(iso: string): RegExpMatchArray | null {

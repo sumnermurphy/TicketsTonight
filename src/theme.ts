@@ -1,17 +1,17 @@
 import { Platform } from "react-native";
 
 export const colors = {
-  ink: "#171C24",
-  mutedInk: "#59606B",
-  fog: "#F5F6F4",
-  paper: "#FFFDFC",
-  line: "#DCD8CF",
-  coral: "#E7563C",
-  coralDark: "#B73A26",
-  teal: "#0D7C75",
-  tealSoft: "#DFF1EE",
-  gold: "#D9A441",
-  plum: "#5C496A"
+  ink: "#111111",
+  mutedInk: "#6B6B66",
+  fog: "#F4F2ED",
+  paper: "#FFFDF8",
+  line: "#DDD8CF",
+  coral: "#8E6B4D",
+  coralDark: "#4B3528",
+  teal: "#111111",
+  tealSoft: "#EEEAE2",
+  gold: "#B39B72",
+  plum: "#2A2926"
 };
 
 export const spacing = {
@@ -26,7 +26,7 @@ export const spacing = {
 export const radii = {
   sm: 6,
   md: 8,
-  lg: 14,
+  lg: 8,
   pill: 999
 };
 
