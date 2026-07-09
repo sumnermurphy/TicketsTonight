@@ -67,7 +67,22 @@ import {
   getGallerySourceEffectiveFreshness,
   reviewGallerySubmissionQueueItem
 } from "../src/services/galleryDataFoundation";
+import {
+  deserializeGalleryAppPersistedState,
+  readGalleryAppPersistedState,
+  serializeGalleryAppPersistedState,
+  writeGalleryAppPersistedState,
+  type GalleryStorageAdapter
+} from "../src/services/galleryAppPersistence";
 import { getGalleryHeroVisual, getGalleryVisual } from "../src/services/galleryVisuals";
+import {
+  advanceGalleryWalk,
+  completeGalleryWalk,
+  createGalleryWalkSession,
+  getActiveWalkProgress,
+  markGalleryWalkStopVisited,
+  skipGalleryWalkStop
+} from "../src/services/galleryWalkSession";
 import { createTicketmasterProviderDiagnostics } from "../src/services/providerDiagnostics";
 import { checkoutBackend } from "../src/services/checkoutBackend";
 import {
@@ -579,6 +594,104 @@ async function main() {
       chelseaTwoHourWalk.routeMapUrl.includes("waypoints=") &&
       !chelseaTwoHourWalk.routeMapUrl.includes(" "),
     "Full-route map links should encode origin, destination, and waypoint addresses for multi-stop walks."
+  );
+
+  const walkSession = createGalleryWalkSession(chelseaTwoHourWalk, galleryReferenceNow);
+  const walkSessionProgress = getActiveWalkProgress(walkSession, chelseaTwoHourWalk);
+  const firstWalkStopId = chelseaTwoHourWalk.stops[0]?.exhibition.id ?? "";
+  const secondWalkStopId = chelseaTwoHourWalk.stops[1]?.exhibition.id ?? "";
+  const visitedWalkSession = markGalleryWalkStopVisited(
+    walkSession,
+    firstWalkStopId,
+    "2026-07-09T16:00:00-04:00"
+  );
+  const visitedWalkProgress = getActiveWalkProgress(visitedWalkSession, chelseaTwoHourWalk);
+  const skippedWalkSession = skipGalleryWalkStop(
+    visitedWalkSession,
+    secondWalkStopId,
+    "2026-07-09T16:05:00-04:00"
+  );
+  const skippedWalkProgress = getActiveWalkProgress(skippedWalkSession, chelseaTwoHourWalk);
+  const advancedWalkSession = advanceGalleryWalk(
+    skippedWalkSession,
+    chelseaTwoHourWalk,
+    "2026-07-09T16:10:00-04:00"
+  );
+  const completedWalkSession = completeGalleryWalk(
+    advancedWalkSession,
+    "2026-07-09T16:30:00-04:00"
+  );
+
+  assert(
+    walkSession.areaId === "nyc" &&
+      walkSession.mode === "two-hour" &&
+      walkSession.orderedStopIds.join("|") ===
+        chelseaTwoHourWalk.stops.map((stop) => stop.exhibition.id).join("|") &&
+      walkSessionProgress.currentStopId === firstWalkStopId &&
+      walkSessionProgress.nextStopId === secondWalkStopId,
+    "Active walk sessions should preserve route identity, stop order, current stop, and next stop."
+  );
+  assert(
+    visitedWalkSession.visitedStopIds.includes(firstWalkStopId) &&
+      visitedWalkProgress.currentStopId === secondWalkStopId &&
+      visitedWalkProgress.stopProgressById[firstWalkStopId] === "visited",
+    "Marking a walk stop visited should update progress and advance the current stop."
+  );
+  assert(
+    skippedWalkSession.skippedStopIds.includes(secondWalkStopId) &&
+      skippedWalkProgress.stopProgressById[secondWalkStopId] === "skipped" &&
+      skippedWalkProgress.completedStopCount === 2,
+    "Skipping a walk stop should record skipped progress without losing visited progress."
+  );
+  assert(
+    advancedWalkSession.visitedStopIds.length > skippedWalkSession.visitedStopIds.length &&
+      completedWalkSession.status === "completed" &&
+      completedWalkSession.completedAt === "2026-07-09T16:30:00-04:00",
+    "Advancing and completing a walk should mutate session progress predictably."
+  );
+
+  const persistedStorageMap = new Map<string, string>();
+  const persistedStorage: GalleryStorageAdapter = {
+    getItem: (key) => persistedStorageMap.get(key) ?? null,
+    setItem: (key, value) => {
+      persistedStorageMap.set(key, value);
+    },
+    removeItem: (key) => {
+      persistedStorageMap.delete(key);
+    }
+  };
+  const persistedLogEntries = upsertGalleryLogEntry(
+    [],
+    firstWalkStopId,
+    "visited",
+    "Active walk test note.",
+    galleryReferenceNow
+  );
+  const persistedState = {
+    version: 1 as const,
+    selectedAreaId: "nyc" as const,
+    selectedNeighborhood: "Chelsea",
+    activeLens: "open-now" as const,
+    verifiedOnly: true,
+    walkMode: "two-hour" as const,
+    alertWindowDays: 7 as const,
+    logEntries: persistedLogEntries,
+    savedAlertArtists: ["Mark Manders"],
+    savedAlertGalleries: ["Tanya Bonakdar Gallery"],
+    savedAlertNeighborhoods: ["Chelsea"],
+    savedAlertMediums: ["sculpture" as const],
+    activeWalkSession: visitedWalkSession
+  };
+  const serializedGalleryState = serializeGalleryAppPersistedState(persistedState);
+
+  writeGalleryAppPersistedState(persistedState, persistedStorage, "test-gallery-state");
+
+  assert(
+    deserializeGalleryAppPersistedState(serializedGalleryState)?.activeWalkSession?.currentStopId ===
+      secondWalkStopId &&
+      readGalleryAppPersistedState(persistedStorage, "test-gallery-state")?.verifiedOnly === true &&
+      readGalleryAppPersistedState(persistedStorage, "test-gallery-state")?.alertWindowDays === 7,
+    "Gallery app persistence should round-trip active walk, filters, alerts, and art log state."
   );
   const routeOrderingWalk = createGalleryWalkPlan({
     areaId: "nyc",

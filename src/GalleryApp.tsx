@@ -13,7 +13,7 @@ import {
   Sparkles,
   X
 } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ImageBackground,
   type ImageSourcePropType,
@@ -51,12 +51,28 @@ import {
   upsertGalleryLogEntry,
   type GalleryWalkMode
 } from "./services/galleryDiscovery";
+import {
+  readGalleryAppPersistedState,
+  writeGalleryAppPersistedState,
+  type GalleryPersistedLens
+} from "./services/galleryAppPersistence";
 import { createGalleryMarketDataAudit } from "./services/galleryDataFoundation";
 import {
   getGalleryHeroVisual,
   getGalleryVisual,
   type GalleryVisualKey
 } from "./services/galleryVisuals";
+import {
+  advanceGalleryWalk,
+  completeGalleryWalk,
+  createGalleryWalkSession,
+  getActiveWalkProgress,
+  markGalleryWalkStopVisited,
+  skipGalleryWalkStop,
+  type GalleryWalkProgress,
+  type GalleryWalkSession,
+  type GalleryWalkStopProgress
+} from "./services/galleryWalkSession";
 import { colors, radii, shadows, spacing } from "./theme";
 import type {
   GalleryAreaId,
@@ -66,7 +82,7 @@ import type {
   GalleryMedium
 } from "./types";
 
-type GalleryLens = "all" | "open-now" | "opening-tonight" | "last-chance";
+type GalleryLens = GalleryPersistedLens;
 type GalleryWalkPlan = ReturnType<typeof createGalleryWalkPlan>;
 type GalleryWalkStop = GalleryWalkPlan["stops"][number];
 
@@ -353,7 +369,20 @@ function RouteCommandPanel({
   routeFixtureStopCount,
   startStop,
   nextStop,
+  activeWalkSession,
+  activeWalkProgress,
+  activeWalkPlan,
+  activeWalkCurrentStop,
+  activeWalkNextStop,
+  activeWalkNextLeg,
+  activeWalkIsDraft,
   onMode,
+  onStartWalk,
+  onResumeWalk,
+  onMarkCurrentVisited,
+  onSkipCurrent,
+  onAdvance,
+  onEndWalk,
   compact = false
 }: {
   walkPlan: GalleryWalkPlan;
@@ -363,62 +392,185 @@ function RouteCommandPanel({
   routeFixtureStopCount: number;
   startStop?: GalleryWalkStop;
   nextStop?: GalleryWalkStop;
+  activeWalkSession?: GalleryWalkSession;
+  activeWalkProgress?: GalleryWalkProgress;
+  activeWalkPlan?: GalleryWalkPlan;
+  activeWalkCurrentStop?: GalleryWalkStop;
+  activeWalkNextStop?: GalleryWalkStop;
+  activeWalkNextLeg?: GalleryWalkPlan["legs"][number];
+  activeWalkIsDraft: boolean;
   onMode: (mode: GalleryWalkMode) => void;
+  onStartWalk: () => void;
+  onResumeWalk: () => void;
+  onMarkCurrentVisited: () => void;
+  onSkipCurrent: () => void;
+  onAdvance: () => void;
+  onEndWalk: () => void;
   compact?: boolean;
 }) {
+  const showingActiveWalk =
+    activeWalkSession?.status === "active" &&
+    !activeWalkIsDraft &&
+    Boolean(activeWalkProgress && activeWalkPlan);
+  const displayPlan = showingActiveWalk && activeWalkPlan ? activeWalkPlan : walkPlan;
+  const currentStop = showingActiveWalk ? activeWalkCurrentStop : startStop;
+  const displayNextStop = showingActiveWalk ? activeWalkNextStop : nextStop;
+  const progressCopy =
+    showingActiveWalk && activeWalkProgress
+      ? `${activeWalkProgress.completedStopCount}/${activeWalkProgress.totalStopCount} stops complete - ${activeWalkProgress.remainingStopIds.length} remaining`
+      : routeConfidenceCopy;
+
   return (
     <View style={[styles.routeFirstPanel, compact ? styles.compactRouteFirstPanel : null]}>
+      {activeWalkSession?.status === "active" && activeWalkIsDraft ? (
+        <View style={styles.activeWalkNotice}>
+          <View style={styles.activeWalkNoticeCopy}>
+            <Text style={styles.activeWalkNoticeTitle}>Active walk preserved</Text>
+            <Text style={styles.activeWalkNoticeText}>
+              Resume {galleryWalkModeLabels[activeWalkSession.mode]} in {activeWalkSession.neighborhood ?? activeWalkSession.areaId.toUpperCase()}, or start this draft route.
+            </Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Resume active walk"
+            onPress={onResumeWalk}
+            style={styles.secondaryRouteButton}
+          >
+            <Text style={styles.secondaryRouteButtonText}>Resume walk</Text>
+          </Pressable>
+        </View>
+      ) : null}
       <View style={styles.routeFirstHeader}>
         <View style={styles.routeFirstTitleBlock}>
-          <Text style={styles.routeFirstKicker}>Tonight's walk</Text>
-          <Text style={styles.routeFirstTitle}>{walkPlan.summary}</Text>
-          <Text style={styles.routeFirstMeta}>{routeConfidenceCopy}</Text>
+          <Text style={styles.routeFirstKicker}>
+            {showingActiveWalk ? "Active walk" : "Tonight's walk"}
+          </Text>
+          <Text style={styles.routeFirstTitle}>
+            {showingActiveWalk && currentStop
+              ? `Current stop: ${currentStop.exhibition.galleryName}`
+              : displayPlan.summary}
+          </Text>
+          <Text style={styles.routeFirstMeta}>
+            {showingActiveWalk && displayNextStop
+              ? `Next: ${displayNextStop.exhibition.galleryName}${
+                  activeWalkNextLeg
+                    ? ` - ${activeWalkNextLeg.walkingMinutes} min, ${activeWalkNextLeg.distanceMiles.toFixed(1)} mi`
+                    : ""
+                }`
+              : progressCopy}
+          </Text>
         </View>
-        {walkPlan.routeMapUrl ? (
-          <Pressable
-            accessibilityRole="link"
-            accessibilityLabel={`Open full ${walkPlan.neighborhood} walking route in maps`}
-            onPress={() => {
-              if (walkPlan.routeMapUrl) {
-                void Linking.openURL(walkPlan.routeMapUrl);
-              }
-            }}
-            style={styles.routeFirstMapButton}
-          >
-            <ExternalLink size={14} color={colors.paper} />
-            <Text style={styles.routeFirstMapButtonText}>Open full route</Text>
-          </Pressable>
-        ) : null}
+        <View style={styles.routeFirstActionStack}>
+          {showingActiveWalk && currentStop ? (
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel={`Open map for current stop ${currentStop.exhibition.galleryName}`}
+              onPress={() => {
+                void Linking.openURL(currentStop.mapUrl);
+              }}
+              style={styles.routeFirstMapButton}
+            >
+              <MapPin size={14} color={colors.paper} />
+              <Text style={styles.routeFirstMapButtonText}>Current map</Text>
+            </Pressable>
+          ) : null}
+          {displayPlan.routeMapUrl ? (
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel={`Open full ${displayPlan.neighborhood} walking route in maps`}
+              onPress={() => {
+                if (displayPlan.routeMapUrl) {
+                  void Linking.openURL(displayPlan.routeMapUrl);
+                }
+              }}
+              style={styles.routeFirstMapButton}
+            >
+              <ExternalLink size={14} color={colors.paper} />
+              <Text style={styles.routeFirstMapButtonText}>Open full route</Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
 
-      <View style={styles.routeFirstModeGrid}>
-        {walkModeOptions.map((mode) => (
-          <RouteModeButton
-            key={mode}
-            label={galleryWalkModeLabels[mode]}
-            detail={walkModeDetails[mode]}
-            active={walkMode === mode}
-            onPress={() => onMode(mode)}
-          />
-        ))}
-      </View>
+      {showingActiveWalk ? (
+        <View style={styles.activeWalkActionRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Mark current stop visited"
+            onPress={onMarkCurrentVisited}
+            style={styles.primaryLightButton}
+          >
+            <Text style={styles.primaryLightButtonText}>Mark visited</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Skip current stop"
+            onPress={onSkipCurrent}
+            style={styles.secondaryRouteButton}
+          >
+            <Text style={styles.secondaryRouteButtonText}>Skip stop</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Go to next stop"
+            onPress={onAdvance}
+            style={styles.secondaryRouteButton}
+          >
+            <Text style={styles.secondaryRouteButtonText}>Next stop</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="End active walk"
+            onPress={onEndWalk}
+            style={styles.secondaryRouteButton}
+          >
+            <Text style={styles.secondaryRouteButtonText}>End walk</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <>
+          <View style={styles.routeFirstModeGrid}>
+            {walkModeOptions.map((mode) => (
+              <RouteModeButton
+                key={mode}
+                label={galleryWalkModeLabels[mode]}
+                detail={walkModeDetails[mode]}
+                active={walkMode === mode}
+                onPress={() => onMode(mode)}
+              />
+            ))}
+          </View>
+          <View style={styles.activeWalkActionRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Start walk"
+              onPress={onStartWalk}
+              style={styles.primaryLightButton}
+            >
+              <Text style={styles.primaryLightButtonText}>
+                {activeWalkSession?.status === "active" ? "Start this route" : "Start walk"}
+              </Text>
+            </Pressable>
+          </View>
+        </>
+      )}
 
       <View style={styles.routeFirstStats}>
-        <Metric label="stops" value={walkPlan.stops.length} tone="good" />
-        <Metric label="minutes" value={walkPlan.totalMinutes} />
-        <Metric label="miles" value={walkPlan.totalDistanceMiles.toFixed(1)} />
+        <Metric label="stops" value={displayPlan.stops.length} tone="good" />
+        <Metric label="minutes" value={displayPlan.totalMinutes} />
+        <Metric label="miles" value={displayPlan.totalDistanceMiles.toFixed(1)} />
         <Metric label="verified" value={`${routeVerifiedStopCount}/${walkPlan.stops.length}`} tone="good" />
         <Metric label="demo" value={routeFixtureStopCount} tone={routeFixtureStopCount > 0 ? "warn" : "neutral"} />
       </View>
 
       <View style={styles.routeStartRow}>
         <Text style={styles.routeStartPill}>Start {startStop?.exhibition.galleryName ?? "where open"}</Text>
-        <Text style={styles.routeStartPill}>Next {nextStop?.exhibition.galleryName ?? "best nearby stop"}</Text>
-        <Text style={styles.routeStartPill}>{walkPlan.canStartNow ? "Can start now" : "Timing check needed"}</Text>
+        <Text style={styles.routeStartPill}>Next {displayNextStop?.exhibition.galleryName ?? "best nearby stop"}</Text>
+        <Text style={styles.routeStartPill}>{displayPlan.canStartNow ? "Can start now" : "Timing check needed"}</Text>
       </View>
 
       <View style={styles.routeReasonRow}>
-        {walkPlan.selectionReasons.slice(0, 4).map((reason) => (
+        {displayPlan.selectionReasons.slice(0, 4).map((reason) => (
           <Text key={reason} style={styles.routeReasonPill}>{reason}</Text>
         ))}
       </View>
@@ -452,19 +604,36 @@ function WalkStopRow({
   stop,
   leg,
   isStart,
-  isNext
+  isNext,
+  progress
 }: {
   stop: GalleryWalkPlan["stops"][number];
   leg?: GalleryWalkPlan["legs"][number];
   isStart: boolean;
   isNext: boolean;
+  progress?: GalleryWalkStopProgress;
 }) {
   const trust = getGalleryInventoryTrust(stop.exhibition);
   const groupedShows = stop.exhibitions ?? [stop.exhibition];
   const showCountLabel = `${groupedShows.length} show${groupedShows.length === 1 ? "" : "s"} on view`;
+  const progressLabel: Partial<Record<GalleryWalkStopProgress, string>> = {
+    current: "Current",
+    next: "Next",
+    visited: "Visited",
+    skipped: "Skipped",
+    planned: "Planned"
+  };
 
   return (
-    <View style={styles.walkStop}>
+    <View
+      style={[
+        styles.walkStop,
+        progress === "current" ? styles.currentWalkStop : null,
+        progress === "next" ? styles.nextWalkStop : null,
+        progress === "visited" ? styles.visitedWalkStop : null,
+        progress === "skipped" ? styles.skippedWalkStop : null
+      ]}
+    >
       <View style={styles.stopNumber}>
         <Text style={styles.stopNumberText}>{stop.stopNumber}</Text>
       </View>
@@ -475,6 +644,9 @@ function WalkStopRow({
           ) : null}
           {isNext ? (
             <Text style={styles.routePill}>Next stop</Text>
+          ) : null}
+          {progress ? (
+            <Text style={styles.routePill}>{progressLabel[progress]}</Text>
           ) : null}
         </View>
         <Text style={styles.walkStopTitle}>{stop.exhibition.galleryName}</Text>
@@ -725,16 +897,22 @@ function ExhibitionDetailSheet({
   allExhibitions,
   savedIds,
   logEntry,
+  routeProgress,
   onStatus,
   onNote,
+  onMarkRouteVisited,
+  onSkipRouteStop,
   onClose
 }: {
   exhibition: GalleryExhibition;
   allExhibitions: GalleryExhibition[];
   savedIds: string[];
   logEntry?: GalleryLogEntry;
+  routeProgress?: GalleryWalkStopProgress;
   onStatus: (status: GalleryLogStatus) => void;
   onNote: (note: string) => void;
+  onMarkRouteVisited?: () => void;
+  onSkipRouteStop?: () => void;
   onClose: () => void;
 }) {
   const status = getGalleryVisitStatus(exhibition, referenceNow);
@@ -798,6 +976,45 @@ function ExhibitionDetailSheet({
           <Text style={styles.sourceText}>{exhibition.mediums.map((medium) => mediumLabels[medium]).join(", ")}</Text>
         </View>
 
+        {routeProgress ? (
+          <View style={styles.activeRouteDetail}>
+            <View style={styles.activeRouteDetailCopy}>
+              <Text style={styles.activeRouteDetailTitle}>In active walk</Text>
+              <Text style={styles.activeRouteDetailText}>
+                {routeProgress === "current"
+                  ? "This is your current stop."
+                  : routeProgress === "next"
+                    ? "This is your next stop."
+                    : routeProgress === "visited"
+                      ? "You marked this stop visited."
+                      : routeProgress === "skipped"
+                        ? "You skipped this stop."
+                        : "This stop is still planned."}
+              </Text>
+            </View>
+            {routeProgress !== "visited" && routeProgress !== "skipped" ? (
+              <View style={styles.activeWalkActionRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Mark ${exhibition.title} visited in active walk`}
+                  onPress={onMarkRouteVisited}
+                  style={styles.primaryLightButton}
+                >
+                  <Text style={styles.primaryLightButtonText}>Mark visited</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Skip ${exhibition.title} in active walk`}
+                  onPress={onSkipRouteStop}
+                  style={styles.secondaryRouteButton}
+                >
+                  <Text style={styles.secondaryRouteButtonText}>Skip stop</Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
         <View style={styles.reasonRow}>
           {reasons.map((reason) => (
             <View key={reason} style={styles.reasonPill}>
@@ -847,20 +1064,42 @@ function ExhibitionDetailSheet({
 
 export function GalleryApp() {
   const { width: viewportWidth } = useWindowDimensions();
-  const [selectedAreaId, setSelectedAreaId] = useState<GalleryAreaId>("nyc");
-  const [selectedNeighborhood, setSelectedNeighborhood] = useState<string | undefined>();
-  const [selectedMedium, setSelectedMedium] = useState<GalleryMedium | undefined>();
-  const [activeLens, setActiveLens] = useState<GalleryLens>("all");
-  const [verifiedOnly, setVerifiedOnly] = useState(false);
-  const [walkMode, setWalkMode] = useState<GalleryWalkMode>("quick-loop");
-  const [alertWindowDays, setAlertWindowDays] = useState<3 | 7 | 14>(14);
+  const persistedState = useMemo(() => readGalleryAppPersistedState(), []);
+  const [selectedAreaId, setSelectedAreaId] = useState<GalleryAreaId>(
+    persistedState?.selectedAreaId ?? "nyc"
+  );
+  const [selectedNeighborhood, setSelectedNeighborhood] = useState<string | undefined>(
+    persistedState?.selectedNeighborhood
+  );
+  const [selectedMedium, setSelectedMedium] = useState<GalleryMedium | undefined>(
+    persistedState?.selectedMedium
+  );
+  const [activeLens, setActiveLens] = useState<GalleryLens>(persistedState?.activeLens ?? "all");
+  const [verifiedOnly, setVerifiedOnly] = useState(persistedState?.verifiedOnly ?? false);
+  const [walkMode, setWalkMode] = useState<GalleryWalkMode>(
+    persistedState?.walkMode ?? "quick-loop"
+  );
+  const [alertWindowDays, setAlertWindowDays] = useState<3 | 7 | 14>(
+    persistedState?.alertWindowDays ?? 14
+  );
   const [query, setQuery] = useState("");
   const [selectedExhibitionId, setSelectedExhibitionId] = useState<string | undefined>();
-  const [logEntries, setLogEntries] = useState<GalleryLogEntry[]>([]);
-  const [savedAlertArtists, setSavedAlertArtists] = useState<string[]>([]);
-  const [savedAlertGalleries, setSavedAlertGalleries] = useState<string[]>([]);
-  const [savedAlertNeighborhoods, setSavedAlertNeighborhoods] = useState<string[]>([]);
-  const [savedAlertMediums, setSavedAlertMediums] = useState<GalleryMedium[]>([]);
+  const [activeWalkSession, setActiveWalkSession] = useState<GalleryWalkSession | undefined>(
+    persistedState?.activeWalkSession
+  );
+  const [logEntries, setLogEntries] = useState<GalleryLogEntry[]>(persistedState?.logEntries ?? []);
+  const [savedAlertArtists, setSavedAlertArtists] = useState<string[]>(
+    persistedState?.savedAlertArtists ?? []
+  );
+  const [savedAlertGalleries, setSavedAlertGalleries] = useState<string[]>(
+    persistedState?.savedAlertGalleries ?? []
+  );
+  const [savedAlertNeighborhoods, setSavedAlertNeighborhoods] = useState<string[]>(
+    persistedState?.savedAlertNeighborhoods ?? []
+  );
+  const [savedAlertMediums, setSavedAlertMediums] = useState<GalleryMedium[]>(
+    persistedState?.savedAlertMediums ?? []
+  );
   const selectedArea = galleryAreas.find((area) => area.id === selectedAreaId) ?? galleryAreas[0];
   const isCompactLayout = viewportWidth < 720;
   const areaInventory = useMemo(
@@ -952,6 +1191,47 @@ export function GalleryApp() {
       }),
     [savedIds, selectedAreaId, selectedNeighborhood, walkMode]
   );
+  const activeWalkPlan = useMemo(
+    () =>
+      activeWalkSession
+        ? createGalleryWalkPlan({
+            areaId: activeWalkSession.areaId,
+            mode: activeWalkSession.mode,
+            neighborhood: activeWalkSession.neighborhood,
+            savedIds,
+            referenceNow
+          })
+        : undefined,
+    [activeWalkSession, savedIds]
+  );
+  const activeWalkProgress = useMemo(
+    () =>
+      activeWalkSession
+        ? getActiveWalkProgress(activeWalkSession, activeWalkPlan)
+        : undefined,
+    [activeWalkPlan, activeWalkSession]
+  );
+  const activeWalkIsDraft =
+    activeWalkSession?.status === "active" &&
+    (activeWalkSession.areaId !== selectedAreaId ||
+      activeWalkSession.mode !== walkMode ||
+      (activeWalkSession.neighborhood ?? undefined) !== walkPlan.neighborhood);
+  const activeWalkCurrentStop = activeWalkProgress?.currentStopId
+    ? activeWalkPlan?.stops.find(
+        (stop) => stop.exhibition.id === activeWalkProgress.currentStopId
+      )
+    : undefined;
+  const activeWalkNextStop = activeWalkProgress?.nextStopId
+    ? activeWalkPlan?.stops.find((stop) => stop.exhibition.id === activeWalkProgress.nextStopId)
+    : undefined;
+  const activeWalkNextLeg =
+    activeWalkProgress?.currentStopId && activeWalkProgress.nextStopId
+      ? activeWalkPlan?.legs.find(
+          (leg) =>
+            leg.fromExhibitionId === activeWalkProgress.currentStopId &&
+            leg.toExhibitionId === activeWalkProgress.nextStopId
+        )
+      : undefined;
   const mediumOptions = useMemo(
     () => Array.from(new Set(areaInventory.flatMap((exhibition) => exhibition.mediums))),
     [areaInventory]
@@ -1019,6 +1299,18 @@ export function GalleryApp() {
   const tonightPickVisual = tonightPick ? getGalleryVisual(tonightPick) : heroVisual;
   const startStop = walkPlan.stops.find((stop) => stop.exhibition.id === walkPlan.startStopId);
   const nextStop = walkPlan.stops.find((stop) => stop.exhibition.id === walkPlan.nextStopId);
+  const routeStopProgressById =
+    activeWalkSession?.status === "active" && !activeWalkIsDraft
+      ? activeWalkProgress?.stopProgressById
+      : undefined;
+  const selectedActiveWalkStop = selectedExhibition
+    ? activeWalkPlan?.stops.find((stop) =>
+        stop.exhibitions.some((exhibition) => exhibition.id === selectedExhibition.id)
+      )
+    : undefined;
+  const selectedActiveWalkProgress = selectedActiveWalkStop
+    ? activeWalkProgress?.stopProgressById[selectedActiveWalkStop.exhibition.id]
+    : undefined;
 
   function resetMarket(areaId: GalleryAreaId) {
     setSelectedAreaId(areaId);
@@ -1052,6 +1344,73 @@ export function GalleryApp() {
     );
   }
 
+  function startWalk() {
+    if (walkPlan.stops.length === 0) {
+      return;
+    }
+
+    setActiveWalkSession(createGalleryWalkSession(walkPlan, referenceNow));
+  }
+
+  function resumeWalk() {
+    if (!activeWalkSession) {
+      return;
+    }
+
+    setSelectedAreaId(activeWalkSession.areaId);
+    setSelectedNeighborhood(activeWalkSession.neighborhood);
+    setWalkMode(activeWalkSession.mode);
+    setSelectedExhibitionId(undefined);
+  }
+
+  function markRouteStopVisited(stopId?: string, exhibitionId?: string) {
+    if (!stopId) {
+      return;
+    }
+
+    setActiveWalkSession((session) =>
+      session ? markGalleryWalkStopVisited(session, stopId, referenceNow) : session
+    );
+
+    if (exhibitionId) {
+      setLogStatus(exhibitionId, "visited");
+    }
+  }
+
+  function skipRouteStop(stopId?: string, exhibitionId?: string) {
+    if (!stopId) {
+      return;
+    }
+
+    setActiveWalkSession((session) =>
+      session ? skipGalleryWalkStop(session, stopId, referenceNow) : session
+    );
+
+    if (exhibitionId) {
+      setLogStatus(exhibitionId, "skipped");
+    }
+  }
+
+  function advanceActiveWalk() {
+    if (!activeWalkSession || !activeWalkPlan) {
+      return;
+    }
+
+    const currentStopId = activeWalkProgress?.currentStopId;
+
+    setActiveWalkSession(advanceGalleryWalk(activeWalkSession, activeWalkPlan, referenceNow));
+
+    if (currentStopId) {
+      setLogStatus(currentStopId, "visited");
+    }
+  }
+
+  function endActiveWalk() {
+    setActiveWalkSession((session) =>
+      session ? completeGalleryWalk(session, referenceNow) : session
+    );
+  }
+
   function toggleStringValue(values: string[], value: string): string[] {
     return values.includes(value)
       ? values.filter((candidate) => candidate !== value)
@@ -1069,6 +1428,39 @@ export function GalleryApp() {
     savedAlertGalleries.length +
     savedAlertNeighborhoods.length +
     savedAlertMediums.length;
+
+  useEffect(() => {
+    writeGalleryAppPersistedState({
+      version: 1,
+      selectedAreaId,
+      selectedNeighborhood,
+      selectedMedium,
+      activeLens,
+      verifiedOnly,
+      walkMode,
+      alertWindowDays,
+      logEntries,
+      savedAlertArtists,
+      savedAlertGalleries,
+      savedAlertNeighborhoods,
+      savedAlertMediums,
+      activeWalkSession
+    });
+  }, [
+    activeLens,
+    activeWalkSession,
+    alertWindowDays,
+    logEntries,
+    savedAlertArtists,
+    savedAlertGalleries,
+    savedAlertMediums,
+    savedAlertNeighborhoods,
+    selectedAreaId,
+    selectedMedium,
+    selectedNeighborhood,
+    verifiedOnly,
+    walkMode
+  ]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -1115,7 +1507,27 @@ export function GalleryApp() {
             routeFixtureStopCount={routeFixtureStopCount}
             startStop={startStop}
             nextStop={nextStop}
+            activeWalkSession={activeWalkSession}
+            activeWalkProgress={activeWalkProgress}
+            activeWalkPlan={activeWalkPlan}
+            activeWalkCurrentStop={activeWalkCurrentStop}
+            activeWalkNextStop={activeWalkNextStop}
+            activeWalkNextLeg={activeWalkNextLeg}
+            activeWalkIsDraft={activeWalkIsDraft}
             onMode={setWalkMode}
+            onStartWalk={startWalk}
+            onResumeWalk={resumeWalk}
+            onMarkCurrentVisited={() =>
+              markRouteStopVisited(
+                activeWalkProgress?.currentStopId,
+                activeWalkCurrentStop?.exhibition.id
+              )
+            }
+            onSkipCurrent={() =>
+              skipRouteStop(activeWalkProgress?.currentStopId, activeWalkCurrentStop?.exhibition.id)
+            }
+            onAdvance={advanceActiveWalk}
+            onEndWalk={endActiveWalk}
             compact={isCompactLayout}
           />
 
@@ -1389,6 +1801,7 @@ export function GalleryApp() {
                   leg={index > 0 ? walkPlan.legs[index - 1] : undefined}
                   isStart={walkPlan.startStopId === stop.exhibition.id}
                   isNext={walkPlan.nextStopId === stop.exhibition.id}
+                  progress={routeStopProgressById?.[stop.exhibition.id]}
                 />
               ))
             )}
@@ -1449,8 +1862,15 @@ export function GalleryApp() {
               allExhibitions={galleryExhibitions}
               savedIds={savedIds}
               logEntry={logEntryById.get(selectedExhibition.id)}
+              routeProgress={selectedActiveWalkProgress}
               onStatus={(status) => setLogStatus(selectedExhibition.id, status)}
               onNote={(note) => setLogNote(selectedExhibition.id, note)}
+              onMarkRouteVisited={() =>
+                markRouteStopVisited(selectedActiveWalkStop?.exhibition.id, selectedExhibition.id)
+              }
+              onSkipRouteStop={() =>
+                skipRouteStop(selectedActiveWalkStop?.exhibition.id, selectedExhibition.id)
+              }
               onClose={() => setSelectedExhibitionId(undefined)}
             />
           </View>
@@ -1824,6 +2244,34 @@ const styles = StyleSheet.create({
   compactRouteFirstPanel: {
     marginTop: 0
   },
+  activeWalkNotice: {
+    alignItems: "center",
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+    justifyContent: "space-between",
+    padding: spacing.md
+  },
+  activeWalkNoticeCopy: {
+    flex: 1,
+    minWidth: 210
+  },
+  activeWalkNoticeTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  activeWalkNoticeText: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17,
+    marginTop: spacing.xs
+  },
   routeFirstHeader: {
     alignItems: "flex-start",
     flexDirection: "row",
@@ -1869,12 +2317,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900"
   },
+  routeFirstActionStack: {
+    alignItems: "flex-end",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    justifyContent: "flex-end"
+  },
   routeFirstStats: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.sm
   },
   routeFirstModeGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm
+  },
+  activeWalkActionRow: {
+    alignItems: "center",
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.sm
@@ -2347,6 +2808,27 @@ const styles = StyleSheet.create({
     minHeight: 72,
     paddingVertical: spacing.md
   },
+  currentWalkStop: {
+    backgroundColor: colors.fog,
+    borderColor: colors.ink,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md
+  },
+  nextWalkStop: {
+    backgroundColor: "#F8FAF5",
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md
+  },
+  visitedWalkStop: {
+    opacity: 0.72
+  },
+  skippedWalkStop: {
+    backgroundColor: "#F7F1ED",
+    borderRadius: radii.md,
+    opacity: 0.76,
+    paddingHorizontal: spacing.md
+  },
   stopLabelRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -2776,6 +3258,28 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: spacing.sm
   },
+  activeRouteDetail: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.md
+  },
+  activeRouteDetailCopy: {
+    gap: spacing.xs
+  },
+  activeRouteDetailTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  activeRouteDetailText: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17
+  },
   reasonPill: {
     alignItems: "center",
     backgroundColor: colors.fog,
@@ -2821,6 +3325,21 @@ const styles = StyleSheet.create({
   },
   primaryLightButtonText: {
     color: colors.paper,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  secondaryRouteButton: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    minHeight: 34,
+    justifyContent: "center",
+    paddingHorizontal: spacing.md
+  },
+  secondaryRouteButtonText: {
+    color: colors.ink,
     fontSize: 13,
     fontWeight: "900"
   },
