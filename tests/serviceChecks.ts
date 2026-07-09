@@ -487,6 +487,17 @@ async function main() {
     ),
     "Open-now filtering should be based on gallery hours."
   );
+  const nycVerifiedOnly = filterGalleryExhibitions(galleryExhibitions, {
+    areaId: "nyc",
+    verifiedOnly: true,
+    referenceNow: galleryReferenceNow
+  });
+
+  assert(
+    nycVerifiedOnly.length === nycVerifiedInventory.length &&
+      nycVerifiedOnly.every((exhibition) => getGalleryInventoryTrust(exhibition).isVerified),
+    "Verified-only filtering should return only manually verified official-page gallery records."
+  );
 
   const chelseaWalk = createGalleryWalkPlan({
     areaId: "nyc",
@@ -523,6 +534,12 @@ async function main() {
       chelseaWalk.totalMinutes <= 45 &&
       chelseaWalk.savedStopCount === 2,
     "Gallery Walk Builder should create a 45-minute route from saved exhibitions."
+  );
+  assert(
+    chelseaTwoHourWalk.stops.length > chelseaWalk.stops.length &&
+      nycOpeningWalk.title !== chelseaWalk.title &&
+      nycLastChanceWalk.title !== chelseaWalk.title,
+    "Route mode switching should expose meaningfully different route outputs for quick, two-hour, opening-night, and last-chance planning."
   );
   assert(
     nycOpeningWalk.stops.length > 0 &&

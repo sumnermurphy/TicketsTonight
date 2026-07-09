@@ -31,6 +31,7 @@ export type GalleryDiscoveryFilters = {
   query?: string;
   openOnly?: boolean;
   openingOnly?: boolean;
+  verifiedOnly?: boolean;
   lastChanceDays?: 3 | 7 | 14;
   referenceNow?: string;
 };
@@ -1202,6 +1203,7 @@ export function filterGalleryExhibitions(
       (exhibition) =>
         mediumSet.size === 0 || exhibition.mediums.some((medium) => mediumSet.has(medium))
     )
+    .filter((exhibition) => !filters.verifiedOnly || getGalleryInventoryTrust(exhibition).isVerified)
     .filter((exhibition) => {
       if (!normalizedQuery) {
         return true;

@@ -10,7 +10,8 @@ import {
   Route,
   Search,
   SlidersHorizontal,
-  Sparkles
+  Sparkles,
+  X
 } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import {
@@ -67,6 +68,7 @@ import type {
 
 type GalleryLens = "all" | "open-now" | "opening-tonight" | "last-chance";
 type GalleryWalkPlan = ReturnType<typeof createGalleryWalkPlan>;
+type GalleryWalkStop = GalleryWalkPlan["stops"][number];
 
 const referenceNow = "2026-07-09T15:30:00-04:00";
 
@@ -343,6 +345,87 @@ function RouteModeButton({
   );
 }
 
+function RouteCommandPanel({
+  walkPlan,
+  walkMode,
+  routeConfidenceCopy,
+  routeVerifiedStopCount,
+  routeFixtureStopCount,
+  startStop,
+  nextStop,
+  onMode,
+  compact = false
+}: {
+  walkPlan: GalleryWalkPlan;
+  walkMode: GalleryWalkMode;
+  routeConfidenceCopy: string;
+  routeVerifiedStopCount: number;
+  routeFixtureStopCount: number;
+  startStop?: GalleryWalkStop;
+  nextStop?: GalleryWalkStop;
+  onMode: (mode: GalleryWalkMode) => void;
+  compact?: boolean;
+}) {
+  return (
+    <View style={[styles.routeFirstPanel, compact ? styles.compactRouteFirstPanel : null]}>
+      <View style={styles.routeFirstHeader}>
+        <View style={styles.routeFirstTitleBlock}>
+          <Text style={styles.routeFirstKicker}>Tonight's walk</Text>
+          <Text style={styles.routeFirstTitle}>{walkPlan.summary}</Text>
+          <Text style={styles.routeFirstMeta}>{routeConfidenceCopy}</Text>
+        </View>
+        {walkPlan.routeMapUrl ? (
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={`Open full ${walkPlan.neighborhood} walking route in maps`}
+            onPress={() => {
+              if (walkPlan.routeMapUrl) {
+                void Linking.openURL(walkPlan.routeMapUrl);
+              }
+            }}
+            style={styles.routeFirstMapButton}
+          >
+            <ExternalLink size={14} color={colors.paper} />
+            <Text style={styles.routeFirstMapButtonText}>Open full route</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      <View style={styles.routeFirstModeGrid}>
+        {walkModeOptions.map((mode) => (
+          <RouteModeButton
+            key={mode}
+            label={galleryWalkModeLabels[mode]}
+            detail={walkModeDetails[mode]}
+            active={walkMode === mode}
+            onPress={() => onMode(mode)}
+          />
+        ))}
+      </View>
+
+      <View style={styles.routeFirstStats}>
+        <Metric label="stops" value={walkPlan.stops.length} tone="good" />
+        <Metric label="minutes" value={walkPlan.totalMinutes} />
+        <Metric label="miles" value={walkPlan.totalDistanceMiles.toFixed(1)} />
+        <Metric label="verified" value={`${routeVerifiedStopCount}/${walkPlan.stops.length}`} tone="good" />
+        <Metric label="demo" value={routeFixtureStopCount} tone={routeFixtureStopCount > 0 ? "warn" : "neutral"} />
+      </View>
+
+      <View style={styles.routeStartRow}>
+        <Text style={styles.routeStartPill}>Start {startStop?.exhibition.galleryName ?? "where open"}</Text>
+        <Text style={styles.routeStartPill}>Next {nextStop?.exhibition.galleryName ?? "best nearby stop"}</Text>
+        <Text style={styles.routeStartPill}>{walkPlan.canStartNow ? "Can start now" : "Timing check needed"}</Text>
+      </View>
+
+      <View style={styles.routeReasonRow}>
+        {walkPlan.selectionReasons.slice(0, 4).map((reason) => (
+          <Text key={reason} style={styles.routeReasonPill}>{reason}</Text>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function OpeningRadarItem({ exhibition }: { exhibition: GalleryExhibition }) {
   const event = getTonightEvent(exhibition);
 
@@ -520,7 +603,8 @@ function ExhibitionCard({
   onToggleAlertArtist,
   onToggleAlertGallery,
   onToggleAlertNeighborhood,
-  onToggleAlertMedium
+  onToggleAlertMedium,
+  onOpenDetails
 }: {
   exhibition: GalleryExhibition;
   allExhibitions: GalleryExhibition[];
@@ -536,12 +620,11 @@ function ExhibitionCard({
   onToggleAlertGallery: (gallery: string) => void;
   onToggleAlertNeighborhood: (neighborhood: string) => void;
   onToggleAlertMedium: (medium: GalleryMedium) => void;
+  onOpenDetails: () => void;
 }) {
   const status = getGalleryVisitStatus(exhibition, referenceNow);
   const reasons = getGalleryWhyGoReasons(exhibition, allExhibitions, referenceNow, savedIds);
   const openingTonight = isGalleryOpeningTonight(exhibition, referenceNow);
-  const primaryArtist = exhibition.artists[0];
-  const primaryMedium = exhibition.mediums[0];
   const trust = getGalleryInventoryTrust(exhibition);
   const visual = getGalleryVisual(exhibition);
 
@@ -602,35 +685,126 @@ function ExhibitionCard({
           <Text style={styles.sourceText}>{exhibition.mediums.map((medium) => mediumLabels[medium]).join(", ")}</Text>
         </View>
 
-        <View style={styles.alertSeedRow}>
-          {primaryArtist ? (
+        <View style={styles.cardActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Show details for ${exhibition.title}`}
+            onPress={onOpenDetails}
+            style={styles.primaryLightButton}
+          >
+            <Text style={styles.primaryLightButtonText}>Details</Text>
+          </Pressable>
+          {logStatusOptions.map((statusOption) => (
             <ChipButton
-              label="Alert artist"
-              active={savedAlertArtists.includes(primaryArtist)}
+              key={statusOption}
+              label={logStatusLabels[statusOption]}
+              active={logEntry?.status === statusOption}
               compact
-              onPress={() => onToggleAlertArtist(primaryArtist)}
+              onPress={() => onStatus(statusOption)}
             />
-          ) : null}
-          <ChipButton
-            label="Alert gallery"
-            active={savedAlertGalleries.includes(exhibition.galleryName)}
-            compact
-            onPress={() => onToggleAlertGallery(exhibition.galleryName)}
-          />
-          <ChipButton
-            label="Alert area"
-            active={savedAlertNeighborhoods.includes(exhibition.neighborhood)}
-            compact
-            onPress={() => onToggleAlertNeighborhood(exhibition.neighborhood)}
-          />
-          {primaryMedium ? (
-            <ChipButton
-              label="Alert medium"
-              active={savedAlertMediums.includes(primaryMedium)}
-              compact
-              onPress={() => onToggleAlertMedium(primaryMedium)}
-            />
-          ) : null}
+          ))}
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={`Open source listing for ${exhibition.title} at ${exhibition.galleryName}`}
+            onPress={() => {
+              void Linking.openURL(exhibition.externalUrl);
+            }}
+            style={styles.linkButton}
+          >
+            <ExternalLink size={14} color={colors.ink} />
+            <Text style={styles.linkButtonText}>{trust.hasOfficialLink ? "Official link" : "Listing"}</Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function ExhibitionDetailSheet({
+  exhibition,
+  allExhibitions,
+  savedIds,
+  logEntry,
+  onStatus,
+  onNote,
+  onClose
+}: {
+  exhibition: GalleryExhibition;
+  allExhibitions: GalleryExhibition[];
+  savedIds: string[];
+  logEntry?: GalleryLogEntry;
+  onStatus: (status: GalleryLogStatus) => void;
+  onNote: (note: string) => void;
+  onClose: () => void;
+}) {
+  const status = getGalleryVisitStatus(exhibition, referenceNow);
+  const trust = getGalleryInventoryTrust(exhibition);
+  const reasons = getGalleryWhyGoReasons(exhibition, allExhibitions, referenceNow, savedIds);
+  const visual = getGalleryVisual(exhibition);
+  const openingTonight = isGalleryOpeningTonight(exhibition, referenceNow);
+
+  return (
+    <View style={styles.detailSheet}>
+      <ImageBackground
+        source={galleryVisualSources[visual.assetKey]}
+        accessibilityLabel={visual.alt}
+        imageStyle={styles.detailImage}
+        style={styles.detailVisual}
+      >
+        <View style={styles.cardImageShade} />
+        <View style={styles.detailTopRow}>
+          <Text style={styles.visualBadge}>{trust.label}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Close details for ${exhibition.title}`}
+            onPress={onClose}
+            style={styles.detailCloseButton}
+          >
+            <X size={16} color={colors.ink} />
+          </Pressable>
+        </View>
+        <View style={styles.cardVisualCopy}>
+          <Text style={styles.cardVisualGallery}>{exhibition.galleryName}</Text>
+          <Text style={styles.detailVisualTitle}>{exhibition.title}</Text>
+        </View>
+      </ImageBackground>
+
+      <View style={styles.detailBody}>
+        <View style={styles.detailTitleRow}>
+          <View style={styles.detailTitleBlock}>
+            <Text style={styles.detailEyebrow}>{exhibition.neighborhood}</Text>
+            <Text style={styles.detailArtists}>{exhibition.artists.join(", ")}</Text>
+          </View>
+          <View style={styles.statusBadge}>
+            <Clock size={13} color={colors.ink} />
+            <Text style={styles.statusBadgeText}>{galleryVisitStatusLabels[status]}</Text>
+          </View>
+        </View>
+
+        <Text style={styles.cardDescription}>{exhibition.description}</Text>
+
+        <View style={styles.cardSignalRow}>
+          <Text style={styles.factText}>{exhibition.address}</Text>
+          <Text style={styles.factText}>{formatShortDate(exhibition.opensAt)} to {formatShortDate(exhibition.closesAt)}</Text>
+          <Text style={[styles.factText, getDaysUntilGalleryCloses(exhibition, referenceNow) <= 7 ? styles.urgentFactText : null]}>
+            {getClosingCopy(exhibition)}
+          </Text>
+          {openingTonight ? <Text style={styles.openingFactText}>Opening tonight</Text> : null}
+        </View>
+
+        <View style={styles.sourceRow}>
+          <Text style={styles.sourceText}>{getFreshnessCopy(exhibition)}</Text>
+          <Text style={styles.sourceText}>{getSourceCopy(exhibition)}</Text>
+          <Text style={styles.sourceText}>{exhibition.mediums.map((medium) => mediumLabels[medium]).join(", ")}</Text>
+        </View>
+
+        <View style={styles.reasonRow}>
+          {reasons.map((reason) => (
+            <View key={reason} style={styles.reasonPill}>
+              <Sparkles size={12} color={colors.plum} />
+              <Text style={styles.reasonText}>{reason}</Text>
+            </View>
+          ))}
         </View>
 
         <View style={styles.cardActions}>
@@ -677,9 +851,11 @@ export function GalleryApp() {
   const [selectedNeighborhood, setSelectedNeighborhood] = useState<string | undefined>();
   const [selectedMedium, setSelectedMedium] = useState<GalleryMedium | undefined>();
   const [activeLens, setActiveLens] = useState<GalleryLens>("all");
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [walkMode, setWalkMode] = useState<GalleryWalkMode>("quick-loop");
   const [alertWindowDays, setAlertWindowDays] = useState<3 | 7 | 14>(14);
   const [query, setQuery] = useState("");
+  const [selectedExhibitionId, setSelectedExhibitionId] = useState<string | undefined>();
   const [logEntries, setLogEntries] = useState<GalleryLogEntry[]>([]);
   const [savedAlertArtists, setSavedAlertArtists] = useState<string[]>([]);
   const [savedAlertGalleries, setSavedAlertGalleries] = useState<string[]>([]);
@@ -702,10 +878,11 @@ export function GalleryApp() {
         query,
         openOnly: activeLens === "open-now",
         openingOnly: activeLens === "opening-tonight",
+        verifiedOnly,
         lastChanceDays: activeLens === "last-chance" ? 14 : undefined,
         referenceNow
       }),
-    [activeLens, query, selectedAreaId, selectedMedium, selectedNeighborhood]
+    [activeLens, query, selectedAreaId, selectedMedium, selectedNeighborhood, verifiedOnly]
   );
   const neighborhoodIntelligence = useMemo(
     () => createNeighborhoodIntelligence(selectedAreaId, galleryExhibitions, referenceNow),
@@ -828,12 +1005,16 @@ export function GalleryApp() {
   const routeScopeLabel = selectedNeighborhood ?? walkPlan.neighborhood;
   const activeFilterCopy = [
     activeLens !== "all" ? lensLabels[activeLens] : undefined,
+    verifiedOnly ? "Verified only" : undefined,
     selectedMedium ? mediumLabels[selectedMedium] : undefined,
     query.trim() ? `Search: ${query.trim()}` : undefined
   ]
     .filter(Boolean)
     .join(" - ");
   const tonightPick = openingTonight[0] ?? visibleExhibitions[0];
+  const selectedExhibition =
+    visibleExhibitions.find((exhibition) => exhibition.id === selectedExhibitionId) ??
+    galleryExhibitions.find((exhibition) => exhibition.id === selectedExhibitionId);
   const heroVisual = getGalleryHeroVisual(selectedAreaId);
   const tonightPickVisual = tonightPick ? getGalleryVisual(tonightPick) : heroVisual;
   const startStop = walkPlan.stops.find((stop) => stop.exhibition.id === walkPlan.startStopId);
@@ -844,7 +1025,9 @@ export function GalleryApp() {
     setSelectedNeighborhood(undefined);
     setSelectedMedium(undefined);
     setActiveLens("all");
+    setVerifiedOnly(false);
     setWalkMode("quick-loop");
+    setSelectedExhibitionId(undefined);
   }
 
   function setLogStatus(exhibitionId: string, status: GalleryLogStatus) {
@@ -924,6 +1107,18 @@ export function GalleryApp() {
             </View>
           </ImageBackground>
 
+          <RouteCommandPanel
+            walkPlan={walkPlan}
+            walkMode={walkMode}
+            routeConfidenceCopy={routeConfidenceCopy}
+            routeVerifiedStopCount={routeVerifiedStopCount}
+            routeFixtureStopCount={routeFixtureStopCount}
+            startStop={startStop}
+            nextStop={nextStop}
+            onMode={setWalkMode}
+            compact={isCompactLayout}
+          />
+
           <View style={styles.discoveryControls}>
             <View style={styles.areaRow}>
               {galleryAreas.map((area) => (
@@ -957,6 +1152,12 @@ export function GalleryApp() {
                   compact
                 />
               ))}
+              <ChipButton
+                label="Verified only"
+                active={verifiedOnly}
+                onPress={() => setVerifiedOnly((value) => !value)}
+                compact
+              />
             </View>
           </View>
 
@@ -1027,7 +1228,10 @@ export function GalleryApp() {
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
           <Pressable
-            onPress={() => setSelectedNeighborhood(undefined)}
+            onPress={() => {
+              setSelectedNeighborhood(undefined);
+              setSelectedExhibitionId(undefined);
+            }}
             style={[styles.neighborhoodCard, !selectedNeighborhood ? styles.selectedNeighborhoodCard : null]}
           >
             {!selectedNeighborhood ? <Text style={styles.selectedMiniLabel}>Active view</Text> : null}
@@ -1044,7 +1248,10 @@ export function GalleryApp() {
               return (
             <Pressable
               key={item.neighborhood}
-              onPress={() => setSelectedNeighborhood(item.neighborhood)}
+              onPress={() => {
+                setSelectedNeighborhood(item.neighborhood);
+                setSelectedExhibitionId(undefined);
+              }}
               style={[
                 styles.neighborhoodCard,
                 selected ? styles.selectedNeighborhoodCard : null
@@ -1230,10 +1437,24 @@ export function GalleryApp() {
         <View style={styles.sectionHeader}>
           <View>
             <Text style={styles.sectionTitle}>{visibleExhibitions.length} Gallery Shows</Text>
-            <Text style={styles.sectionSubtitle}>Why-go cards include hours, closing pressure, source trust, and your art log.</Text>
+            <Text style={styles.sectionSubtitle}>Tap details for source trust, why-go notes, maps, and your art log.</Text>
           </View>
           <MapPin size={20} color={colors.ink} />
         </View>
+
+        {selectedExhibition ? (
+          <View style={styles.detailSheetWrap}>
+            <ExhibitionDetailSheet
+              exhibition={selectedExhibition}
+              allExhibitions={galleryExhibitions}
+              savedIds={savedIds}
+              logEntry={logEntryById.get(selectedExhibition.id)}
+              onStatus={(status) => setLogStatus(selectedExhibition.id, status)}
+              onNote={(note) => setLogNote(selectedExhibition.id, note)}
+              onClose={() => setSelectedExhibitionId(undefined)}
+            />
+          </View>
+        ) : null}
 
         <View style={styles.exhibitionList}>
           {visibleExhibitions.map((exhibition) => (
@@ -1261,6 +1482,7 @@ export function GalleryApp() {
               onToggleAlertMedium={(medium) =>
                 setSavedAlertMediums((values) => toggleMediumValue(values, medium))
               }
+              onOpenDetails={() => setSelectedExhibitionId(exhibition.id)}
             />
           ))}
         </View>
@@ -1588,6 +1810,75 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900"
   },
+  routeFirstPanel: {
+    backgroundColor: colors.paper,
+    borderColor: "rgba(17, 17, 17, 0.08)",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginTop: -spacing.md,
+    padding: spacing.lg,
+    ...shadows.card
+  },
+  compactRouteFirstPanel: {
+    marginTop: 0
+  },
+  routeFirstHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+    justifyContent: "space-between"
+  },
+  routeFirstTitleBlock: {
+    flex: 1,
+    minWidth: 220
+  },
+  routeFirstKicker: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  routeFirstTitle: {
+    color: colors.ink,
+    fontSize: 22,
+    fontWeight: "900",
+    lineHeight: 27,
+    marginTop: spacing.xs
+  },
+  routeFirstMeta: {
+    color: colors.mutedInk,
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 18,
+    marginTop: spacing.xs
+  },
+  routeFirstMapButton: {
+    alignItems: "center",
+    backgroundColor: colors.ink,
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    gap: spacing.xs,
+    minHeight: 38,
+    paddingHorizontal: spacing.md
+  },
+  routeFirstMapButtonText: {
+    color: colors.paper,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  routeFirstStats: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm
+  },
+  routeFirstModeGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm
+  },
   marketSnapshot: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1867,9 +2158,10 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: radii.md,
     borderWidth: 1,
+    flexBasis: 136,
     flexGrow: 1,
     minHeight: 58,
-    minWidth: 148,
+    minWidth: 132,
     padding: spacing.md
   },
   activeRouteModeButton: {
@@ -2256,6 +2548,77 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md
   },
+  detailSheetWrap: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md
+  },
+  detailSheet: {
+    backgroundColor: colors.paper,
+    borderColor: "rgba(17, 17, 17, 0.08)",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    overflow: "hidden",
+    ...shadows.card
+  },
+  detailVisual: {
+    minHeight: 300,
+    justifyContent: "space-between",
+    overflow: "hidden",
+    padding: spacing.md
+  },
+  detailImage: {
+    height: "100%",
+    width: "100%",
+    resizeMode: "cover"
+  },
+  detailTopRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md
+  },
+  detailCloseButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(255, 253, 248, 0.92)",
+    borderRadius: radii.pill,
+    height: 34,
+    justifyContent: "center",
+    width: 34
+  },
+  detailVisualTitle: {
+    color: colors.paper,
+    fontSize: 30,
+    fontWeight: "900",
+    lineHeight: 35
+  },
+  detailBody: {
+    gap: spacing.md,
+    padding: spacing.lg
+  },
+  detailTitleRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+    justifyContent: "space-between"
+  },
+  detailTitleBlock: {
+    flex: 1,
+    minWidth: 220
+  },
+  detailEyebrow: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  detailArtists: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "800",
+    lineHeight: 22,
+    marginTop: spacing.xs
+  },
   exhibitionCard: {
     backgroundColor: colors.paper,
     borderColor: "rgba(17, 17, 17, 0.08)",
@@ -2447,6 +2810,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.sm
+  },
+  primaryLightButton: {
+    alignItems: "center",
+    backgroundColor: colors.ink,
+    borderRadius: radii.pill,
+    minHeight: 34,
+    justifyContent: "center",
+    paddingHorizontal: spacing.md
+  },
+  primaryLightButtonText: {
+    color: colors.paper,
+    fontSize: 13,
+    fontWeight: "900"
   },
   linkButton: {
     alignItems: "center",
