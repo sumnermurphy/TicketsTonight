@@ -90,10 +90,21 @@ import {
   createPersonalizedGalleryWalkPlan,
   deriveTastePassportFromBehavior,
   deriveTastePassportFromQuiz,
+  getGalleryConciergeReasons,
   getGalleryPassportBadges,
+  mergeGalleryTastePassports,
   rankGalleryExhibitionsForTaste,
   type GalleryQuizAnswer
 } from "../src/services/galleryTastePassport";
+import {
+  createGalleryEventSignals,
+  createOpeningNightConciergePlan
+} from "../src/services/galleryEventIntelligence";
+import {
+  createGalleryWalkItineraryText,
+  createGalleryWalkShareSummary,
+  createSavedGalleryWalk
+} from "../src/services/galleryWalkSharing";
 import { createTicketmasterProviderDiagnostics } from "../src/services/providerDiagnostics";
 import { checkoutBackend } from "../src/services/checkoutBackend";
 import {
@@ -722,6 +733,11 @@ async function main() {
     galleryQuizArtworks,
     galleryReferenceNow
   );
+  const persistedSavedWalk = createSavedGalleryWalk(
+    chelseaTwoHourWalk,
+    completedWalkSession,
+    galleryReferenceNow
+  );
   const persistedState = {
     version: 1 as const,
     selectedAreaId: "nyc" as const,
@@ -740,7 +756,21 @@ async function main() {
     tastePassport: persistedTastePassport,
     earnedBadges: [],
     completedQuestIds: ["complete-market-walk"],
-    completedWalkSessions: [completedWalkSession]
+    completedWalkSessions: [completedWalkSession],
+    tasteFeedback: [
+      {
+        exhibitionId: firstWalkStopId,
+        kind: "more-like-this" as const,
+        createdAt: galleryReferenceNow
+      }
+    ],
+    tastePreferences: {
+      preferredMediums: ["photography" as const],
+      avoidedMediums: ["prints" as const],
+      preferredNeighborhoods: ["Chelsea"],
+      preferredTags: ["quiet"]
+    },
+    savedWalks: [persistedSavedWalk]
   };
   const serializedGalleryState = serializeGalleryAppPersistedState(persistedState);
 
@@ -756,8 +786,11 @@ async function main() {
       persistedRoundTrip.quizAnswers.length === 1 &&
       persistedRoundTrip.tastePassport?.likedMediums.includes("painting") &&
       persistedRoundTrip.completedQuestIds.includes("complete-market-walk") &&
-      persistedRoundTrip.completedWalkSessions.length === 1,
-    "Gallery app persistence should round-trip completed walk, filters, alerts, art log, and taste passport state."
+      persistedRoundTrip.completedWalkSessions.length === 1 &&
+      persistedRoundTrip.tasteFeedback[0]?.kind === "more-like-this" &&
+      persistedRoundTrip.tastePreferences?.preferredNeighborhoods.includes("Chelsea") &&
+      persistedRoundTrip.savedWalks[0]?.itineraryText.includes("Full route"),
+    "Gallery app persistence should round-trip completed walk, filters, alerts, art log, taste passport, feedback, preferences, and saved walks."
   );
 
   const quizTasteAnswers: GalleryQuizAnswer[] = [
@@ -884,6 +917,77 @@ async function main() {
     referenceNow: galleryReferenceNow,
     exhibitions: [tasteVerifiedPainting, tasteVerifiedPhoto, tasteVerifiedSculpture]
   });
+  const feedbackTastePicks = rankGalleryExhibitionsForTaste(
+    [tasteVerifiedPhoto, tasteVerifiedPainting, tasteVerifiedSculpture],
+    quizTastePassport,
+    galleryReferenceNow,
+    {
+      feedback: [
+        {
+          exhibitionId: "taste-verified-sculpture",
+          kind: "more-like-this",
+          createdAt: galleryReferenceNow
+        },
+        {
+          exhibitionId: "taste-verified-photo",
+          kind: "less-like-this",
+          createdAt: galleryReferenceNow
+        }
+      ],
+      logEntries: [
+        {
+          exhibitionId: "taste-verified-photo",
+          status: "skipped",
+          updatedAt: galleryReferenceNow
+        }
+      ]
+    }
+  );
+  const preferenceTastePassport = mergeGalleryTastePassports(
+    quizTastePassport,
+    undefined,
+    galleryReferenceNow,
+    {
+      preferredMediums: ["sculpture"],
+      avoidedMediums: ["photography"],
+      preferredNeighborhoods: ["Chelsea"],
+      preferredTags: ["quiet"]
+    }
+  );
+  const preferenceTastePicks = rankGalleryExhibitionsForTaste(
+    [tasteVerifiedPhoto, tasteVerifiedSculpture],
+    preferenceTastePassport,
+    galleryReferenceNow,
+    {
+      preferences: {
+        preferredMediums: ["sculpture"],
+        avoidedMediums: ["photography"],
+        preferredNeighborhoods: ["Chelsea"],
+        preferredTags: ["quiet"]
+      }
+    }
+  );
+  const conciergeReasons = getGalleryConciergeReasons(
+    tasteVerifiedSculpture,
+    preferenceTastePassport,
+    galleryReferenceNow,
+    {
+      feedback: [
+        {
+          exhibitionId: "taste-verified-sculpture",
+          kind: "more-like-this",
+          createdAt: galleryReferenceNow
+        }
+      ],
+      preferences: {
+        preferredMediums: ["sculpture"],
+        avoidedMediums: ["photography"],
+        preferredNeighborhoods: ["Chelsea"],
+        preferredTags: ["quiet"]
+      },
+      activeRouteStopIds: ["taste-verified-sculpture"]
+    }
+  );
 
   assert(
     rankedTastePicks[0]?.exhibition.id === "taste-verified-photo" &&
@@ -898,6 +1002,14 @@ async function main() {
       personalizedTasteWalk.stops[0]?.exhibition.id === "taste-verified-photo" &&
       personalizedTasteWalk.selectionReasons.includes("Personalized pick"),
     "For-you gallery routes should use taste scores and differ from the nearest quick loop when taste data exists."
+  );
+  assert(
+    feedbackTastePicks[0]?.exhibition.id === "taste-verified-sculpture" &&
+      feedbackTastePicks.find((pick) => pick.exhibition.id === "taste-verified-photo")?.reasons.includes("Tuned down by you") &&
+      preferenceTastePicks[0]?.exhibition.id === "taste-verified-sculpture" &&
+      conciergeReasons.includes("You asked for more like this") &&
+      conciergeReasons.includes("Already in your walk"),
+    "Concierge ranking should react to more/less feedback, skipped behavior, editable preferences, and active route context."
   );
 
   const passportBadges = getGalleryPassportBadges(
@@ -934,6 +1046,67 @@ async function main() {
         (quest) => quest.id === "verified-warren-street" && quest.targetCount <= 2
       ),
     "Gallery quests should adapt to completed NYC walks and thinner Hudson verified supply."
+  );
+
+  const openingSignalExhibition = createSyntheticGalleryExhibition({
+    id: "event-opening",
+    title: "Event Opening",
+    galleryName: "Event Gallery",
+    coordinates: { latitude: 40.747, longitude: -74.006 },
+    specialEvents: [
+      {
+        id: "opening-reception",
+        kind: "opening-reception",
+        title: "Opening reception",
+        startsAt: "2026-07-09T18:00:00-04:00",
+        rsvpUrl: "https://event-gallery.test/rsvp"
+      }
+    ],
+    externalUrl: "https://event-gallery.test/current"
+  });
+  const lastLookSignalExhibition = createSyntheticGalleryExhibition({
+    id: "event-last-look",
+    title: "Event Last Look",
+    galleryName: "Last Look Gallery",
+    coordinates: { latitude: 40.748, longitude: -74.006 },
+    closesAt: "2026-07-11T18:00:00-04:00",
+    externalUrl: "https://last-look-gallery.test/current"
+  });
+  const eventSignals = createGalleryEventSignals(
+    [openingSignalExhibition, lastLookSignalExhibition],
+    galleryReferenceNow
+  );
+  const socialEventPlan = createOpeningNightConciergePlan({
+    areaId: "nyc",
+    intent: "social-opening",
+    neighborhood: "Chelsea",
+    exhibitions: [openingSignalExhibition, lastLookSignalExhibition],
+    referenceNow: galleryReferenceNow
+  });
+  const lastLookEventPlan = createOpeningNightConciergePlan({
+    areaId: "nyc",
+    intent: "last-look",
+    neighborhood: "Chelsea",
+    exhibitions: [openingSignalExhibition, lastLookSignalExhibition],
+    referenceNow: galleryReferenceNow
+  });
+  const itineraryText = createGalleryWalkItineraryText(socialEventPlan, completedWalkSession);
+  const sharePayload = createGalleryWalkShareSummary(socialEventPlan, completedWalkRecap);
+  const savedWalk = createSavedGalleryWalk(socialEventPlan, completedWalkSession, galleryReferenceNow);
+
+  assert(
+    eventSignals.some((signal) => signal.kind === "opening" && signal.requiresRsvp) &&
+      eventSignals.some((signal) => signal.kind === "last-look") &&
+      socialEventPlan.mode === "opening-night" &&
+      lastLookEventPlan.mode === "last-chance",
+    "Gallery event intelligence should classify openings, RSVP previews, last-look windows, and route intent variants."
+  );
+  assert(
+    itineraryText.includes("Official gallery link") &&
+      itineraryText.includes("Map:") &&
+      sharePayload.text.includes(socialEventPlan.guidance) &&
+      savedWalk.itineraryText === itineraryText,
+    "Gallery walk sharing should export ordered stops with trust labels, map/source links, and saved itinerary text."
   );
 
   const routeOrderingWalk = createGalleryWalkPlan({

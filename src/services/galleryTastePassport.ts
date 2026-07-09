@@ -47,6 +47,21 @@ export type GalleryTastePassport = {
   subjectLabels: string[];
 };
 
+export type GalleryTasteFeedbackKind = "more-like-this" | "less-like-this";
+
+export type GalleryTasteFeedback = {
+  exhibitionId: string;
+  kind: GalleryTasteFeedbackKind;
+  createdAt: string;
+};
+
+export type GalleryEditableTastePreference = {
+  preferredMediums: GalleryMedium[];
+  avoidedMediums: GalleryMedium[];
+  preferredNeighborhoods: string[];
+  preferredTags: string[];
+};
+
 export type GalleryQuizArtwork = {
   id: string;
   source: "artic";
@@ -120,6 +135,16 @@ export type CreatePersonalizedGalleryWalkPlanInput = {
   referenceNow?: string;
   exhibitions?: GalleryExhibition[];
   timeBudgetMinutes?: number;
+  feedback?: GalleryTasteFeedback[];
+  preferences?: GalleryEditableTastePreference;
+};
+
+export type GalleryConciergeContext = {
+  feedback?: GalleryTasteFeedback[];
+  preferences?: GalleryEditableTastePreference;
+  logEntries?: GalleryLogEntry[];
+  activeRouteStopIds?: string[];
+  sourceArtworkTitles?: string[];
 };
 
 const defaultNow = "2026-07-09T15:30:00-04:00";
@@ -253,6 +278,31 @@ function buildPassportFromSignalMap(input: {
     styleLabels,
     subjectLabels
   };
+}
+
+function addPreferenceSignals(
+  signalMap: Map<string, GalleryTasteSignal>,
+  preferences: GalleryEditableTastePreference | undefined
+): void {
+  if (!preferences) {
+    return;
+  }
+
+  for (const medium of preferences.preferredMediums) {
+    addSignal(signalMap, "medium", medium, 2.8, "behavior");
+  }
+
+  for (const medium of preferences.avoidedMediums) {
+    addSignal(signalMap, "medium", medium, -2.8, "behavior");
+  }
+
+  for (const neighborhood of preferences.preferredNeighborhoods) {
+    addSignal(signalMap, "neighborhood", neighborhood, 1.8, "behavior");
+  }
+
+  for (const tag of preferences.preferredTags) {
+    addSignal(signalMap, "mood", tag, 1.5, "behavior");
+  }
 }
 
 function addArtworkSignals(
@@ -398,9 +448,27 @@ export function deriveTastePassportFromBehavior(
 export function mergeGalleryTastePassports(
   quizPassport: GalleryTastePassport,
   behaviorPassport?: GalleryTastePassport,
-  now: string = defaultNow
+  now: string = defaultNow,
+  preferences?: GalleryEditableTastePreference
 ): GalleryTastePassport {
   if (!behaviorPassport || behaviorPassport.signals.length === 0) {
+    if (preferences) {
+      const signalMap = new Map<string, GalleryTasteSignal>();
+
+      for (const signal of quizPassport.signals) {
+        addSignal(signalMap, signal.kind, signal.label, signal.weight, signal.source);
+      }
+
+      addPreferenceSignals(signalMap, preferences);
+
+      return buildPassportFromSignalMap({
+        signalMap,
+        now,
+        createdAt: quizPassport.createdAt,
+        completedQuizAt: quizPassport.completedQuizAt
+      });
+    }
+
     return quizPassport;
   }
 
@@ -410,11 +478,57 @@ export function mergeGalleryTastePassports(
     addSignal(signalMap, signal.kind, signal.label, signal.weight, signal.source);
   }
 
+  addPreferenceSignals(signalMap, preferences);
+
   return buildPassportFromSignalMap({
     signalMap,
     now,
     createdAt: quizPassport.createdAt,
     completedQuizAt: quizPassport.completedQuizAt
+  });
+}
+
+export function applyGalleryTasteFeedback(
+  passport: GalleryTastePassport,
+  feedback: GalleryTasteFeedback[],
+  exhibitions: GalleryExhibition[] = galleryExhibitions,
+  now: string = defaultNow
+): GalleryTastePassport {
+  if (feedback.length === 0) {
+    return passport;
+  }
+
+  const signalMap = new Map<string, GalleryTasteSignal>();
+  const exhibitionById = new Map(exhibitions.map((exhibition) => [exhibition.id, exhibition]));
+
+  for (const signal of passport.signals) {
+    addSignal(signalMap, signal.kind, signal.label, signal.weight, signal.source);
+  }
+
+  for (const item of feedback) {
+    const exhibition = exhibitionById.get(item.exhibitionId);
+    const weight = item.kind === "more-like-this" ? 2.2 : -2.2;
+
+    if (!exhibition) {
+      continue;
+    }
+
+    for (const medium of exhibition.mediums) {
+      addSignal(signalMap, "medium", medium, weight * 1.4, "behavior");
+    }
+
+    addSignal(signalMap, "neighborhood", exhibition.neighborhood, weight * 0.7, "behavior");
+
+    for (const signal of exhibition.whyGoSignals.slice(0, 4)) {
+      addSignal(signalMap, "mood", signal, weight * 0.6, "behavior");
+    }
+  }
+
+  return buildPassportFromSignalMap({
+    signalMap,
+    now,
+    createdAt: passport.createdAt,
+    completedQuizAt: passport.completedQuizAt
   });
 }
 
@@ -450,7 +564,8 @@ function getSignalMatchScore(exhibition: GalleryExhibition, passport: GalleryTas
 function getPickReasons(
   exhibition: GalleryExhibition,
   matchedSignals: GalleryTasteSignal[],
-  referenceNow: string
+  referenceNow: string,
+  context: GalleryConciergeContext = {}
 ): string[] {
   const trust = getGalleryInventoryTrust(exhibition);
   const status = getGalleryVisitStatus(exhibition, referenceNow);
@@ -466,6 +581,29 @@ function getPickReasons(
     reasons.push(`Matches your ${mediumMatch.label.replace("-", " ")} taste`);
   } else if (styleMatch) {
     reasons.push(`Matches ${styleMatch.label}`);
+  }
+
+  const positiveFeedback = context.feedback?.some(
+    (item) => item.exhibitionId === exhibition.id && item.kind === "more-like-this"
+  );
+  const negativeFeedback = context.feedback?.some(
+    (item) => item.exhibitionId === exhibition.id && item.kind === "less-like-this"
+  );
+
+  if (positiveFeedback) {
+    reasons.push("You asked for more like this");
+  }
+
+  if (negativeFeedback) {
+    reasons.push("Tuned down by you");
+  }
+
+  if (context.activeRouteStopIds?.includes(exhibition.id)) {
+    reasons.push("Already in your walk");
+  }
+
+  if (context.preferences?.preferredNeighborhoods.includes(exhibition.neighborhood)) {
+    reasons.push(`Near your ${exhibition.neighborhood} preference`);
   }
 
   if (status === "open-now") {
@@ -489,11 +627,26 @@ function getPickReasons(
   return Array.from(new Set(reasons)).slice(0, 4);
 }
 
+export function getGalleryConciergeReasons(
+  exhibition: GalleryExhibition,
+  passport: GalleryTastePassport,
+  referenceNow: string = defaultNow,
+  context: GalleryConciergeContext = {}
+): string[] {
+  const { matchedSignals } = getSignalMatchScore(exhibition, passport);
+
+  return getPickReasons(exhibition, matchedSignals, referenceNow, context);
+}
+
 export function rankGalleryExhibitionsForTaste(
   exhibitions: GalleryExhibition[],
   passport: GalleryTastePassport,
-  referenceNow: string = defaultNow
+  referenceNow: string = defaultNow,
+  context: GalleryConciergeContext = {}
 ): GalleryPersonalizedPick[] {
+  const feedbackById = new Map((context.feedback ?? []).map((item) => [item.exhibitionId, item]));
+  const logEntryById = new Map((context.logEntries ?? []).map((entry) => [entry.exhibitionId, entry]));
+
   return exhibitions
     .map((exhibition): GalleryPersonalizedPick => {
       const trust = getGalleryInventoryTrust(exhibition);
@@ -508,14 +661,50 @@ export function rankGalleryExhibitionsForTaste(
       const lastChanceScore =
         getDaysUntilGalleryCloses(exhibition, referenceNow) <= 7 ? 7 : 0;
       const distanceScore = Math.max(0, 8 - exhibition.distanceMiles * 5);
+      const feedback = feedbackById.get(exhibition.id);
+      const feedbackScore =
+        feedback?.kind === "more-like-this" ? 34 : feedback?.kind === "less-like-this" ? -42 : 0;
+      const logStatus = logEntryById.get(exhibition.id)?.status;
+      const behaviorScore =
+        logStatus === "visited"
+          ? 10
+          : logStatus === "saved" || logStatus === "want-to-see"
+            ? 8
+            : logStatus === "skipped"
+              ? -28
+              : 0;
+      const preferenceScore =
+        (context.preferences?.preferredNeighborhoods.includes(exhibition.neighborhood) ? 10 : 0) +
+        exhibition.mediums.reduce((score, medium) => {
+          if (context.preferences?.preferredMediums.includes(medium)) {
+            return score + 12;
+          }
+
+          if (context.preferences?.avoidedMediums.includes(medium)) {
+            return score - 22;
+          }
+
+          return score;
+        }, 0);
       const score = Number(
-        (signalScore + avoidedPenalty + trustScore + statusScore + eventScore + lastChanceScore + distanceScore).toFixed(3)
+        (
+          signalScore +
+          avoidedPenalty +
+          trustScore +
+          statusScore +
+          eventScore +
+          lastChanceScore +
+          distanceScore +
+          feedbackScore +
+          behaviorScore +
+          preferenceScore
+        ).toFixed(3)
       );
 
       return {
         exhibition,
         score,
-        reasons: getPickReasons(exhibition, matchedSignals, referenceNow),
+        reasons: getPickReasons(exhibition, matchedSignals, referenceNow, context),
         matchedSignals,
         trustLabel: trust.label
       };
@@ -546,7 +735,11 @@ export function createPersonalizedGalleryWalkPlan(
   const rankedPicks = rankGalleryExhibitionsForTaste(
     sourceExhibitions,
     input.passport,
-    input.referenceNow
+    input.referenceNow,
+    {
+      feedback: input.feedback,
+      preferences: input.preferences
+    }
   );
   const rankedExhibitions = rankedPicks.map((pick) => pick.exhibition);
   const personalizedScores = rankedPicks.reduce<Record<string, number>>((scores, pick) => {

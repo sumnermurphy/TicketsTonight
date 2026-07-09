@@ -6,10 +6,13 @@ import type {
 import type { GalleryWalkMode } from "./galleryDiscovery";
 import type {
   GalleryPassportBadge,
+  GalleryEditableTastePreference,
   GalleryQuizAnswer,
+  GalleryTasteFeedback,
   GalleryTastePassport
 } from "./galleryTastePassport";
 import type { GalleryWalkSession } from "./galleryWalkSession";
+import type { GallerySavedWalk } from "./galleryWalkSharing";
 
 export type GalleryPersistedLens = "all" | "open-now" | "opening-tonight" | "last-chance";
 
@@ -33,6 +36,9 @@ export type GalleryAppPersistedState = {
   earnedBadges: GalleryPassportBadge[];
   completedQuestIds: string[];
   completedWalkSessions: GalleryWalkSession[];
+  tasteFeedback: GalleryTasteFeedback[];
+  tastePreferences?: GalleryEditableTastePreference;
+  savedWalks: GallerySavedWalk[];
 };
 
 export type GalleryStorageAdapter = {
@@ -124,7 +130,14 @@ function sanitizeState(value: unknown): GalleryAppPersistedState | undefined {
     completedQuestIds: isStringArray(value.completedQuestIds) ? value.completedQuestIds : [],
     completedWalkSessions: Array.isArray(value.completedWalkSessions)
       ? (value.completedWalkSessions as GalleryWalkSession[])
-      : []
+      : [],
+    tasteFeedback: Array.isArray(value.tasteFeedback)
+      ? (value.tasteFeedback as GalleryTasteFeedback[])
+      : [],
+    tastePreferences: isObject(value.tastePreferences)
+      ? (value.tastePreferences as GalleryEditableTastePreference)
+      : undefined,
+    savedWalks: Array.isArray(value.savedWalks) ? (value.savedWalks as GallerySavedWalk[]) : []
   };
 }
 

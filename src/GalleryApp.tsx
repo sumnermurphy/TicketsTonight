@@ -3,12 +3,14 @@ import {
   CalendarDays,
   Check,
   Clock,
+  Copy,
   ExternalLink,
   Heart,
   MapPin,
   NotebookPen,
   Route,
   Search,
+  Share2,
   SlidersHorizontal,
   Sparkles,
   X
@@ -77,14 +79,23 @@ import {
   type GalleryWalkStopProgress
 } from "./services/galleryWalkSession";
 import {
+  createGalleryEventSignals,
+  createOpeningNightConciergePlan,
+  type GalleryEventRouteIntent,
+  type GalleryEventSignal
+} from "./services/galleryEventIntelligence";
+import {
+  applyGalleryTasteFeedback,
   createGalleryQuests,
   createPersonalizedGalleryWalkPlan,
   deriveTastePassportFromBehavior,
   deriveTastePassportFromQuiz,
   getGalleryPassportBadges,
   getGalleryPassportStamps,
+  getGalleryConciergeReasons,
   mergeGalleryTastePassports,
   rankGalleryExhibitionsForTaste,
+  type GalleryEditableTastePreference,
   type GalleryPassportBadge,
   type GalleryPassportStamp,
   type GalleryPersonalizedPick,
@@ -92,8 +103,16 @@ import {
   type GalleryQuizAnswer,
   type GalleryQuizArtwork,
   type GalleryQuizResponse,
+  type GalleryTasteFeedback,
+  type GalleryTasteFeedbackKind,
   type GalleryTastePassport
 } from "./services/galleryTastePassport";
+import {
+  createGalleryWalkItineraryText,
+  createGalleryWalkShareSummary,
+  createSavedGalleryWalk,
+  type GallerySavedWalk
+} from "./services/galleryWalkSharing";
 import { colors, radii, shadows, spacing } from "./theme";
 import type {
   GalleryAreaId,
@@ -146,6 +165,16 @@ const logStatusLabels: Record<GalleryLogStatus, string> = {
 
 const logStatusOptions: GalleryLogStatus[] = ["saved", "want-to-see", "visited", "skipped"];
 const alertWindowOptions: Array<3 | 7 | 14> = [3, 7, 14];
+const eventRouteIntentOptions: GalleryEventRouteIntent[] = [
+  "social-opening",
+  "quiet-verified",
+  "last-look"
+];
+const eventRouteIntentLabels: Record<GalleryEventRouteIntent, string> = {
+  "social-opening": "Social opening crawl",
+  "quiet-verified": "Quiet verified walk",
+  "last-look": "Last-look route"
+};
 const walkModeOptions: GalleryWalkMode[] = [
   "quick-loop",
   "two-hour",
@@ -160,6 +189,13 @@ const walkModeDetails: Record<GalleryWalkMode, string> = {
   "opening-night": "Timed around receptions",
   "last-chance": "Closing soon first",
   "for-you": "Taste-ranked stops"
+};
+
+const defaultTastePreferences: GalleryEditableTastePreference = {
+  preferredMediums: [],
+  avoidedMediums: [],
+  preferredNeighborhoods: [],
+  preferredTags: []
 };
 
 function getDatePart(iso: string, index: number): string {
@@ -208,12 +244,6 @@ function getClosingCopy(exhibition: GalleryExhibition): string {
   }
 
   return `Closes in ${daysUntilClose} days`;
-}
-
-function getTonightEvent(exhibition: GalleryExhibition) {
-  const today = referenceNow.slice(0, 10);
-
-  return exhibition.specialEvents.find((event) => event.startsAt.slice(0, 10) === today);
 }
 
 function getFreshnessCopy(exhibition: GalleryExhibition): string {
@@ -302,6 +332,79 @@ function getNewBadgeCount(
   const earnedIds = new Set(earnedBadges.map((badge) => badge.id));
 
   return computedBadges.filter((badge) => !earnedIds.has(badge.id)).length;
+}
+
+function upsertTasteFeedback(
+  feedback: GalleryTasteFeedback[],
+  exhibitionId: string,
+  kind: GalleryTasteFeedbackKind,
+  createdAt: string
+): GalleryTasteFeedback[] {
+  return [
+    ...feedback.filter((item) => item.exhibitionId !== exhibitionId),
+    { exhibitionId, kind, createdAt }
+  ];
+}
+
+function toggleMediumPreference(
+  preferences: GalleryEditableTastePreference,
+  medium: GalleryMedium,
+  field: "preferredMediums" | "avoidedMediums"
+): GalleryEditableTastePreference {
+  const otherField = field === "preferredMediums" ? "avoidedMediums" : "preferredMediums";
+  const values = preferences[field].includes(medium)
+    ? preferences[field].filter((candidate) => candidate !== medium)
+    : [...preferences[field], medium];
+
+  return {
+    ...preferences,
+    [field]: values,
+    [otherField]: preferences[otherField].filter((candidate) => candidate !== medium)
+  };
+}
+
+function toggleStringPreference(
+  values: string[],
+  value: string
+): string[] {
+  return values.includes(value)
+    ? values.filter((candidate) => candidate !== value)
+    : [...values, value];
+}
+
+async function writeTextToClipboard(text: string): Promise<boolean> {
+  const maybeNavigator = (globalThis as unknown as {
+    navigator?: {
+      clipboard?: {
+        writeText?: (value: string) => Promise<void>;
+      };
+      share?: (payload: { title?: string; text?: string; url?: string }) => Promise<void>;
+    };
+  }).navigator;
+
+  if (!maybeNavigator?.clipboard?.writeText) {
+    return false;
+  }
+
+  await maybeNavigator.clipboard.writeText(text);
+
+  return true;
+}
+
+async function shareWalkPayload(payload: { title?: string; text?: string; url?: string }): Promise<boolean> {
+  const maybeNavigator = (globalThis as unknown as {
+    navigator?: {
+      share?: (value: { title?: string; text?: string; url?: string }) => Promise<void>;
+    };
+  }).navigator;
+
+  if (!maybeNavigator?.share) {
+    return false;
+  }
+
+  await maybeNavigator.share(payload);
+
+  return true;
 }
 
 function getRouteProgressDetail(progress?: GalleryWalkStopProgress): string {
@@ -507,6 +610,9 @@ function RouteCommandPanel({
   onMarkCurrentVisited,
   onSkipCurrent,
   onEndWalk,
+  onCopyItinerary,
+  onShareRoute,
+  onSaveWalk,
   walkRecapRewardCopy,
   compact = false
 }: {
@@ -532,6 +638,9 @@ function RouteCommandPanel({
   onMarkCurrentVisited: () => void;
   onSkipCurrent: () => void;
   onEndWalk: () => void;
+  onCopyItinerary: () => void;
+  onShareRoute: () => void;
+  onSaveWalk: () => void;
   walkRecapRewardCopy?: string;
   compact?: boolean;
 }) {
@@ -695,6 +804,24 @@ function RouteCommandPanel({
           >
             <Text style={styles.primaryLightButtonText}>Start another walk</Text>
           </Pressable>
+          <View style={styles.activeWalkActionRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Copy completed walk itinerary"
+              onPress={onCopyItinerary}
+              style={styles.secondaryRouteButton}
+            >
+              <Text style={styles.secondaryRouteButtonText}>Copy itinerary</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Share completed walk summary"
+              onPress={onShareRoute}
+              style={styles.secondaryRouteButton}
+            >
+              <Text style={styles.secondaryRouteButtonText}>Share</Text>
+            </Pressable>
+          </View>
         </View>
       ) : (
         <>
@@ -742,6 +869,32 @@ function RouteCommandPanel({
                 {activeWalkSession?.status === "active" ? "Start this route" : "Start walk"}
               </Text>
             </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Save this walk"
+              onPress={onSaveWalk}
+              style={styles.secondaryRouteButton}
+            >
+              <Text style={styles.secondaryRouteButtonText}>Save walk</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Copy current walk itinerary"
+              onPress={onCopyItinerary}
+              style={styles.secondaryRouteButton}
+            >
+              <Copy size={13} color={colors.ink} />
+              <Text style={styles.secondaryRouteButtonText}>Copy itinerary</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Share current walk route"
+              onPress={onShareRoute}
+              style={styles.secondaryRouteButton}
+            >
+              <Share2 size={13} color={colors.ink} />
+              <Text style={styles.secondaryRouteButtonText}>Share</Text>
+            </Pressable>
           </View>
 
           <View style={styles.routeFirstStats}>
@@ -770,23 +923,24 @@ function RouteCommandPanel({
   );
 }
 
-function OpeningRadarItem({ exhibition }: { exhibition: GalleryExhibition }) {
-  const event = getTonightEvent(exhibition);
-
+function OpeningRadarItem({ signal }: { signal: GalleryEventSignal }) {
   return (
     <View style={styles.radarItem}>
       <View style={styles.radarIcon}>
         <CalendarDays size={18} color={colors.coralDark} />
       </View>
       <View style={styles.radarCopy}>
-        <Text style={styles.radarTitle}>{exhibition.title}</Text>
+        <Text style={styles.radarTitle}>{signal.exhibition.title}</Text>
         <Text style={styles.radarMeta}>
-          {event?.title ?? "Opening reception"} - {formatShortTime(event?.startsAt ?? exhibition.receptionAt ?? referenceNow)}
+          {signal.label} - {signal.timingLabel}
         </Text>
-        {event?.rsvpUrl || exhibition.rsvpUrl ? (
-          <Text style={styles.radarMeta}>RSVP needed</Text>
-        ) : null}
-        <Text style={styles.radarMeta}>{exhibition.galleryName} - {exhibition.neighborhood}</Text>
+        <Text style={styles.radarMeta}>
+          {signal.exhibition.galleryName} - {signal.exhibition.neighborhood} - {signal.routeFit} route fit
+        </Text>
+        <View style={styles.routeReasonRow}>
+          <Text style={styles.walkStopReason}>{signal.requiresRsvp ? "RSVP/link available" : "No RSVP needed"}</Text>
+          <Text style={styles.walkStopReason}>{signal.sourceLabel}</Text>
+        </View>
       </View>
     </View>
   );
@@ -1017,26 +1171,31 @@ function TasteQuizArtworkCard({
 
 function PersonalizedPickRow({
   pick,
-  onOpenDetails
+  feedback,
+  onOpenDetails,
+  onFeedback
 }: {
   pick: GalleryPersonalizedPick;
+  feedback?: GalleryTasteFeedback;
   onOpenDetails: () => void;
+  onFeedback: (kind: GalleryTasteFeedbackKind) => void;
 }) {
   const status = getGalleryVisitStatus(pick.exhibition, referenceNow);
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Open details for personalized pick ${pick.exhibition.title}`}
-      onPress={onOpenDetails}
-      style={styles.personalPickRow}
-    >
+    <View style={styles.personalPickRow}>
       <View style={styles.personalPickScore}>
         <Sparkles size={14} color={colors.paper} />
         <Text style={styles.personalPickScoreText}>{Math.round(pick.score)}</Text>
       </View>
       <View style={styles.personalPickCopy}>
-        <Text style={styles.personalPickTitle}>{pick.exhibition.title}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Open details for personalized pick ${pick.exhibition.title}`}
+          onPress={onOpenDetails}
+        >
+          <Text style={styles.personalPickTitle}>{pick.exhibition.title}</Text>
+        </Pressable>
         <Text style={styles.personalPickMeta}>
           {pick.exhibition.galleryName} - {pick.exhibition.neighborhood} - {galleryVisitStatusLabels[status]}
         </Text>
@@ -1045,8 +1204,46 @@ function PersonalizedPickRow({
             <Text key={reason} style={styles.walkStopReason}>{reason}</Text>
           ))}
         </View>
+        <View style={styles.feedbackRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`More like ${pick.exhibition.title}`}
+            onPress={() => onFeedback("more-like-this")}
+            style={[
+              styles.feedbackButton,
+              feedback?.kind === "more-like-this" ? styles.activeFeedbackButton : null
+            ]}
+          >
+            <Text
+              style={[
+                styles.feedbackButtonText,
+                feedback?.kind === "more-like-this" ? styles.activeFeedbackButtonText : null
+              ]}
+            >
+              More like this
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Less like ${pick.exhibition.title}`}
+            onPress={() => onFeedback("less-like-this")}
+            style={[
+              styles.feedbackButton,
+              feedback?.kind === "less-like-this" ? styles.activeFeedbackButton : null
+            ]}
+          >
+            <Text
+              style={[
+                styles.feedbackButtonText,
+                feedback?.kind === "less-like-this" ? styles.activeFeedbackButtonText : null
+              ]}
+            >
+              Less
+            </Text>
+          </Pressable>
+        </View>
       </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -1080,9 +1277,18 @@ function GalleryPassportPanel({
   quests,
   newBadgeCount,
   activeWalkMode,
+  feedback,
+  preferences,
+  mediumOptions,
+  neighborhoodOptions,
   onQuizAnswer,
   onOpenPick,
-  onUseForYouRoute
+  onUseForYouRoute,
+  onFeedback,
+  onTogglePreferredMedium,
+  onToggleAvoidedMedium,
+  onTogglePreferredNeighborhood,
+  onTogglePreferredTag
 }: {
   quizAnswers: GalleryQuizAnswer[];
   passport: GalleryTastePassport;
@@ -1092,12 +1298,25 @@ function GalleryPassportPanel({
   quests: GalleryQuest[];
   newBadgeCount: number;
   activeWalkMode: GalleryWalkMode;
+  feedback: GalleryTasteFeedback[];
+  preferences: GalleryEditableTastePreference;
+  mediumOptions: GalleryMedium[];
+  neighborhoodOptions: string[];
   onQuizAnswer: (artworkId: string, response: GalleryQuizResponse) => void;
   onOpenPick: (exhibitionId: string) => void;
   onUseForYouRoute: () => void;
+  onFeedback: (exhibitionId: string, kind: GalleryTasteFeedbackKind) => void;
+  onTogglePreferredMedium: (medium: GalleryMedium) => void;
+  onToggleAvoidedMedium: (medium: GalleryMedium) => void;
+  onTogglePreferredNeighborhood: (neighborhood: string) => void;
+  onTogglePreferredTag: (tag: string) => void;
 }) {
   const answerByArtworkId = new Map(quizAnswers.map((answer) => [answer.artworkId, answer]));
   const topSignals = passport.signals.filter((signal) => signal.weight > 0).slice(0, 5);
+  const feedbackById = new Map(feedback.map((item) => [item.exhibitionId, item]));
+  const tagOptions = Array.from(
+    new Set([...passport.styleLabels, ...passport.subjectLabels, "quiet", "social", "last-look"])
+  ).slice(0, 8);
 
   return (
     <View style={styles.passportBand}>
@@ -1150,6 +1369,103 @@ function GalleryPassportPanel({
             ))}
             {stamps.length === 0 ? <Text style={styles.passportStamp}>No stamps yet</Text> : null}
           </View>
+          <View style={styles.preferenceBlock}>
+            <Text style={styles.preferenceLabel}>Tune mediums</Text>
+            <View style={styles.preferenceRow}>
+              {mediumOptions.slice(0, 7).map((medium) => (
+                <Pressable
+                  key={`preferred-${medium}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Prefer ${mediumLabels[medium]}`}
+                  onPress={() => onTogglePreferredMedium(medium)}
+                  style={[
+                    styles.preferenceChip,
+                    preferences.preferredMediums.includes(medium) ? styles.activePreferenceChip : null
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.preferenceChipText,
+                      preferences.preferredMediums.includes(medium) ? styles.activePreferenceChipText : null
+                    ]}
+                  >
+                    + {mediumLabels[medium]}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <View style={styles.preferenceRow}>
+              {mediumOptions.slice(0, 5).map((medium) => (
+                <Pressable
+                  key={`avoided-${medium}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Avoid ${mediumLabels[medium]}`}
+                  onPress={() => onToggleAvoidedMedium(medium)}
+                  style={[
+                    styles.preferenceChip,
+                    preferences.avoidedMediums.includes(medium) ? styles.activePreferenceChip : null
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.preferenceChipText,
+                      preferences.avoidedMediums.includes(medium) ? styles.activePreferenceChipText : null
+                    ]}
+                  >
+                    - {mediumLabels[medium]}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={styles.preferenceLabel}>Favorite areas</Text>
+            <View style={styles.preferenceRow}>
+              {neighborhoodOptions.slice(0, 6).map((neighborhood) => (
+                <Pressable
+                  key={neighborhood}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Toggle preferred ${neighborhood}`}
+                  onPress={() => onTogglePreferredNeighborhood(neighborhood)}
+                  style={[
+                    styles.preferenceChip,
+                    preferences.preferredNeighborhoods.includes(neighborhood) ? styles.activePreferenceChip : null
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.preferenceChipText,
+                      preferences.preferredNeighborhoods.includes(neighborhood) ? styles.activePreferenceChipText : null
+                    ]}
+                  >
+                    {neighborhood}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={styles.preferenceLabel}>Vibe tags</Text>
+            <View style={styles.preferenceRow}>
+              {tagOptions.map((tag) => (
+                <Pressable
+                  key={tag}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Toggle ${tag} taste tag`}
+                  onPress={() => onTogglePreferredTag(tag)}
+                  style={[
+                    styles.preferenceChip,
+                    preferences.preferredTags.includes(tag) ? styles.activePreferenceChip : null
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.preferenceChipText,
+                      preferences.preferredTags.includes(tag) ? styles.activePreferenceChipText : null
+                    ]}
+                  >
+                    {tag}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
         </View>
 
         <View style={styles.forYouPanel}>
@@ -1176,7 +1492,9 @@ function GalleryPassportPanel({
             <PersonalizedPickRow
               key={pick.exhibition.id}
               pick={pick}
+              feedback={feedbackById.get(pick.exhibition.id)}
               onOpenDetails={() => onOpenPick(pick.exhibition.id)}
+              onFeedback={(kind) => onFeedback(pick.exhibition.id, kind)}
             />
           ))}
           {picks.length === 0 ? (
@@ -1337,10 +1655,16 @@ function ExhibitionDetailSheet({
   savedIds,
   logEntry,
   routeProgress,
+  conciergeReasons,
+  feedback,
   onStatus,
   onNote,
   onMarkRouteVisited,
   onSkipRouteStop,
+  onFeedback,
+  onStartRouteFromHere,
+  onAddToActiveWalk,
+  onShare,
   onClose
 }: {
   exhibition: GalleryExhibition;
@@ -1348,10 +1672,16 @@ function ExhibitionDetailSheet({
   savedIds: string[];
   logEntry?: GalleryLogEntry;
   routeProgress?: GalleryWalkStopProgress;
+  conciergeReasons: string[];
+  feedback?: GalleryTasteFeedback;
   onStatus: (status: GalleryLogStatus) => void;
   onNote: (note: string) => void;
   onMarkRouteVisited?: () => void;
   onSkipRouteStop?: () => void;
+  onFeedback: (kind: GalleryTasteFeedbackKind) => void;
+  onStartRouteFromHere: () => void;
+  onAddToActiveWalk: () => void;
+  onShare: () => void;
   onClose: () => void;
 }) {
   const status = getGalleryVisitStatus(exhibition, referenceNow);
@@ -1359,6 +1689,21 @@ function ExhibitionDetailSheet({
   const reasons = getGalleryWhyGoReasons(exhibition, allExhibitions, referenceNow, savedIds);
   const visual = getGalleryVisual(exhibition);
   const openingTonight = isGalleryOpeningTonight(exhibition, referenceNow);
+  const groupedShows = allExhibitions.filter(
+    (candidate) =>
+      candidate.id !== exhibition.id &&
+      candidate.galleryName === exhibition.galleryName &&
+      candidate.address === exhibition.address
+  );
+  const nearbyShows = allExhibitions
+    .filter(
+      (candidate) =>
+        candidate.id !== exhibition.id &&
+        candidate.areaId === exhibition.areaId &&
+        candidate.neighborhood === exhibition.neighborhood &&
+        candidate.galleryName !== exhibition.galleryName
+    )
+    .slice(0, 3);
 
   return (
     <View style={styles.detailSheet}>
@@ -1437,6 +1782,15 @@ function ExhibitionDetailSheet({
 
         <Text style={styles.cardDescription}>{exhibition.description}</Text>
 
+        <View style={styles.conciergeDetailBlock}>
+          <Text style={styles.guidanceTitle}>Worth it if you like</Text>
+          <View style={styles.routeReasonRow}>
+            {(conciergeReasons.length > 0 ? conciergeReasons : reasons).slice(0, 5).map((reason) => (
+              <Text key={reason} style={styles.routeReasonPill}>{reason}</Text>
+            ))}
+          </View>
+        </View>
+
         <View style={styles.cardSignalRow}>
           <Text style={styles.factText}>{exhibition.address}</Text>
           <Text style={styles.factText}>{formatShortDate(exhibition.opensAt)} to {formatShortDate(exhibition.closesAt)}</Text>
@@ -1460,6 +1814,91 @@ function ExhibitionDetailSheet({
             </View>
           ))}
         </View>
+
+        <View style={styles.conciergeDetailBlock}>
+          <Text style={styles.guidanceTitle}>Plan around this</Text>
+          <View style={styles.activeWalkActionRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Start route from ${exhibition.title}`}
+              onPress={onStartRouteFromHere}
+              style={styles.primaryLightButton}
+            >
+              <Text style={styles.primaryLightButtonText}>Start route from here</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Add ${exhibition.title} to active walk`}
+              onPress={onAddToActiveWalk}
+              style={styles.secondaryRouteButton}
+            >
+              <Text style={styles.secondaryRouteButtonText}>Add to walk</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Share ${exhibition.title}`}
+              onPress={onShare}
+              style={styles.secondaryRouteButton}
+            >
+              <Share2 size={13} color={colors.ink} />
+              <Text style={styles.secondaryRouteButtonText}>Share</Text>
+            </Pressable>
+          </View>
+          <View style={styles.feedbackRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`More like ${exhibition.title}`}
+              onPress={() => onFeedback("more-like-this")}
+              style={[
+                styles.feedbackButton,
+                feedback?.kind === "more-like-this" ? styles.activeFeedbackButton : null
+              ]}
+            >
+              <Text
+                style={[
+                  styles.feedbackButtonText,
+                  feedback?.kind === "more-like-this" ? styles.activeFeedbackButtonText : null
+                ]}
+              >
+                More like this
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Less like ${exhibition.title}`}
+              onPress={() => onFeedback("less-like-this")}
+              style={[
+                styles.feedbackButton,
+                feedback?.kind === "less-like-this" ? styles.activeFeedbackButton : null
+              ]}
+            >
+              <Text
+                style={[
+                  styles.feedbackButtonText,
+                  feedback?.kind === "less-like-this" ? styles.activeFeedbackButtonText : null
+                ]}
+              >
+                Less like this
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {(groupedShows.length > 0 || nearbyShows.length > 0) ? (
+          <View style={styles.conciergeDetailBlock}>
+            <Text style={styles.guidanceTitle}>Nearby and same-gallery context</Text>
+            {groupedShows.slice(0, 3).map((candidate) => (
+              <Text key={candidate.id} style={styles.groupedShowText}>
+                Same gallery: {candidate.title}
+              </Text>
+            ))}
+            {nearbyShows.map((candidate) => (
+              <Text key={candidate.id} style={styles.groupedShowText}>
+                Nearby: {candidate.galleryName} - {candidate.title}
+              </Text>
+            ))}
+          </View>
+        ) : null}
 
         <View style={styles.cardActions}>
           {logStatusOptions.map((statusOption) => (
@@ -1560,6 +1999,17 @@ export function GalleryApp() {
   const [completedWalkSessions, setCompletedWalkSessions] = useState<GalleryWalkSession[]>(
     persistedState?.completedWalkSessions ?? []
   );
+  const [tasteFeedback, setTasteFeedback] = useState<GalleryTasteFeedback[]>(
+    persistedState?.tasteFeedback ?? []
+  );
+  const [tastePreferences, setTastePreferences] = useState<GalleryEditableTastePreference>(
+    persistedState?.tastePreferences ?? defaultTastePreferences
+  );
+  const [savedWalks, setSavedWalks] = useState<GallerySavedWalk[]>(
+    persistedState?.savedWalks ?? []
+  );
+  const [eventRouteIntent, setEventRouteIntent] = useState<GalleryEventRouteIntent>("social-opening");
+  const [shareStatus, setShareStatus] = useState<string | undefined>();
   const selectedArea = galleryAreas.find((area) => area.id === selectedAreaId) ?? galleryAreas[0];
   const isCompactLayout = viewportWidth < 720;
   const areaInventory = useMemo(
@@ -1636,13 +2086,20 @@ export function GalleryApp() {
     const derivedPassport = mergeGalleryTastePassports(
       quizTastePassport,
       behaviorTastePassport,
+      referenceNow,
+      tastePreferences
+    );
+    const feedbackPassport = applyGalleryTasteFeedback(
+      derivedPassport,
+      tasteFeedback,
+      galleryExhibitions,
       referenceNow
     );
 
-    return derivedPassport.confidence === "empty" && persistedState?.tastePassport
+    return feedbackPassport.confidence === "empty" && persistedState?.tastePassport
       ? persistedState.tastePassport
-      : derivedPassport;
-  }, [behaviorTastePassport, persistedState, quizTastePassport]);
+      : feedbackPassport;
+  }, [behaviorTastePassport, persistedState, quizTastePassport, tasteFeedback, tastePreferences]);
   const openingTonight = useMemo(
     () =>
       filterGalleryExhibitions(galleryExhibitions, {
@@ -1686,7 +2143,9 @@ export function GalleryApp() {
             passport: tastePassport,
             neighborhood: selectedNeighborhood,
             savedIds,
-            referenceNow
+            referenceNow,
+            feedback: tasteFeedback,
+            preferences: tastePreferences
           })
         : createGalleryWalkPlan({
             areaId: selectedAreaId,
@@ -1706,7 +2165,9 @@ export function GalleryApp() {
               passport: tastePassport,
               neighborhood: activeWalkSession.neighborhood,
               savedIds,
-              referenceNow
+              referenceNow,
+              feedback: tasteFeedback,
+              preferences: tastePreferences
             })
           : createGalleryWalkPlan({
               areaId: activeWalkSession.areaId,
@@ -1716,7 +2177,7 @@ export function GalleryApp() {
               referenceNow
             })
         : undefined,
-    [activeWalkSession, savedIds, tastePassport]
+    [activeWalkSession, savedIds, tasteFeedback, tastePassport, tastePreferences]
   );
   const activeWalkProgress = useMemo(
     () =>
@@ -1839,16 +2300,60 @@ export function GalleryApp() {
   const selectedActiveWalkProgress = selectedActiveWalkStop
     ? activeWalkProgress?.stopProgressById[selectedActiveWalkStop.exhibition.id]
     : undefined;
+  const activeRouteStopIds = activeWalkPlan?.stops.map((stop) => stop.exhibition.id) ?? [];
   const personalizedPicks = useMemo(
     () =>
-      rankGalleryExhibitionsForTaste(areaInventory, tastePassport, referenceNow)
+      rankGalleryExhibitionsForTaste(areaInventory, tastePassport, referenceNow, {
+        feedback: tasteFeedback,
+        preferences: tastePreferences,
+        logEntries,
+        activeRouteStopIds
+      })
         .filter((pick) => {
           const status = getGalleryVisitStatus(pick.exhibition, referenceNow);
 
           return status === "open-now" || status === "opens-later";
         })
         .slice(0, 6),
-    [areaInventory, tastePassport]
+    [activeRouteStopIds, areaInventory, logEntries, tasteFeedback, tastePassport, tastePreferences]
+  );
+  const feedbackByExhibitionId = useMemo(
+    () => new Map(tasteFeedback.map((item) => [item.exhibitionId, item])),
+    [tasteFeedback]
+  );
+  const selectedConciergeReasons = useMemo(
+    () =>
+      selectedExhibition
+        ? getGalleryConciergeReasons(selectedExhibition, tastePassport, referenceNow, {
+            feedback: tasteFeedback,
+            preferences: tastePreferences,
+            logEntries,
+            activeRouteStopIds
+          })
+        : [],
+    [activeRouteStopIds, logEntries, selectedExhibition, tasteFeedback, tastePassport, tastePreferences]
+  );
+  const eventSignals = useMemo(
+    () =>
+      createGalleryEventSignals(
+        areaInventory.filter((exhibition) =>
+          selectedNeighborhood ? exhibition.neighborhood === selectedNeighborhood : true
+        ),
+        referenceNow
+      ),
+    [areaInventory, selectedNeighborhood]
+  );
+  const eventConciergePlan = useMemo(
+    () =>
+      createOpeningNightConciergePlan({
+        areaId: selectedAreaId,
+        intent: eventRouteIntent,
+        neighborhood: selectedNeighborhood,
+        savedIds,
+        exhibitions: galleryExhibitions,
+        referenceNow
+      }),
+    [eventRouteIntent, savedIds, selectedAreaId, selectedNeighborhood]
   );
   const passportBadges = useMemo(
     () =>
@@ -1932,6 +2437,91 @@ export function GalleryApp() {
 
   function answerQuizCard(artworkId: string, response: GalleryQuizResponse) {
     setQuizAnswers((answers) => upsertQuizAnswer(answers, artworkId, response, referenceNow));
+  }
+
+  function recordTasteFeedback(exhibitionId: string, kind: GalleryTasteFeedbackKind) {
+    setTasteFeedback((feedback) => upsertTasteFeedback(feedback, exhibitionId, kind, referenceNow));
+  }
+
+  function togglePreferredMedium(medium: GalleryMedium) {
+    setTastePreferences((preferences) =>
+      toggleMediumPreference(preferences, medium, "preferredMediums")
+    );
+  }
+
+  function toggleAvoidedMedium(medium: GalleryMedium) {
+    setTastePreferences((preferences) =>
+      toggleMediumPreference(preferences, medium, "avoidedMediums")
+    );
+  }
+
+  function togglePreferredNeighborhood(neighborhood: string) {
+    setTastePreferences((preferences) => ({
+      ...preferences,
+      preferredNeighborhoods: toggleStringPreference(
+        preferences.preferredNeighborhoods,
+        neighborhood
+      )
+    }));
+  }
+
+  function togglePreferredTag(tag: string) {
+    setTastePreferences((preferences) => ({
+      ...preferences,
+      preferredTags: toggleStringPreference(preferences.preferredTags, tag)
+    }));
+  }
+
+  async function copyCurrentItinerary() {
+    const copied = await writeTextToClipboard(createGalleryWalkItineraryText(walkPlan, activeWalkSession));
+
+    setShareStatus(copied ? "Itinerary copied." : "Itinerary ready to copy from the route card.");
+  }
+
+  async function shareCurrentRoute() {
+    const payload = createGalleryWalkShareSummary(walkPlan, activeWalkRecap);
+    const shared = await shareWalkPayload(payload);
+
+    if (!shared) {
+      await writeTextToClipboard(payload.text);
+    }
+
+    setShareStatus(shared ? "Route shared." : "Route summary copied.");
+  }
+
+  function saveCurrentWalk() {
+    const savedWalk = createSavedGalleryWalk(walkPlan, activeWalkSession, referenceNow);
+
+    setSavedWalks((walks) => [
+      savedWalk,
+      ...walks.filter((walk) => walk.id !== savedWalk.id)
+    ].slice(0, 6));
+    setShareStatus("Walk saved locally.");
+  }
+
+  function startRouteFromExhibition(exhibition: GalleryExhibition) {
+    setSelectedAreaId(exhibition.areaId);
+    setSelectedNeighborhood(exhibition.neighborhood);
+    setWalkMode("for-you");
+    setLogStatus(exhibition.id, "want-to-see");
+    recordTasteFeedback(exhibition.id, "more-like-this");
+  }
+
+  function addExhibitionToActiveWalk(exhibition: GalleryExhibition) {
+    setLogStatus(exhibition.id, "want-to-see");
+    recordTasteFeedback(exhibition.id, "more-like-this");
+    setShareStatus("Added to your intent signals for the next route.");
+  }
+
+  async function shareExhibition(exhibition: GalleryExhibition) {
+    const text = `${exhibition.title} at ${exhibition.galleryName}\n${exhibition.address}\n${exhibition.externalUrl}`;
+    const shared = await shareWalkPayload({ title: exhibition.title, text, url: exhibition.externalUrl });
+
+    if (!shared) {
+      await writeTextToClipboard(text);
+    }
+
+    setShareStatus(shared ? "Exhibition shared." : "Exhibition details copied.");
   }
 
   function startWalk() {
@@ -2045,7 +2635,10 @@ export function GalleryApp() {
       tastePassport,
       earnedBadges,
       completedQuestIds,
-      completedWalkSessions
+      completedWalkSessions,
+      tasteFeedback,
+      tastePreferences,
+      savedWalks
     });
   }, [
     activeLens,
@@ -2063,7 +2656,10 @@ export function GalleryApp() {
     selectedAreaId,
     selectedMedium,
     selectedNeighborhood,
+    savedWalks,
+    tasteFeedback,
     tastePassport,
+    tastePreferences,
     verifiedOnly,
     walkMode
   ]);
@@ -2135,9 +2731,19 @@ export function GalleryApp() {
               skipRouteStop(activeWalkProgress?.currentStopId, activeWalkCurrentStop?.exhibition.id)
             }
             onEndWalk={endActiveWalk}
+            onCopyItinerary={copyCurrentItinerary}
+            onShareRoute={shareCurrentRoute}
+            onSaveWalk={saveCurrentWalk}
             walkRecapRewardCopy={walkRecapRewardCopy}
             compact={isCompactLayout}
           />
+
+          {shareStatus ? (
+            <View style={styles.shareStatusBar}>
+              <Share2 size={14} color={colors.ink} />
+              <Text style={styles.shareStatusText}>{shareStatus}</Text>
+            </View>
+          ) : null}
 
           <View style={styles.discoveryControls}>
             <View style={styles.areaRow}>
@@ -2236,9 +2842,20 @@ export function GalleryApp() {
             stamps={passportStamps}
             quests={galleryQuests}
             newBadgeCount={newBadgeCount}
+            feedback={tasteFeedback}
+            preferences={tastePreferences}
+            mediumOptions={mediumOptions}
+            neighborhoodOptions={galleryNeighborhoods
+              .filter((neighborhood) => neighborhood.areaId === selectedAreaId)
+              .map((neighborhood) => neighborhood.name)}
             activeWalkMode={walkMode}
             onQuizAnswer={answerQuizCard}
             onOpenPick={(exhibitionId) => setSelectedExhibitionId(exhibitionId)}
+            onFeedback={recordTasteFeedback}
+            onTogglePreferredMedium={togglePreferredMedium}
+            onToggleAvoidedMedium={toggleAvoidedMedium}
+            onTogglePreferredNeighborhood={togglePreferredNeighborhood}
+            onTogglePreferredTag={togglePreferredTag}
             onUseForYouRoute={() => setWalkMode("for-you")}
           />
         </View>
@@ -2408,6 +3025,32 @@ export function GalleryApp() {
               </Pressable>
             ) : null}
           </View>
+          {savedWalks.length > 0 ? (
+            <View style={styles.savedWalksPanel}>
+              <Text style={styles.guidanceTitle}>Saved walks</Text>
+              {savedWalks.slice(0, 3).map((savedWalk) => (
+                <View key={savedWalk.id} style={styles.savedWalkRow}>
+                  <View style={styles.savedWalkCopy}>
+                    <Text style={styles.savedWalkTitle}>{savedWalk.title}</Text>
+                    <Text style={styles.savedWalkMeta}>{savedWalk.summary}</Text>
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Copy saved walk ${savedWalk.title}`}
+                    onPress={() => {
+                      void writeTextToClipboard(savedWalk.itineraryText).then((copied) => {
+                        setShareStatus(copied ? "Saved itinerary copied." : "Saved itinerary ready.");
+                      });
+                    }}
+                    style={styles.secondaryRouteButton}
+                  >
+                    <Copy size={13} color={colors.ink} />
+                    <Text style={styles.secondaryRouteButtonText}>Copy</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          ) : null}
           <RoutePreview walkPlan={walkPlan} />
           <View style={styles.walkStops}>
             {walkPlan.stops.length === 0 ? (
@@ -2435,12 +3078,29 @@ export function GalleryApp() {
         <View style={styles.splitSection}>
           <View style={styles.infoPanel}>
             <Text style={styles.sectionTitle}>Opening Night Radar</Text>
-            <Text style={styles.sectionSubtitle}>Separate tonight events from exhibitions simply on view.</Text>
-            {openingTonight.slice(0, 4).map((exhibition) => (
-              <OpeningRadarItem key={exhibition.id} exhibition={exhibition} />
+            <Text style={styles.sectionSubtitle}>Timed openings, RSVP cues, last looks, and route fit.</Text>
+            <View style={styles.filterRow}>
+              {eventRouteIntentOptions.map((intent) => (
+                <ChipButton
+                  key={intent}
+                  label={eventRouteIntentLabels[intent]}
+                  active={eventRouteIntent === intent}
+                  compact
+                  onPress={() => setEventRouteIntent(intent)}
+                />
+              ))}
+            </View>
+            <View style={styles.eventPlanCard}>
+              <Text style={styles.eventPlanTitle}>{eventConciergePlan.summary}</Text>
+              <Text style={styles.eventPlanMeta}>
+                {eventConciergePlan.stops.length} stops - {eventConciergePlan.totalMinutes} min - {eventConciergePlan.readinessCopy}
+              </Text>
+            </View>
+            {eventSignals.slice(0, 4).map((signal) => (
+              <OpeningRadarItem key={signal.id} signal={signal} />
             ))}
-            {openingTonight.length === 0 ? (
-              <Text style={styles.emptyText}>No receptions or talks tonight in this filter.</Text>
+            {eventSignals.length === 0 ? (
+              <Text style={styles.emptyText}>No timed gallery signals in this filter. The app will fall back to verified exhibitions on view.</Text>
             ) : null}
           </View>
 
@@ -2487,6 +3147,8 @@ export function GalleryApp() {
               savedIds={savedIds}
               logEntry={logEntryById.get(selectedExhibition.id)}
               routeProgress={selectedActiveWalkProgress}
+              conciergeReasons={selectedConciergeReasons}
+              feedback={feedbackByExhibitionId.get(selectedExhibition.id)}
               onStatus={(status) => setLogStatus(selectedExhibition.id, status)}
               onNote={(note) => setLogNote(selectedExhibition.id, note)}
               onMarkRouteVisited={() =>
@@ -2495,6 +3157,12 @@ export function GalleryApp() {
               onSkipRouteStop={() =>
                 skipRouteStop(selectedActiveWalkStop?.exhibition.id, selectedExhibition.id)
               }
+              onFeedback={(kind) => recordTasteFeedback(selectedExhibition.id, kind)}
+              onStartRouteFromHere={() => startRouteFromExhibition(selectedExhibition)}
+              onAddToActiveWalk={() => addExhibitionToActiveWalk(selectedExhibition)}
+              onShare={() => {
+                void shareExhibition(selectedExhibition);
+              }}
               onClose={() => setSelectedExhibitionId(undefined)}
             />
           </View>
@@ -4465,6 +5133,153 @@ const styles = StyleSheet.create({
     color: colors.mutedInk,
     fontSize: 12,
     fontWeight: "700"
+  },
+  feedbackRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  feedbackButton: {
+    alignItems: "center",
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    minHeight: 32,
+    paddingHorizontal: spacing.sm
+  },
+  activeFeedbackButton: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink
+  },
+  feedbackButtonText: {
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    lineHeight: 30
+  },
+  activeFeedbackButtonText: {
+    color: colors.paper
+  },
+  preferenceBlock: {
+    borderTopColor: "rgba(255, 253, 248, 0.16)",
+    borderTopWidth: 1,
+    gap: spacing.sm,
+    paddingTop: spacing.md
+  },
+  preferenceLabel: {
+    color: "#DAD8D0",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  preferenceRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  preferenceChip: {
+    backgroundColor: "rgba(255, 253, 248, 0.1)",
+    borderColor: "rgba(255, 253, 248, 0.22)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    minHeight: 30,
+    paddingHorizontal: spacing.sm
+  },
+  activePreferenceChip: {
+    backgroundColor: colors.paper,
+    borderColor: colors.paper
+  },
+  preferenceChipText: {
+    color: colors.paper,
+    fontSize: 11,
+    fontWeight: "900",
+    lineHeight: 28
+  },
+  activePreferenceChipText: {
+    color: colors.ink
+  },
+  conciergeDetailBlock: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md
+  },
+  shareStatusBar: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.xs,
+    marginHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
+  },
+  shareStatusText: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  savedWalksPanel: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md
+  },
+  savedWalkRow: {
+    alignItems: "center",
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    justifyContent: "space-between",
+    paddingTop: spacing.sm
+  },
+  savedWalkCopy: {
+    flex: 1,
+    minWidth: 190
+  },
+  savedWalkTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  savedWalkMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17,
+    marginTop: spacing.xs
+  },
+  eventPlanCard: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.xs,
+    padding: spacing.md
+  },
+  eventPlanTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "900",
+    lineHeight: 19
+  },
+  eventPlanMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17
   },
   alertSeedRow: {
     flexDirection: "row",
