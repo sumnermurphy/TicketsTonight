@@ -47,6 +47,8 @@ export type GalleryWalkPlanInput = {
 
 export type GalleryWalkStop = {
   exhibition: GalleryExhibition;
+  exhibitions: GalleryExhibition[];
+  groupedExhibitionCount: number;
   status: GalleryVisitStatus;
   reasons: string[];
   isSaved: boolean;
@@ -151,6 +153,22 @@ export type GalleryLastChanceAlert = {
   matchedSignals: string[];
 };
 
+type GalleryOpeningTimingStatus = "upcoming" | "active" | "ended";
+
+type GalleryOpeningTiming = {
+  startsAt: string;
+  endsAt?: string;
+  status: GalleryOpeningTimingStatus;
+  sortMinutes: number;
+  label: string;
+};
+
+type GalleryRouteGroup = {
+  key: string;
+  exhibition: GalleryExhibition;
+  exhibitions: GalleryExhibition[];
+};
+
 export type GallerySubmissionDraftInput = {
   galleryName?: string;
   areaId?: GalleryAreaId;
@@ -243,6 +261,17 @@ function getLocalTimeMinutes(iso: string): number {
   const minute = Number(match?.[5] ?? "0");
 
   return hour * 60 + minute;
+}
+
+function getTimeLabel(iso: string): string {
+  const totalMinutes = getLocalTimeMinutes(iso);
+  const hour24 = Math.floor(totalMinutes / 60);
+  const minute = totalMinutes % 60;
+  const period = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 || 12;
+  const minuteLabel = minute === 0 ? "" : `:${String(minute).padStart(2, "0")}`;
+
+  return `${hour12}${minuteLabel} ${period}`;
 }
 
 function parseClockMinutes(clock: string): number {
@@ -552,19 +581,7 @@ export function isGalleryOpeningTonight(
   exhibition: GalleryExhibition,
   referenceNow = defaultReferenceNow
 ): boolean {
-  const today = getLocalDateKey(referenceNow);
-  const receptionIsTonight =
-    typeof exhibition.receptionAt === "string" && getLocalDateKey(exhibition.receptionAt) === today;
-  const specialEventIsTonight = exhibition.specialEvents.some(
-    (event) =>
-      getLocalDateKey(event.startsAt) === today &&
-      (event.kind === "opening-reception" ||
-        event.kind === "artist-talk" ||
-        event.kind === "walkthrough" ||
-        event.kind === "rsvp-preview")
-  );
-
-  return isOnView(exhibition, referenceNow) && (receptionIsTonight || specialEventIsTonight);
+  return isOnView(exhibition, referenceNow) && getGalleryOpeningTimings(exhibition, referenceNow).length > 0;
 }
 
 export function isGalleryLastChance(
@@ -664,13 +681,131 @@ function getGalleryRouteNameKey(exhibition: GalleryExhibition): string {
   return normalizeText(exhibition.galleryName);
 }
 
+function getGalleryRouteGroupKey(exhibition: GalleryExhibition): string {
+  return normalizeText(`${exhibition.galleryName}|${exhibition.address}`);
+}
+
+function getOpeningTimingStatus(
+  startsAt: string,
+  endsAt: string | undefined,
+  referenceNow: string
+): GalleryOpeningTimingStatus {
+  const nowMinutes = getLocalTimeMinutes(referenceNow);
+  const startMinutes = getLocalTimeMinutes(startsAt);
+  const endMinutes = endsAt ? getLocalTimeMinutes(endsAt) : startMinutes + 120;
+
+  if (nowMinutes >= endMinutes) {
+    return "ended";
+  }
+
+  if (nowMinutes >= startMinutes) {
+    return "active";
+  }
+
+  return "upcoming";
+}
+
+function getOpeningTimingLabel(timing: GalleryOpeningTiming): string {
+  if (timing.status === "active") {
+    return "Reception still active";
+  }
+
+  if (timing.status === "ended") {
+    return "Too late for this opening";
+  }
+
+  return `Starts at ${getTimeLabel(timing.startsAt)}`;
+}
+
+function getGalleryOpeningTimings(
+  exhibition: GalleryExhibition,
+  referenceNow: string
+): GalleryOpeningTiming[] {
+  const today = getLocalDateKey(referenceNow);
+  const timings = exhibition.specialEvents
+    .filter(
+      (event) =>
+        getLocalDateKey(event.startsAt) === today &&
+        (event.kind === "opening-reception" ||
+          event.kind === "artist-talk" ||
+          event.kind === "walkthrough" ||
+          event.kind === "rsvp-preview")
+    )
+    .map((event): GalleryOpeningTiming => {
+      const status = getOpeningTimingStatus(event.startsAt, event.endsAt, referenceNow);
+
+      return {
+        startsAt: event.startsAt,
+        endsAt: event.endsAt,
+        status,
+        sortMinutes: getLocalTimeMinutes(event.startsAt),
+        label: getOpeningTimingLabel({
+          startsAt: event.startsAt,
+          endsAt: event.endsAt,
+          status,
+          sortMinutes: getLocalTimeMinutes(event.startsAt),
+          label: ""
+        })
+      };
+    });
+
+  if (
+    typeof exhibition.receptionAt === "string" &&
+    getLocalDateKey(exhibition.receptionAt) === today &&
+    !timings.some((timing) => timing.startsAt === exhibition.receptionAt)
+  ) {
+    const status = getOpeningTimingStatus(exhibition.receptionAt, undefined, referenceNow);
+
+    timings.push({
+      startsAt: exhibition.receptionAt,
+      status,
+      sortMinutes: getLocalTimeMinutes(exhibition.receptionAt),
+      label: getOpeningTimingLabel({
+        startsAt: exhibition.receptionAt,
+        status,
+        sortMinutes: getLocalTimeMinutes(exhibition.receptionAt),
+        label: ""
+      })
+    });
+  }
+
+  return timings.sort((left, right) => {
+    const statusRank: Record<GalleryOpeningTimingStatus, number> = {
+      active: 0,
+      upcoming: 1,
+      ended: 2
+    };
+    const statusDelta = statusRank[left.status] - statusRank[right.status];
+
+    if (statusDelta !== 0) {
+      return statusDelta;
+    }
+
+    return left.sortMinutes - right.sortMinutes;
+  });
+}
+
+function getBestGalleryOpeningTiming(
+  exhibition: GalleryExhibition,
+  referenceNow: string
+): GalleryOpeningTiming | undefined {
+  return getGalleryOpeningTimings(exhibition, referenceNow)[0];
+}
+
 function getRouteModeScore(
   exhibition: GalleryExhibition,
   referenceNow: string,
   mode: GalleryWalkMode
 ): number {
   if (mode === "opening-night") {
-    return isGalleryOpeningTonight(exhibition, referenceNow) ? -20 : 20;
+    const timing = getBestGalleryOpeningTiming(exhibition, referenceNow);
+    const statusRank: Record<GalleryOpeningTimingStatus, number> = {
+      active: 0,
+      upcoming: 1,
+      ended: 3
+    };
+
+    return timing ? statusRank[timing.status] * 10000 + timing.sortMinutes : 50000;
   }
 
   if (mode === "last-chance") {
@@ -709,15 +844,116 @@ function getRouteCandidateScore(input: {
   );
 }
 
+function sortRouteGroupExhibitions(
+  exhibitions: GalleryExhibition[],
+  referenceNow: string,
+  savedIdSet: Set<string>,
+  mode: GalleryWalkMode
+): GalleryExhibition[] {
+  return [...exhibitions].sort((left, right) => {
+    const savedDelta = Number(savedIdSet.has(right.id)) - Number(savedIdSet.has(left.id));
+
+    if (savedDelta !== 0) {
+      return savedDelta;
+    }
+
+    const scoreDelta =
+      getRouteCandidateScore({
+        candidate: left,
+        referenceNow,
+        savedIdSet,
+        mode
+      }) -
+      getRouteCandidateScore({
+        candidate: right,
+        referenceNow,
+        savedIdSet,
+        mode
+      });
+
+    if (scoreDelta !== 0) {
+      return scoreDelta;
+    }
+
+    return left.title.localeCompare(right.title);
+  });
+}
+
+function createGalleryRouteGroups(
+  routeCandidates: GalleryExhibition[],
+  groupSourceCandidates: GalleryExhibition[],
+  referenceNow: string,
+  savedIdSet: Set<string>,
+  mode: GalleryWalkMode
+): GalleryRouteGroup[] {
+  const sourceGroups = new Map<string, GalleryExhibition[]>();
+  const routeGroups = new Map<string, GalleryExhibition[]>();
+
+  for (const exhibition of groupSourceCandidates) {
+    const key = getGalleryRouteGroupKey(exhibition);
+    const group = sourceGroups.get(key) ?? [];
+
+    group.push(exhibition);
+    sourceGroups.set(key, group);
+  }
+
+  for (const exhibition of routeCandidates) {
+    const key = getGalleryRouteGroupKey(exhibition);
+    const group = routeGroups.get(key) ?? [];
+
+    group.push(exhibition);
+    routeGroups.set(key, group);
+  }
+
+  return Array.from(routeGroups.entries()).flatMap(([key, groupRouteCandidates]) => {
+    const sortedRouteCandidates = sortRouteGroupExhibitions(
+      groupRouteCandidates,
+      referenceNow,
+      savedIdSet,
+      mode
+    );
+    const exhibition = sortedRouteCandidates[0] ?? groupRouteCandidates[0];
+
+    if (!exhibition) {
+      return [];
+    }
+
+    const sourceGroup = sourceGroups.get(key) ?? groupRouteCandidates;
+    const groupedExhibitions = exhibition
+      ? [
+          exhibition,
+          ...sortRouteGroupExhibitions(sourceGroup, referenceNow, savedIdSet, mode).filter(
+            (candidate) => candidate.id !== exhibition.id
+          )
+        ]
+      : sortRouteGroupExhibitions(sourceGroup, referenceNow, savedIdSet, mode);
+
+    return [{
+      key,
+      exhibition,
+      exhibitions: groupedExhibitions
+    }];
+  });
+}
+
 function getRouteReasonSet(
   exhibition: GalleryExhibition,
   previous: GalleryExhibition | undefined,
-  referenceNow: string
+  referenceNow: string,
+  options: {
+    groupedExhibitionCount?: number;
+    mode?: GalleryWalkMode;
+  } = {}
 ): string[] {
   const reasons: string[] = [];
   const status = getGalleryVisitStatus(exhibition, referenceNow);
   const trust = getGalleryInventoryTrust(exhibition);
   const daysUntilClose = getDaysUntilGalleryCloses(exhibition, referenceNow);
+  const openingTiming = getBestGalleryOpeningTiming(exhibition, referenceNow);
+
+  if ((options.groupedExhibitionCount ?? 1) > 1) {
+    reasons.push(`Grouped ${options.groupedExhibitionCount} shows here`);
+  }
 
   if (status === "open-now") {
     reasons.push("Open now");
@@ -729,10 +965,12 @@ function getRouteReasonSet(
     const distance = getDistanceMiles(previous.coordinates, exhibition.coordinates);
 
     if (distance <= 0.25) {
-      reasons.push("Very nearby");
+      reasons.push(trust.isVerified ? "Closest verified next stop" : "Very nearby");
     } else if (distance <= 0.5) {
       reasons.push("Nearby");
     }
+
+    reasons.push("Avoids repeat gallery stops");
   } else {
     reasons.push("Start here");
   }
@@ -745,8 +983,13 @@ function getRouteReasonSet(
     reasons.push("Opening tonight");
   }
 
+  if (options.mode === "opening-night" && openingTiming) {
+    reasons.push(openingTiming.label);
+    reasons.push("Best opening-time sequence");
+  }
+
   if (trust.isVerified) {
-    reasons.push("Verified source");
+    reasons.push("Verified official source");
   } else if (trust.isFixture) {
     reasons.push("Fixture/demo");
   } else if (trust.kind === "partner-submitted") {
@@ -885,6 +1128,15 @@ function getWalkReadiness(
     };
   }
 
+  if (stops.length > 0 && stops.length < requiredUniqueStops) {
+    return {
+      readinessLevel: stops.length >= 2 && usableStops >= 1 ? "thin" : "not-ready",
+      readinessCopy: `${neighborhood} has only ${stops.length} unique gallery stop${
+        stops.length === 1 ? "" : "s"
+      } for this ${modeLabel}; group depth is useful, but the neighborhood is thin today.`
+    };
+  }
+
   if (stops.length >= 2 && usableStops >= 1) {
     if (repeatedGalleryCount > 0) {
       return {
@@ -1014,9 +1266,17 @@ export function createGalleryWalkPlan(input: GalleryWalkPlanInput): GalleryWalkP
     (exhibition) => exhibition.areaId === input.areaId && exhibition.neighborhood === neighborhood
   );
   const onViewCandidates = baseCandidates.filter((exhibition) => isOnView(exhibition, referenceNow));
+  const openingCandidates = onViewCandidates.filter((exhibition) =>
+    isGalleryOpeningTonight(exhibition, referenceNow)
+  );
+  const currentOpeningCandidates = openingCandidates.filter(
+    (exhibition) => getBestGalleryOpeningTiming(exhibition, referenceNow)?.status !== "ended"
+  );
   const modeCandidates =
     input.mode === "opening-night"
-      ? onViewCandidates.filter((exhibition) => isGalleryOpeningTonight(exhibition, referenceNow))
+      ? currentOpeningCandidates.length > 0
+        ? currentOpeningCandidates
+        : openingCandidates
       : input.mode === "last-chance"
         ? onViewCandidates.filter((exhibition) =>
             isGalleryLastChance(exhibition, referenceNow, config.lastChanceDays ?? 14)
@@ -1065,32 +1325,53 @@ export function createGalleryWalkPlan(input: GalleryWalkPlanInput): GalleryWalkP
   );
   const routeCandidates =
     usableCandidates.length >= Math.min(2, maxStops) ? usableCandidates : preSortedCandidates;
-  const selectedExhibitions = orderGalleryWalkCandidates(
+  const routeGroups = createGalleryRouteGroups(
     routeCandidates,
+    onViewCandidates,
     referenceNow,
     savedIdSet,
     input.mode
-  ).slice(0, maxStops);
-  const stops = selectedExhibitions.map((exhibition, index) => {
-    const previous = selectedExhibitions[index - 1];
-    const routeReasons = getRouteReasonSet(exhibition, previous, referenceNow);
+  );
+  const routeGroupByPrimaryId = new Map(
+    routeGroups.map((group) => [group.exhibition.id, group] as const)
+  );
+  const selectedGroups = orderGalleryWalkCandidates(
+    routeGroups.map((group) => group.exhibition),
+    referenceNow,
+    savedIdSet,
+    input.mode
+  )
+    .slice(0, maxStops)
+    .map((exhibition) => routeGroupByPrimaryId.get(exhibition.id))
+    .filter((group): group is GalleryRouteGroup => Boolean(group));
+  const stops = selectedGroups.map((group, index) => {
+    const exhibition = group.exhibition;
+    const previous = selectedGroups[index - 1]?.exhibition;
+    const routeReasons = getRouteReasonSet(exhibition, previous, referenceNow, {
+      groupedExhibitionCount: group.exhibitions.length,
+      mode: input.mode
+    });
     const whyGoReasons = getGalleryWhyGoReasons(
       exhibition,
       sourceExhibitions,
       referenceNow,
       input.savedIds ?? []
     );
-    const savedReasons = savedIdSet.has(exhibition.id) ? ["Saved by user"] : [];
+    const isSaved = group.exhibitions.some((candidate) => savedIdSet.has(candidate.id));
+    const savedReasons = isSaved ? ["Saved by user"] : [];
+    const stopMinutesAtStop = minutesAtStop + Math.min(12, Math.max(0, group.exhibitions.length - 1) * 6);
 
     return {
       exhibition,
+      exhibitions: group.exhibitions,
+      groupedExhibitionCount: group.exhibitions.length,
       status: getGalleryVisitStatus(exhibition, referenceNow),
       reasons: Array.from(new Set([...savedReasons, ...routeReasons, ...whyGoReasons])).slice(
         0,
         5
       ),
-      isSaved: savedIdSet.has(exhibition.id),
-      minutesAtStop,
+      isSaved,
+      minutesAtStop: stopMinutesAtStop,
       stopNumber: index + 1,
       mapUrl: getGalleryStopMapUrl(exhibition)
     };
@@ -1114,7 +1395,8 @@ export function createGalleryWalkPlan(input: GalleryWalkPlanInput): GalleryWalkP
   });
   const routeDistance = legs.reduce((total, leg) => total + leg.distanceMiles, 0);
   const walkingMinutes = legs.reduce((total, leg) => total + leg.walkingMinutes, 0);
-  const totalMinutes = stops.length * minutesAtStop + walkingMinutes;
+  const totalMinutes =
+    stops.reduce((total, stop) => total + stop.minutesAtStop, 0) + walkingMinutes;
   const savedStopCount = stops.filter((stop) => stop.isSaved).length;
   const modeLabel = config.label;
   const startStop = stops[0];
@@ -1130,12 +1412,32 @@ export function createGalleryWalkPlan(input: GalleryWalkPlanInput): GalleryWalkP
     readinessCopy = `${readinessCopy}${getFallbackNeighborhoodCopy(intelligence, neighborhood)}`;
   }
 
+  const startOpeningTiming =
+    input.mode === "opening-night" && startStop
+      ? getBestGalleryOpeningTiming(startStop.exhibition, referenceNow)
+      : undefined;
+  const nextOpeningTiming =
+    input.mode === "opening-night" && nextStop
+      ? getBestGalleryOpeningTiming(nextStop.exhibition, referenceNow)
+      : undefined;
   const guidance = startStop
-    ? `${startStop.status === "open-now" ? "Start here" : "Start when open"}: ${
-        startStop.exhibition.galleryName
-      }. ${
+    ? `${
+        startOpeningTiming?.status === "upcoming"
+          ? `Start at ${getTimeLabel(startOpeningTiming.startsAt)}`
+          : startOpeningTiming?.status === "active"
+            ? "Start while the reception is active"
+            : startStop.status === "open-now"
+              ? "Start here"
+              : "Start when open"
+      }: ${startStop.exhibition.galleryName}. ${
         nextStop
-          ? `Next stop: ${nextStop.exhibition.galleryName}, ${legs[0]?.walkingMinutes ?? 0} min walk.`
+          ? `Next stop: ${nextStop.exhibition.galleryName}, ${legs[0]?.walkingMinutes ?? 0} min walk${
+              nextOpeningTiming?.status === "upcoming"
+                ? ` for ${getTimeLabel(nextOpeningTiming.startsAt)}`
+                : nextOpeningTiming?.status === "active"
+                  ? " while its reception is active"
+                  : ""
+            }.`
           : "No second stop is strong enough yet."
       }`
     : `No ${modeLabel} is ready in ${neighborhood} yet.`;
@@ -1186,14 +1488,18 @@ export function createNeighborhoodIntelligence(
     const opensLaterCount = neighborhoodExhibitions.filter(
       (exhibition) => getGalleryVisitStatus(exhibition, referenceNow) === "opens-later"
     ).length;
+    const usableGalleryStopCount = new Set(
+      neighborhoodExhibitions
+        .filter((exhibition) => isRouteUsableStatus(getGalleryVisitStatus(exhibition, referenceNow)))
+        .map(getGalleryRouteGroupKey)
+    ).size;
     const openingTonightCount = neighborhoodExhibitions.filter((exhibition) =>
       isGalleryOpeningTonight(exhibition, referenceNow)
     ).length;
     const lastChanceCount = neighborhoodExhibitions.filter((exhibition) =>
       isGalleryLastChance(exhibition, referenceNow, 14)
     ).length;
-    const canSupportWalk =
-      neighborhoodExhibitions.length >= 2 && openNowCount + opensLaterCount >= 2;
+    const canSupportWalk = usableGalleryStopCount >= 2;
     const topReason =
       openingTonightCount > 0
         ? "Opening-night supply"

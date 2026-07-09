@@ -245,6 +245,8 @@ function WalkStopRow({
   isNext: boolean;
 }) {
   const trust = getGalleryInventoryTrust(stop.exhibition);
+  const groupedShows = stop.exhibitions ?? [stop.exhibition];
+  const showCountLabel = `${groupedShows.length} show${groupedShows.length === 1 ? "" : "s"} on view`;
 
   return (
     <View style={styles.walkStop}>
@@ -262,8 +264,19 @@ function WalkStopRow({
         </View>
         <Text style={styles.walkStopTitle}>{stop.exhibition.galleryName}</Text>
         <Text style={styles.walkStopMeta}>
-          {stop.exhibition.address} - {galleryVisitStatusLabels[stop.status]}
+          {stop.exhibition.address} - {stop.exhibition.neighborhood} - {galleryVisitStatusLabels[stop.status]}
         </Text>
+        <Text style={styles.walkStopShowCount}>{showCountLabel}</Text>
+        <View style={styles.groupedShowList}>
+          {groupedShows.slice(0, 3).map((exhibition) => (
+            <Text key={exhibition.id} style={styles.groupedShowText} numberOfLines={1}>
+              {exhibition.title} - {exhibition.artists.join(", ")}
+            </Text>
+          ))}
+          {groupedShows.length > 3 ? (
+            <Text style={styles.groupedShowText}>+{groupedShows.length - 3} more here</Text>
+          ) : null}
+        </View>
         {leg ? (
           <Text style={styles.walkStopMeta}>
             {leg.walkingMinutes} min walk - {leg.distanceMiles.toFixed(1)} mi from previous
@@ -320,6 +333,7 @@ function RoutePreview({ walkPlan }: { walkPlan: GalleryWalkPlan }) {
           const nextLeg = walkPlan.legs[index];
           const isStart = walkPlan.startStopId === stop.exhibition.id;
           const isNext = walkPlan.nextStopId === stop.exhibition.id;
+          const groupedCount = stop.groupedExhibitionCount ?? 1;
 
           return (
             <View key={stop.exhibition.id} style={styles.routePreviewStop}>
@@ -340,7 +354,13 @@ function RoutePreview({ walkPlan }: { walkPlan: GalleryWalkPlan }) {
                 {stop.exhibition.galleryName}
               </Text>
               <Text style={styles.routePreviewStatus} numberOfLines={1}>
-                {isStart ? "Start here" : isNext ? "Next stop" : galleryVisitStatusLabels[stop.status]}
+                {groupedCount > 1
+                  ? `${groupedCount} shows here`
+                  : isStart
+                    ? "Start here"
+                    : isNext
+                      ? "Next stop"
+                      : galleryVisitStatusLabels[stop.status]}
               </Text>
               <Text style={styles.routePreviewLeg}>
                 {nextLeg ? `${nextLeg.walkingMinutes} min to next` : "Finish"}
@@ -1370,6 +1390,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     marginTop: spacing.xs
+  },
+  walkStopShowCount: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "900",
+    marginTop: spacing.sm
+  },
+  groupedShowList: {
+    gap: 2,
+    marginTop: spacing.xs
+  },
+  groupedShowText: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 15
   },
   walkStopReason: {
     backgroundColor: colors.tealSoft,

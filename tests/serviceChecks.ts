@@ -636,6 +636,59 @@ async function main() {
     "Gallery routes should avoid duplicate galleries when a unique alternative exists."
   );
 
+  const groupedStopWalk = createGalleryWalkPlan({
+    areaId: "nyc",
+    mode: "two-hour",
+    neighborhood: "Chelsea",
+    referenceNow: galleryReferenceNow,
+    exhibitions: [
+      createSyntheticGalleryExhibition({
+        id: "grouped-gallery-first",
+        title: "Grouped Gallery First",
+        galleryName: "Grouped Gallery",
+        address: "100 Grouped St, New York, NY",
+        coordinates: { latitude: 40.747, longitude: -74.006 },
+        externalUrl: "https://grouped-gallery.test/first"
+      }),
+      createSyntheticGalleryExhibition({
+        id: "grouped-gallery-second",
+        title: "Grouped Gallery Second",
+        galleryName: "Grouped Gallery",
+        address: "100 Grouped St, New York, NY",
+        coordinates: { latitude: 40.747, longitude: -74.006 },
+        externalUrl: "https://grouped-gallery.test/second"
+      }),
+      createSyntheticGalleryExhibition({
+        id: "grouped-gallery-third",
+        title: "Grouped Gallery Third",
+        galleryName: "Grouped Gallery",
+        address: "100 Grouped St, New York, NY",
+        coordinates: { latitude: 40.747, longitude: -74.006 },
+        externalUrl: "https://grouped-gallery.test/third"
+      }),
+      createSyntheticGalleryExhibition({
+        id: "unique-gallery-neighbor",
+        title: "Unique Gallery Neighbor",
+        galleryName: "Unique Gallery Neighbor",
+        coordinates: { latitude: 40.7473, longitude: -74.0062 },
+        externalUrl: "https://unique-gallery-neighbor.test/show"
+      })
+    ]
+  });
+  const groupedStop = groupedStopWalk.stops.find(
+    (stop) => stop.exhibition.galleryName === "Grouped Gallery"
+  );
+
+  assert(
+    groupedStopWalk.stops.length === 2 &&
+      groupedStop?.groupedExhibitionCount === 3 &&
+      groupedStop.exhibitions.map((exhibition) => exhibition.title).join("|") ===
+        "Grouped Gallery First|Grouped Gallery Second|Grouped Gallery Third" &&
+      groupedStop.reasons.includes("Grouped 3 shows here") &&
+      groupedStopWalk.readinessCopy.includes("only 2 unique gallery stops"),
+    "Same-gallery exhibitions should become one route stop while preserving all grouped show titles and thin-route honesty."
+  );
+
   const verifiedPreferenceWalk = createGalleryWalkPlan({
     areaId: "nyc",
     mode: "quick-loop",
@@ -696,8 +749,84 @@ async function main() {
 
   assert(
     upperEastSideWalk.stops.some((stop) => stop.exhibition.galleryName === "Skarstedt") &&
+      upperEastSideWalk.stops.some(
+        (stop) =>
+          stop.exhibition.galleryName === "Gagosian" &&
+          stop.exhibition.address === "980 Madison Ave, New York, NY" &&
+          stop.groupedExhibitionCount === 2
+      ) &&
       upperEastSideWalk.readinessCopy.includes("repeats a gallery"),
-    "Upper East Side routing should add a unique verified stop but honestly flag repeated-gallery quality when alternatives are thin."
+    "Upper East Side routing should group same-address Gagosian shows and honestly flag repeated-gallery quality when alternatives are thin."
+  );
+
+  const timedOpeningWalk = createGalleryWalkPlan({
+    areaId: "nyc",
+    mode: "opening-night",
+    neighborhood: "Chelsea",
+    referenceNow: "2026-07-09T17:30:00-04:00",
+    exhibitions: [
+      createSyntheticGalleryExhibition({
+        id: "opening-ended",
+        title: "Already Ended Opening",
+        galleryName: "Already Ended Gallery",
+        coordinates: { latitude: 40.747, longitude: -74.006 },
+        receptionAt: "2026-07-09T15:00:00-04:00",
+        specialEvents: [
+          {
+            id: "opening-ended-event",
+            kind: "opening-reception",
+            title: "Ended reception",
+            startsAt: "2026-07-09T15:00:00-04:00",
+            endsAt: "2026-07-09T16:00:00-04:00"
+          }
+        ],
+        externalUrl: "https://opening-ended.test/show"
+      }),
+      createSyntheticGalleryExhibition({
+        id: "opening-six",
+        title: "Six PM Opening",
+        galleryName: "Six PM Gallery",
+        coordinates: { latitude: 40.7472, longitude: -74.0061 },
+        receptionAt: "2026-07-09T18:00:00-04:00",
+        specialEvents: [
+          {
+            id: "opening-six-event",
+            kind: "opening-reception",
+            title: "Six PM reception",
+            startsAt: "2026-07-09T18:00:00-04:00",
+            endsAt: "2026-07-09T20:00:00-04:00"
+          }
+        ],
+        externalUrl: "https://opening-six.test/show"
+      }),
+      createSyntheticGalleryExhibition({
+        id: "opening-seven",
+        title: "Seven PM Opening",
+        galleryName: "Seven PM Gallery",
+        coordinates: { latitude: 40.7474, longitude: -74.0062 },
+        receptionAt: "2026-07-09T19:00:00-04:00",
+        specialEvents: [
+          {
+            id: "opening-seven-event",
+            kind: "opening-reception",
+            title: "Seven PM reception",
+            startsAt: "2026-07-09T19:00:00-04:00",
+            endsAt: "2026-07-09T21:00:00-04:00"
+          }
+        ],
+        externalUrl: "https://opening-seven.test/show"
+      })
+    ]
+  });
+
+  assert(
+    timedOpeningWalk.stops.map((stop) => stop.exhibition.id).join("|") ===
+      "opening-six|opening-seven" &&
+      timedOpeningWalk.guidance.includes("Start at 6 PM") &&
+      timedOpeningWalk.guidance.includes("for 7 PM") &&
+      timedOpeningWalk.selectionReasons.includes("Best opening-time sequence") &&
+      timedOpeningWalk.stops[0]?.reasons.includes("Starts at 6 PM"),
+    "Opening crawl should exclude already-ended events, order by reception time, and explain the timing sequence."
   );
 
   const thinFallbackWalk = createGalleryWalkPlan({
@@ -1089,10 +1218,19 @@ async function main() {
     hudsonWithApprovedSubmission,
     galleryReferenceNow
   ).find((neighborhood) => neighborhood.neighborhood === "Kingston");
+  const kingstonGroupedWalk = createGalleryWalkPlan({
+    areaId: "hudson",
+    mode: "two-hour",
+    neighborhood: "Kingston",
+    exhibitions: hudsonWithApprovedSubmission,
+    referenceNow: galleryReferenceNow
+  });
 
   assert(
-    kingstonReadinessAfter?.canSupportWalk,
-    "Approved submission inventory should be able to change neighborhood walk readiness."
+    kingstonReadinessAfter && !kingstonReadinessAfter.canSupportWalk &&
+      kingstonGroupedWalk.stops.length === 1 &&
+      kingstonGroupedWalk.stops[0]?.groupedExhibitionCount === 2,
+    "Approved submissions at one Kingston gallery should add grouped inventory without faking physical walk readiness."
   );
 
   const nycDataAudit = createGalleryMarketDataAudit("nyc", {
@@ -1129,8 +1267,8 @@ async function main() {
   assert(
     nycDataAudit.officialLinkCoveragePercent === 100 &&
       laDataAudit.hoursCoveragePercent === 100 &&
-      hudsonDataAudit.walkReadyNeighborhoods.includes("Kingston"),
-    "Gallery market data audits should report coverage and walk-ready neighborhoods."
+      !hudsonDataAudit.walkReadyNeighborhoods.includes("Kingston"),
+    "Gallery market data audits should report coverage and keep same-address submission depth out of walk-ready neighborhoods."
   );
   assert(
     nycDataAudit.needsReviewSourceIds.length > 0 &&
