@@ -582,50 +582,64 @@ function GalleryConciergePanel({
     <View style={styles.conciergePanel}>
       <View style={styles.conciergeHeader}>
         <View style={styles.conciergeTitleBlock}>
-          <Text style={styles.routeFirstKicker}>Concierge</Text>
+          <View style={styles.conciergeBadgeRow}>
+            <Text style={styles.conciergeBadge}>Concierge</Text>
+            <Text style={styles.conciergeBadgeMeta}>{suggestions.length} live moves</Text>
+          </View>
           <Text style={styles.conciergeTitle}>{primarySuggestion?.title ?? "What to do next"}</Text>
           <Text style={styles.conciergeCopy}>
             {primarySuggestion?.body ?? "A few source-aware moves for tonight."}
           </Text>
+          {primarySuggestion ? (
+            <View style={styles.routeReasonRow}>
+              {primarySuggestion.reasons.slice(0, 3).map((reason) => (
+                <Text key={reason} style={styles.conciergeReasonPill}>{reason}</Text>
+              ))}
+            </View>
+          ) : null}
         </View>
         {primarySuggestion ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={primarySuggestion.ctaLabel}
             onPress={() => onSuggestion(primarySuggestion)}
-            style={styles.primaryLightButton}
+            style={[styles.primaryLightButton, styles.conciergePrimaryButton]}
           >
-            <Text style={styles.primaryLightButtonText}>{primarySuggestion.ctaLabel}</Text>
+            <Text style={[styles.primaryLightButtonText, styles.conciergePrimaryButtonText]}>
+              {primarySuggestion.ctaLabel}
+            </Text>
           </Pressable>
         ) : null}
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.conciergeRail}
-      >
-        {suggestions.slice(1).map((suggestion) => (
-          <Pressable
-            key={suggestion.id}
-            accessibilityRole="button"
-            accessibilityLabel={suggestion.title}
-            onPress={() => onSuggestion(suggestion)}
-            style={styles.conciergeSuggestionCard}
-          >
-            <Text style={styles.conciergeSuggestionTitle}>{suggestion.title}</Text>
-            <Text style={styles.conciergeSuggestionBody} numberOfLines={3}>
-              {suggestion.body}
-            </Text>
-            <View style={styles.routeReasonRow}>
-              {suggestion.reasons.slice(0, 3).map((reason) => (
-                <Text key={reason} style={styles.walkStopReason}>{reason}</Text>
-              ))}
-            </View>
-            <Text style={styles.conciergeSuggestionCta}>{suggestion.ctaLabel}</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+      {suggestions.length > 1 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.conciergeRail}
+        >
+          {suggestions.slice(1).map((suggestion) => (
+            <Pressable
+              key={suggestion.id}
+              accessibilityRole="button"
+              accessibilityLabel={suggestion.title}
+              onPress={() => onSuggestion(suggestion)}
+              style={styles.conciergeSuggestionCard}
+            >
+              <Text style={styles.conciergeSuggestionTitle}>{suggestion.title}</Text>
+              <Text style={styles.conciergeSuggestionBody} numberOfLines={3}>
+                {suggestion.body}
+              </Text>
+              <View style={styles.routeReasonRow}>
+                {suggestion.reasons.slice(0, 3).map((reason) => (
+                  <Text key={reason} style={styles.walkStopReason}>{reason}</Text>
+                ))}
+              </View>
+              <Text style={styles.conciergeSuggestionCta}>{suggestion.ctaLabel}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      ) : null}
     </View>
   );
 }
@@ -917,7 +931,11 @@ function RouteCommandPanel({
               </Pressable>
             ) : null}
           </View>
-          <View style={styles.routeFirstModeGrid}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.routeModeRail}
+          >
             {walkModeOptions.map((mode) => (
               <RouteModeButton
                 key={mode}
@@ -927,7 +945,7 @@ function RouteCommandPanel({
                 onPress={() => onMode(mode)}
               />
             ))}
-          </View>
+          </ScrollView>
           <View style={styles.activeWalkActionRow}>
             <Pressable
               accessibilityRole="button"
@@ -2848,6 +2866,11 @@ export function GalleryApp() {
             </View>
           </ImageBackground>
 
+          <GalleryConciergePanel
+            suggestions={conciergeSuggestions}
+            onSuggestion={handleConciergeSuggestion}
+          />
+
           <RouteCommandPanel
             walkPlan={walkPlan}
             walkMode={walkMode}
@@ -2883,11 +2906,6 @@ export function GalleryApp() {
             onSaveWalk={saveCurrentWalk}
             walkRecapRewardCopy={walkRecapRewardCopy}
             compact={isCompactLayout}
-          />
-
-          <GalleryConciergePanel
-            suggestions={conciergeSuggestions}
-            onSuggestion={handleConciergeSuggestion}
           />
 
           {shareStatus ? (
@@ -3133,7 +3151,11 @@ export function GalleryApp() {
               <Text style={styles.routePlannerModeHint}>
                 Switch modes here to preview a draft route without changing your active walk.
               </Text>
-              <View style={styles.routeModeGrid}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.routeModeRail}
+              >
                 {walkModeOptions.map((mode) => (
                   <RouteModeButton
                     key={mode}
@@ -3143,7 +3165,7 @@ export function GalleryApp() {
                     onPress={() => setWalkMode(mode)}
                   />
                 ))}
-              </View>
+              </ScrollView>
             </View>
           ) : null}
           <View style={styles.routePlannerFacts}>
@@ -3954,8 +3976,8 @@ const styles = StyleSheet.create({
     textTransform: "uppercase"
   },
   conciergePanel: {
-    backgroundColor: colors.paper,
-    borderColor: "rgba(17, 17, 17, 0.08)",
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
     borderRadius: radii.md,
     borderWidth: 1,
     gap: spacing.md,
@@ -3974,15 +3996,38 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 220
   },
-  conciergeTitle: {
+  conciergeBadgeRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm
+  },
+  conciergeBadge: {
+    backgroundColor: colors.paper,
+    borderRadius: radii.pill,
     color: colors.ink,
-    fontSize: 21,
+    fontSize: 11,
     fontWeight: "900",
-    lineHeight: 26,
-    marginTop: spacing.xs
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    textTransform: "uppercase"
+  },
+  conciergeBadgeMeta: {
+    color: "#DAD8D0",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  conciergeTitle: {
+    color: colors.paper,
+    fontSize: 24,
+    fontWeight: "900",
+    lineHeight: 29,
+    marginTop: spacing.sm
   },
   conciergeCopy: {
-    color: colors.mutedInk,
+    color: "#E8E1D7",
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 18,
@@ -3993,33 +4038,53 @@ const styles = StyleSheet.create({
     paddingRight: spacing.lg
   },
   conciergeSuggestionCard: {
-    backgroundColor: colors.fog,
-    borderColor: colors.line,
+    backgroundColor: "rgba(255, 253, 248, 0.08)",
+    borderColor: "rgba(255, 253, 248, 0.16)",
     borderRadius: radii.md,
     borderWidth: 1,
     gap: spacing.sm,
-    minHeight: 154,
+    minHeight: 146,
     padding: spacing.md,
     width: 238
   },
   conciergeSuggestionTitle: {
-    color: colors.ink,
+    color: colors.paper,
     fontSize: 14,
     fontWeight: "900",
     lineHeight: 19
   },
   conciergeSuggestionBody: {
-    color: colors.mutedInk,
+    color: "#DAD8D0",
     fontSize: 12,
     fontWeight: "700",
     lineHeight: 17
   },
   conciergeSuggestionCta: {
-    color: colors.ink,
+    color: colors.paper,
     fontSize: 11,
     fontWeight: "900",
     marginTop: "auto",
     textTransform: "uppercase"
+  },
+  conciergePrimaryButton: {
+    backgroundColor: colors.paper,
+    borderColor: colors.paper,
+    borderWidth: 1
+  },
+  conciergePrimaryButtonText: {
+    color: colors.ink
+  },
+  conciergeReasonPill: {
+    backgroundColor: "rgba(255, 253, 248, 0.1)",
+    borderColor: "rgba(255, 253, 248, 0.18)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.paper,
+    fontSize: 11,
+    fontWeight: "800",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
   },
   routeFirstPanel: {
     backgroundColor: colors.paper,
@@ -4028,8 +4093,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: spacing.md,
     marginHorizontal: spacing.lg,
-    marginTop: -spacing.md,
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     ...shadows.card
   },
   compactRouteFirstPanel: {
@@ -4085,9 +4150,9 @@ const styles = StyleSheet.create({
   },
   routeFirstTitle: {
     color: colors.ink,
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: "900",
-    lineHeight: 27,
+    lineHeight: 23,
     marginTop: spacing.xs
   },
   routeFirstMeta: {
@@ -4306,6 +4371,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.sm
+  },
+  routeModeRail: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    paddingRight: spacing.lg
   },
   activeWalkActionRow: {
     alignItems: "center",
@@ -4603,11 +4673,10 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: radii.md,
     borderWidth: 1,
-    flexBasis: 136,
-    flexGrow: 1,
-    minHeight: 58,
-    minWidth: 132,
-    padding: spacing.md
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    width: 146
   },
   activeRouteModeButton: {
     backgroundColor: colors.ink,
@@ -4623,9 +4692,9 @@ const styles = StyleSheet.create({
   },
   routeModeDetail: {
     color: colors.mutedInk,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "800",
-    lineHeight: 15,
+    lineHeight: 14,
     marginTop: spacing.xs
   },
   activeRouteModeDetail: {
