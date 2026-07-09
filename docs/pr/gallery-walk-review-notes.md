@@ -21,8 +21,16 @@
 
 ## Route Map Behavior
 - The route preview uses existing stop coordinates to draw a static map-like canvas with projected pins, route line, walking-time labels, and current/next/visited/skipped states.
+- Route confidence is a deterministic local score based on verified stops, open/timing usability, distance, source-review risk, and route readiness.
+- Pin taps focus a stop in the planner. The explicit map buttons remain the external navigation handoff.
 - External Google Maps links remain the navigation handoff for the full route and each stop.
 - This branch does not add a map SDK, live geolocation, backend routing, auth, checkout, Spotify, concerts/ticketing, native packaging, or the ops console.
+
+## Known Limitations
+- Route confidence does not use live location, transit disruptions, weather, or real-time gallery capacity.
+- Source receipts are evidence labels from checked-in verified metadata, not live page fetches.
+- The map preview is intentionally schematic; Google Maps remains the source of truth for turn-by-turn walking.
+- "Use as swap cue" records taste/log intent for the next generated route. It does not yet provide manual drag-and-drop route editing.
 
 ## Validation Checklist
 - `npm run typecheck`

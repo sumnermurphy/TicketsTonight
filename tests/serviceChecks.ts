@@ -1237,9 +1237,15 @@ async function main() {
       routeMapModel.pathPoints.every((point) => point.id.trim().length > 0) &&
       routeMapModel.bounds.north >= routeMapModel.bounds.south &&
       routeMapModel.bounds.east >= routeMapModel.bounds.west &&
+      routeMapModel.confidence.score > 0 &&
+      routeMapModel.confidence.bestStartLabel.includes("Best start") &&
+      routeMapModel.confidence.routeAdvice.some((advice) => advice.includes("verified")) &&
+      routeMapModel.stopAdvisories.length === routeMapModel.pins.length &&
+      routeMapModel.stopAdvisories[0]?.reasons.includes("Start here") &&
+      routeMapModel.segments.every((segment) => segment.detail.length > 0) &&
       activeRouteMapModel.currentPin?.progress === "current" &&
       activeRouteMapModel.nextPin?.progress === "next",
-    "Gallery route map model should expose projected pins, route path points, current/next state, and external map links."
+    "Gallery route map model should expose confidence scoring, advisory stops, projected pins, current/next state, and external map links."
   );
   assert(
     shareCard.shareText.includes(socialEventPlan.title) &&

@@ -696,7 +696,6 @@ function RouteModeButton({
 function RouteCommandPanel({
   walkPlan,
   walkMode,
-  routeConfidenceCopy,
   routeVerifiedStopCount,
   routeFixtureStopCount,
   startStop,
@@ -726,7 +725,6 @@ function RouteCommandPanel({
 }: {
   walkPlan: GalleryWalkPlan;
   walkMode: GalleryWalkMode;
-  routeConfidenceCopy: string;
   routeVerifiedStopCount: number;
   routeFixtureStopCount: number;
   startStop?: GalleryWalkStop;
@@ -768,7 +766,7 @@ function RouteCommandPanel({
   const progressCopy =
     showingActiveWalk && activeWalkProgress
       ? `${activeWalkProgress.completedStopCount}/${activeWalkProgress.totalStopCount} stops complete - ${activeWalkProgress.remainingStopIds.length} remaining`
-      : routeConfidenceCopy;
+      : `${routeMapModel.confidence.label} - ${routeMapModel.confidence.bestStartLabel}`;
   const activeNextCopy =
     displayNextStop && activeWalkNextLeg
       ? `${activeWalkNextLeg.walkingMinutes} min, ${activeWalkNextLeg.distanceMiles.toFixed(1)} mi`
@@ -1077,7 +1075,10 @@ function WalkStopRow({
   isNext,
   isLast,
   progress,
-  freshnessLabel
+  freshnessLabel,
+  advisory,
+  highlighted,
+  onHighlight
 }: {
   stop: GalleryWalkPlan["stops"][number];
   leg?: GalleryWalkPlan["legs"][number];
@@ -1086,6 +1087,9 @@ function WalkStopRow({
   isLast: boolean;
   progress?: GalleryWalkStopProgress;
   freshnessLabel?: string;
+  advisory?: GalleryRouteMapModel["stopAdvisories"][number];
+  highlighted?: boolean;
+  onHighlight?: () => void;
 }) {
   const trust = getGalleryInventoryTrust(stop.exhibition);
   const receipt = createGallerySourceReceipt(stop.exhibition, referenceNow);
@@ -1099,7 +1103,8 @@ function WalkStopRow({
         progress === "current" ? styles.currentWalkStop : null,
         progress === "next" ? styles.nextWalkStop : null,
         progress === "visited" ? styles.visitedWalkStop : null,
-        progress === "skipped" ? styles.skippedWalkStop : null
+        progress === "skipped" ? styles.skippedWalkStop : null,
+        highlighted ? styles.highlightedWalkStop : null
       ]}
     >
       <View style={styles.stopRail}>
@@ -1158,6 +1163,17 @@ function WalkStopRow({
         <Text style={styles.walkStopReceipt} numberOfLines={1}>
           {receipt.label} - {receipt.actionLabel}
         </Text>
+        {advisory ? (
+          <View style={styles.walkStopAdvisory}>
+            <Text style={styles.walkStopAdvisoryTitle}>{advisory.label}</Text>
+            <Text style={styles.walkStopAdvisoryCopy}>{advisory.detail}</Text>
+            <View style={styles.routeReasonRow}>
+              {advisory.reasons.slice(0, 3).map((reason) => (
+                <Text key={reason} style={styles.walkStopReason}>{reason}</Text>
+              ))}
+            </View>
+          </View>
+        ) : null}
       </View>
       {stop.isSaved ? (
         <View style={styles.savedPill}>
@@ -1176,11 +1192,30 @@ function WalkStopRow({
         <MapPin size={16} color={colors.ink} />
         <Text style={styles.mapIconButtonText}>Map</Text>
       </Pressable>
+      {onHighlight ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Highlight ${stop.exhibition.galleryName} on route map`}
+          onPress={onHighlight}
+          style={styles.mapIconButton}
+        >
+          <Route size={16} color={colors.ink} />
+          <Text style={styles.mapIconButtonText}>Focus</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
 
-function RoutePreview({ routeMapModel }: { routeMapModel: GalleryRouteMapModel }) {
+function RoutePreview({
+  routeMapModel,
+  highlightedStopId,
+  onHighlightStop
+}: {
+  routeMapModel: GalleryRouteMapModel;
+  highlightedStopId?: string;
+  onHighlightStop: (stopId: string) => void;
+}) {
   if (routeMapModel.pins.length === 0) {
     return null;
   }
@@ -1188,6 +1223,13 @@ function RoutePreview({ routeMapModel }: { routeMapModel: GalleryRouteMapModel }
   const routePath = routeMapModel.pathPoints
     .map((point) => `${point.xPercent},${point.yPercent}`)
     .join(" ");
+  const focusedPin =
+    routeMapModel.pins.find((pin) => pin.id === highlightedStopId) ??
+    routeMapModel.currentPin ??
+    routeMapModel.pins[0];
+  const focusedAdvisory = routeMapModel.stopAdvisories.find(
+    (advisory) => advisory.stopId === focusedPin?.id
+  );
 
   return (
     <View style={styles.routePreview}>
@@ -1196,6 +1238,20 @@ function RoutePreview({ routeMapModel }: { routeMapModel: GalleryRouteMapModel }
         <Text style={styles.routePreviewTitle}>Route map</Text>
         <Text style={styles.routePreviewMeta}>
           {routeMapModel.mapReadinessLabel} - {routeMapModel.totalDistanceMiles.toFixed(1)} mi
+        </Text>
+      </View>
+      <View style={styles.routeConfidencePanel}>
+        <View style={styles.routeConfidenceHeader}>
+          <Text style={styles.routeConfidenceScore}>{routeMapModel.confidence.score}</Text>
+          <View style={styles.routeConfidenceCopyBlock}>
+            <Text style={styles.routeConfidenceLabel}>{routeMapModel.confidence.label}</Text>
+            <Text style={styles.routeConfidenceMeta}>
+              {routeMapModel.confidence.bestStartLabel}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.routeConfidenceAdvice}>
+          {routeMapModel.confidence.routeAdvice.slice(0, 2).join(" ")}
         </Text>
       </View>
       <View style={styles.routeMapSummaryRow}>
@@ -1210,19 +1266,19 @@ function RoutePreview({ routeMapModel }: { routeMapModel: GalleryRouteMapModel }
         </Text>
       </View>
       <View style={styles.routeMapActionRow}>
-        {routeMapModel.currentPin ? (
+        {focusedPin ? (
           <Pressable
             accessibilityRole="link"
-            accessibilityLabel={`Open map for current stop ${routeMapModel.currentPin.galleryName}`}
+            accessibilityLabel={`Open map for selected stop ${focusedPin.galleryName}`}
             onPress={() => {
-              if (routeMapModel.currentPin) {
-                void Linking.openURL(routeMapModel.currentPin.mapUrl);
+              if (focusedPin) {
+                void Linking.openURL(focusedPin.mapUrl);
               }
             }}
             style={styles.routeMapPrimaryAction}
           >
             <MapPin size={14} color={colors.paper} />
-            <Text style={styles.routeMapPrimaryActionText}>Open current stop</Text>
+            <Text style={styles.routeMapPrimaryActionText}>Open selected stop</Text>
           </Pressable>
         ) : null}
         {routeMapModel.routeMapUrl ? (
@@ -1282,16 +1338,15 @@ function RoutePreview({ routeMapModel }: { routeMapModel: GalleryRouteMapModel }
         {routeMapModel.pins.map((pin) => (
           <Pressable
             key={pin.id}
-            accessibilityRole="link"
-            accessibilityLabel={`Open map for stop ${pin.stopNumber}, ${pin.galleryName}`}
-            onPress={() => {
-              void Linking.openURL(pin.mapUrl);
-            }}
+            accessibilityRole="button"
+            accessibilityLabel={`Focus stop ${pin.stopNumber}, ${pin.galleryName} on the route map`}
+            onPress={() => onHighlightStop(pin.id)}
             style={[
               styles.routeMapPin,
               pin.isCurrent || pin.isNext ? styles.routeMapPinActive : null,
               pin.progress === "visited" ? styles.routeMapPinVisited : null,
               pin.progress === "skipped" ? styles.routeMapPinSkipped : null,
+              pin.id === focusedPin?.id ? styles.routeMapPinSelected : null,
               {
                 left: percentPosition(pin.xPercent),
                 top: percentPosition(pin.yPercent)
@@ -1302,9 +1357,11 @@ function RoutePreview({ routeMapModel }: { routeMapModel: GalleryRouteMapModel }
           </Pressable>
         ))}
         <View style={styles.routeMapCanvasLegend}>
-          <Text style={styles.routeMapCanvasTitle}>{routeMapModel.title}</Text>
+          <Text style={styles.routeMapCanvasTitle}>
+            {focusedPin ? `${focusedPin.stopNumber}. ${focusedPin.galleryName}` : routeMapModel.title}
+          </Text>
           <Text style={styles.routeMapCanvasMeta}>
-            {routeMapModel.pins.length} stops - tap a pin for maps
+            {focusedAdvisory?.label ?? `${routeMapModel.pins.length} stops`} - tap a pin to focus
           </Text>
         </View>
       </View>
@@ -1318,7 +1375,16 @@ function RoutePreview({ routeMapModel }: { routeMapModel: GalleryRouteMapModel }
           const nextSegment = routeMapModel.segments[index];
 
           return (
-            <View key={pin.id} style={styles.routePreviewStop}>
+            <Pressable
+              key={pin.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Focus route stop ${pin.stopNumber}, ${pin.galleryName}`}
+              onPress={() => onHighlightStop(pin.id)}
+              style={[
+                styles.routePreviewStop,
+                pin.id === focusedPin?.id ? styles.selectedRoutePreviewStop : null
+              ]}
+            >
               <View style={styles.routePreviewNodeRow}>
                 <View
                   style={[
@@ -1341,9 +1407,9 @@ function RoutePreview({ routeMapModel }: { routeMapModel: GalleryRouteMapModel }
                 {getRouteProgressLabel(pin.progress)}
               </Text>
               <Text style={styles.routePreviewLeg}>
-                {nextSegment ? nextSegment.label : "Finish"}
+                {nextSegment ? `${nextSegment.label} - ${nextSegment.detail}` : "Finish"}
               </Text>
-            </View>
+            </Pressable>
           );
         })}
       </ScrollView>
@@ -1917,6 +1983,10 @@ function ExhibitionDetailSheet({
   savedIds,
   logEntry,
   routeProgress,
+  routeAdvisory,
+  routeConfidenceLabel,
+  isInDisplayedRoute,
+  hasActiveWalk,
   conciergeReasons,
   feedback,
   onStatus,
@@ -1934,6 +2004,10 @@ function ExhibitionDetailSheet({
   savedIds: string[];
   logEntry?: GalleryLogEntry;
   routeProgress?: GalleryWalkStopProgress;
+  routeAdvisory?: GalleryRouteMapModel["stopAdvisories"][number];
+  routeConfidenceLabel: string;
+  isInDisplayedRoute: boolean;
+  hasActiveWalk: boolean;
   conciergeReasons: string[];
   feedback?: GalleryTasteFeedback;
   onStatus: (status: GalleryLogStatus) => void;
@@ -1950,6 +2024,25 @@ function ExhibitionDetailSheet({
   const trust = getGalleryInventoryTrust(exhibition);
   const sourceReceipt = createGallerySourceReceipt(exhibition, referenceNow);
   const reasons = getGalleryWhyGoReasons(exhibition, allExhibitions, referenceNow, savedIds);
+  const matchReasons = Array.from(
+    new Set([
+      ...conciergeReasons,
+      sourceReceipt.evidenceLabel,
+      ...exhibition.mediums.slice(0, 2).map((medium) => mediumLabels[medium])
+    ])
+  ).slice(0, 5);
+  const routeFitCopy = routeAdvisory
+    ? routeAdvisory.detail
+    : isInDisplayedRoute
+      ? "This exhibition is already part of the displayed route."
+      : hasActiveWalk
+        ? "Not in the active walk yet; use it as a route swap cue before replacing the current route."
+        : "Not in this route yet; start from here to build a more personal path.";
+  const routeActionLabel = isInDisplayedRoute
+    ? "Keep in route"
+    : hasActiveWalk
+      ? "Use as swap cue"
+      : "Add to walk";
   const visual = getGalleryVisual(exhibition);
   const openingTonight = isGalleryOpeningTonight(exhibition, referenceNow);
   const groupedShows = allExhibitions.filter(
@@ -2043,6 +2136,23 @@ function ExhibitionDetailSheet({
           </View>
         ) : null}
 
+        <View style={styles.detailRouteFitBlock}>
+          <View style={styles.detailRouteFitHeader}>
+            <Text style={styles.detailRouteFitPill}>
+              {isInDisplayedRoute ? "In route" : "Route option"}
+            </Text>
+            <Text style={styles.detailRouteFitTitle}>{routeConfidenceLabel}</Text>
+          </View>
+          <Text style={styles.detailRouteFitText}>{routeFitCopy}</Text>
+          {routeAdvisory ? (
+            <View style={styles.routeReasonRow}>
+              {routeAdvisory.reasons.map((reason) => (
+                <Text key={reason} style={styles.routeReasonPill}>{reason}</Text>
+              ))}
+            </View>
+          ) : null}
+        </View>
+
         <Text style={styles.cardDescription}>{exhibition.description}</Text>
 
         {conciergeReasons.length > 0 ? (
@@ -2053,9 +2163,9 @@ function ExhibitionDetailSheet({
         ) : null}
 
         <View style={styles.conciergeDetailBlock}>
-          <Text style={styles.guidanceTitle}>Worth it if you like</Text>
+          <Text style={styles.guidanceTitle}>Why this matches you</Text>
           <View style={styles.routeReasonRow}>
-            {(conciergeReasons.length > 0 ? conciergeReasons : reasons).slice(0, 5).map((reason) => (
+            {(matchReasons.length > 0 ? matchReasons : reasons).slice(0, 5).map((reason) => (
               <Text key={reason} style={styles.routeReasonPill}>{reason}</Text>
             ))}
           </View>
@@ -2135,7 +2245,7 @@ function ExhibitionDetailSheet({
               onPress={onAddToActiveWalk}
               style={styles.secondaryRouteButton}
             >
-              <Text style={styles.secondaryRouteButtonText}>Add to walk</Text>
+              <Text style={styles.secondaryRouteButtonText}>{routeActionLabel}</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
@@ -2274,6 +2384,7 @@ export function GalleryApp() {
   );
   const [query, setQuery] = useState("");
   const [selectedExhibitionId, setSelectedExhibitionId] = useState<string | undefined>();
+  const [highlightedRouteStopId, setHighlightedRouteStopId] = useState<string | undefined>();
   const [activeWalkSession, setActiveWalkSession] = useState<GalleryWalkSession | undefined>(
     persistedState?.activeWalkSession
   );
@@ -2505,14 +2616,31 @@ export function GalleryApp() {
         : undefined,
     [activeWalkPlan, activeWalkSession, logEntries]
   );
+  const displayWalkPlan =
+    activeWalkSession?.status === "active" && activeWalkPlan ? activeWalkPlan : walkPlan;
   const displayRouteMapModel = useMemo(
     () =>
       createGalleryRouteMapModel(
-        activeWalkSession?.status === "active" && activeWalkPlan ? activeWalkPlan : walkPlan,
+        displayWalkPlan,
         activeWalkSession?.status === "active" ? activeWalkSession : undefined
       ),
-    [activeWalkPlan, activeWalkSession, walkPlan]
+    [activeWalkSession, displayWalkPlan]
   );
+  const displayRouteAdvisoryById = useMemo(
+    () =>
+      new Map(
+        displayRouteMapModel.stopAdvisories.map((advisory) => [advisory.stopId, advisory] as const)
+      ),
+    [displayRouteMapModel]
+  );
+  useEffect(() => {
+    if (
+      highlightedRouteStopId &&
+      !displayRouteMapModel.pins.some((pin) => pin.id === highlightedRouteStopId)
+    ) {
+      setHighlightedRouteStopId(undefined);
+    }
+  }, [displayRouteMapModel, highlightedRouteStopId]);
   const activeWalkRouteMatchesCurrent = Boolean(
     activeWalkSession &&
       activeWalkSession.areaId === selectedAreaId &&
@@ -2579,18 +2707,6 @@ export function GalleryApp() {
   const routeFixtureStopCount = walkPlan.stops.filter((stop) =>
     getGalleryInventoryTrust(stop.exhibition).isFixture
   ).length;
-  const routeUniqueGalleryCount = new Set(
-    walkPlan.stops.map((stop) => stop.exhibition.galleryName.toLowerCase())
-  ).size;
-  const routeConfidenceCopy =
-    walkPlan.stops.length === 0
-      ? "Not ready: no verified route stops yet."
-      : routeVerifiedStopCount === walkPlan.stops.length &&
-          routeUniqueGalleryCount === walkPlan.stops.length
-      ? "Reliable: all stops verified and unique."
-      : routeVerifiedStopCount >= Math.min(2, walkPlan.stops.length)
-        ? `Usable: ${routeVerifiedStopCount} verified stops, ${routeFixtureStopCount} demo.`
-        : "Thin: verified route supply is still limited.";
   const routeScopeLabel = selectedNeighborhood ?? walkPlan.neighborhood;
   const compactAreaName =
     selectedAreaId === "nyc" ? "NYC" : selectedAreaId === "la" ? "LA" : "Hudson";
@@ -2631,6 +2747,15 @@ export function GalleryApp() {
   const selectedActiveWalkProgress = selectedActiveWalkStop
     ? activeWalkProgress?.stopProgressById[selectedActiveWalkStop.exhibition.id]
     : undefined;
+  const selectedDisplayRouteStop = selectedExhibition
+    ? displayWalkPlan.stops.find((stop) =>
+        stop.exhibitions.some((exhibition) => exhibition.id === selectedExhibition.id)
+      )
+    : undefined;
+  const selectedRouteAdvisory = selectedDisplayRouteStop
+    ? displayRouteAdvisoryById.get(selectedDisplayRouteStop.exhibition.id)
+    : undefined;
+  const selectedIsInDisplayedRoute = Boolean(selectedDisplayRouteStop);
   const activeRouteStopIds = activeWalkPlan?.stops.map((stop) => stop.exhibition.id) ?? [];
   const personalizedPicks = useMemo(
     () =>
@@ -2899,9 +3024,19 @@ export function GalleryApp() {
   }
 
   function addExhibitionToActiveWalk(exhibition: GalleryExhibition) {
+    const alreadyInActiveRoute = activeWalkPlan?.stops.some((stop) =>
+      stop.exhibitions.some((candidate) => candidate.id === exhibition.id)
+    );
+
     setLogStatus(exhibition.id, "want-to-see");
     recordTasteFeedback(exhibition.id, "more-like-this");
-    setShareStatus("Added to your intent signals for the next route.");
+    setShareStatus(
+      alreadyInActiveRoute
+        ? "Already in the displayed route."
+        : activeWalkSession?.status === "active"
+          ? "Saved as a swap cue for the next route draft."
+          : "Added to your intent signals for the next route."
+    );
   }
 
   async function shareExhibition(exhibition: GalleryExhibition) {
@@ -3144,7 +3279,6 @@ export function GalleryApp() {
           <RouteCommandPanel
             walkPlan={walkPlan}
             walkMode={walkMode}
-            routeConfidenceCopy={routeConfidenceCopy}
             routeVerifiedStopCount={routeVerifiedStopCount}
             routeFixtureStopCount={routeFixtureStopCount}
             startStop={startStop}
@@ -3437,9 +3571,9 @@ export function GalleryApp() {
               <Text style={styles.routeCommandMeta}>{walkPlan.guidance}</Text>
             </View>
             <View style={styles.routeQualityStack}>
-              <Text style={styles.routeQualityLabel}>{walkPlan.readinessLevel}</Text>
+              <Text style={styles.routeQualityLabel}>{displayRouteMapModel.confidence.score}</Text>
               <Text style={styles.routeQualityMeta}>
-                {walkPlan.canStartNow ? "Can start now" : "Timing check needed"}
+                {displayRouteMapModel.confidence.label}
               </Text>
             </View>
           </View>
@@ -3474,8 +3608,12 @@ export function GalleryApp() {
           </View>
           <View style={styles.routeGuidance}>
             <Text style={styles.guidanceTitle}>Why this route works</Text>
-            <Text style={styles.routeConfidenceText}>{routeConfidenceCopy}</Text>
-            <Text style={styles.guidanceCopy}>{walkPlan.readinessCopy}</Text>
+            <Text style={styles.routeConfidenceText}>
+              {displayRouteMapModel.confidence.bestStartLabel}
+            </Text>
+            <Text style={styles.guidanceCopy}>
+              {displayRouteMapModel.confidence.routeAdvice.join(" ")}
+            </Text>
             <View style={styles.routeReasonRow}>
               {walkPlan.selectionReasons.slice(0, 4).map((reason) => (
                 <Text key={reason} style={styles.routeReasonPill}>{reason}</Text>
@@ -3523,7 +3661,11 @@ export function GalleryApp() {
               ))}
             </View>
           ) : null}
-          <RoutePreview routeMapModel={displayRouteMapModel} />
+          <RoutePreview
+            routeMapModel={displayRouteMapModel}
+            highlightedStopId={highlightedRouteStopId}
+            onHighlightStop={setHighlightedRouteStopId}
+          />
           <View style={styles.walkStops}>
             {walkPlan.stops.length === 0 ? (
               <View style={styles.emptyRouteState}>
@@ -3542,6 +3684,9 @@ export function GalleryApp() {
                   isLast={index === walkPlan.stops.length - 1}
                   progress={routeStopProgressById?.[stop.exhibition.id]}
                   freshnessLabel={getGalleryFreshnessState(stop.exhibition, referenceNow).label}
+                  advisory={displayRouteAdvisoryById.get(stop.exhibition.id)}
+                  highlighted={highlightedRouteStopId === stop.exhibition.id}
+                  onHighlight={() => setHighlightedRouteStopId(stop.exhibition.id)}
                 />
               ))
             )}
@@ -3620,6 +3765,10 @@ export function GalleryApp() {
               savedIds={savedIds}
               logEntry={logEntryById.get(selectedExhibition.id)}
               routeProgress={selectedActiveWalkProgress}
+              routeAdvisory={selectedRouteAdvisory}
+              routeConfidenceLabel={displayRouteMapModel.confidence.label}
+              isInDisplayedRoute={selectedIsInDisplayedRoute}
+              hasActiveWalk={activeWalkSession?.status === "active"}
               conciergeReasons={selectedConciergeReasons}
               feedback={feedbackByExhibitionId.get(selectedExhibition.id)}
               onStatus={(status) => setLogStatus(selectedExhibition.id, status)}
@@ -5160,7 +5309,14 @@ const styles = StyleSheet.create({
   routePreviewStop: {
     marginRight: spacing.md,
     minHeight: 86,
+    padding: spacing.xs,
     width: 124
+  },
+  selectedRoutePreviewStop: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1
   },
   routePreviewNodeRow: {
     alignItems: "center",
@@ -5269,6 +5425,47 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900"
   },
+  routeConfidencePanel: {
+    backgroundColor: colors.ink,
+    borderRadius: radii.md,
+    gap: spacing.sm,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.md,
+    padding: spacing.md
+  },
+  routeConfidenceHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.md
+  },
+  routeConfidenceScore: {
+    color: colors.paper,
+    fontSize: 30,
+    fontWeight: "900",
+    lineHeight: 34
+  },
+  routeConfidenceCopyBlock: {
+    flex: 1,
+    minWidth: 0
+  },
+  routeConfidenceLabel: {
+    color: colors.paper,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  routeConfidenceMeta: {
+    color: "#DAD8D0",
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17,
+    marginTop: 2
+  },
+  routeConfidenceAdvice: {
+    color: "#F0ECE4",
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17
+  },
   routeMapCanvas: {
     backgroundColor: colors.fog,
     borderColor: colors.line,
@@ -5358,6 +5555,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.line,
     borderColor: colors.mutedInk
   },
+  routeMapPinSelected: {
+    borderColor: colors.gold,
+    borderWidth: 3,
+    height: 34,
+    transform: [{ translateX: -17 }, { translateY: -17 }],
+    width: 34
+  },
   routeMapPinText: {
     color: colors.paper,
     fontSize: 12,
@@ -5435,6 +5639,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fog,
     borderRadius: radii.md,
     opacity: 0.7,
+    paddingHorizontal: spacing.md
+  },
+  highlightedWalkStop: {
+    backgroundColor: colors.paper,
+    borderColor: colors.gold,
+    borderRadius: radii.md,
+    borderWidth: 1,
     paddingHorizontal: spacing.md
   },
   stopRail: {
@@ -5540,6 +5751,26 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     marginTop: 2
+  },
+  walkStopAdvisory: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    padding: spacing.sm
+  },
+  walkStopAdvisoryTitle: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  walkStopAdvisoryCopy: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 16
   },
   routeReasonRow: {
     flexDirection: "row",
@@ -5678,7 +5909,7 @@ const styles = StyleSheet.create({
     ...shadows.card
   },
   detailVisual: {
-    minHeight: 300,
+    minHeight: 340,
     justifyContent: "space-between",
     overflow: "hidden",
     padding: spacing.md
@@ -5704,9 +5935,11 @@ const styles = StyleSheet.create({
   },
   detailVisualTitle: {
     color: colors.paper,
-    fontSize: 30,
+    flexShrink: 1,
+    fontSize: 26,
     fontWeight: "900",
-    lineHeight: 35
+    lineHeight: 31,
+    maxWidth: "100%"
   },
   detailBody: {
     gap: spacing.md,
@@ -5841,9 +6074,11 @@ const styles = StyleSheet.create({
   },
   cardDescription: {
     color: colors.ink,
+    flexShrink: 1,
     fontSize: 14,
     fontWeight: "600",
-    lineHeight: 20
+    lineHeight: 20,
+    maxWidth: "100%"
   },
   cardSignalRow: {
     flexDirection: "row",
@@ -5900,6 +6135,42 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: spacing.md,
     padding: spacing.md
+  },
+  detailRouteFitBlock: {
+    backgroundColor: colors.ink,
+    borderRadius: radii.md,
+    gap: spacing.sm,
+    padding: spacing.md
+  },
+  detailRouteFitHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm
+  },
+  detailRouteFitPill: {
+    backgroundColor: colors.paper,
+    borderRadius: radii.pill,
+    color: colors.ink,
+    fontSize: 10,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    textTransform: "uppercase"
+  },
+  detailRouteFitTitle: {
+    color: colors.paper,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "900",
+    minWidth: 120
+  },
+  detailRouteFitText: {
+    color: "#F0ECE4",
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17
   },
   currentActiveRouteDetail: {
     backgroundColor: colors.paper,
