@@ -1,0 +1,44 @@
+{
+  "name": "tickets-tonight",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo start --ios",
+    "android": "expo start --android",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "audit:coverage": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/coverageAudit.ts && node .audit-build/scripts/coverageAudit.js",
+    "audit:calendar-imports": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/calendarImportHealthAudit.ts && node .audit-build/scripts/calendarImportHealthAudit.js",
+    "audit:quality": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/discoveryQualityAudit.ts && node .audit-build/scripts/discoveryQualityAudit.js",
+    "audit:sources": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/sourceReadinessAudit.ts && node .audit-build/scripts/sourceReadinessAudit.js",
+    "audit:source-directory": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/sourceDirectoryAudit.ts && node .audit-build/scripts/sourceDirectoryAudit.js",
+    "audit:live-supply": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/liveSupplyAudit.ts && node .audit-build/scripts/liveSupplyAudit.js",
+    "audit:live-inventory": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/liveInventoryAudit.ts && node .audit-build/scripts/liveInventoryAudit.js",
+    "audit:providers": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/providerDiagnostics.ts && node .audit-build/scripts/providerDiagnostics.js",
+    "audit:spotify": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/spotifyConfigAudit.ts && node .audit-build/scripts/spotifyConfigAudit.js",
+    "audit:galleries": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/galleryDiscoveryAudit.ts && node .audit-build/scripts/galleryDiscoveryAudit.js",
+    "test:services": "tsc --ignoreConfig --outDir .test-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict tests/serviceChecks.ts && node .test-build/tests/serviceChecks.js"
+  },
+  "engines": {
+    "node": ">=20.19.4"
+  },
+  "dependencies": {
+    "expo": "57.0.4",
+    "expo-auth-session": "57.0.2",
+    "expo-crypto": "57.0.0",
+    "expo-status-bar": "57.0.0",
+    "expo-web-browser": "57.0.0",
+    "lucide-react-native": "1.23.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.0",
+    "react-native-svg": "15.15.4",
+    "react-native-web": "0.21.2"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.17",
+    "typescript": "6.0.3"
+  }
+}

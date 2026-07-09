@@ -1,0 +1,723 @@
+import { categoryLabels, shows } from "../data/catalog";
+import { normalizedLocalCalendarShows } from "./calendarFeedProvider";
+import { normalizedPartnerFeedShows } from "./feedProvider";
+import type {
+  DateWindow,
+  EventProvider,
+  InventorySource,
+  Recommendation,
+  RecommendationContext,
+  RecommendationMatch,
+  Show,
+  ShowSearchFilters,
+  ShowCategory,
+  TicketOffer
+} from "../types";
+
+const normalize = (value: string) => value.trim().toLowerCase().replace(/[-_]+/g, " ");
+const baseShows = [...shows, ...normalizedPartnerFeedShows, ...normalizedLocalCalendarShows];
+const runtimeShows = new Map<string, Show>();
+const sourceDisplayPriority: Record<InventorySource, number> = {
+  "venue-direct": 60,
+  "calendar-feed": 55,
+  "partner-feed": 50,
+  promoter: 45,
+  "primary-marketplace": 35,
+  "verified-resale": 20
+};
+
+export function rememberShows(candidates: Show[]): Show[] {
+  const mergedShows = dedupeShows(candidates);
+  const mergedByKey = new Map(mergedShows.map((show) => [getShowDedupeKey(show), show]));
+
+  for (const candidate of candidates) {
+    runtimeShows.set(candidate.id, mergedByKey.get(getShowDedupeKey(candidate)) ?? candidate);
+  }
+
+  for (const show of mergedShows) {
+    runtimeShows.set(show.id, show);
+  }
+
+  return mergedShows;
+}
+
+export function getCatalogShows(): Show[] {
+  return dedupeShows([...baseShows, ...runtimeShows.values()]);
+}
+
+export function filterShows(candidates: Show[], filters: ShowSearchFilters): Show[] {
+  const query = normalize(filters.query);
+  const neighborhoods = new Set((filters.neighborhoods ?? []).map(normalize));
+  const maxPriceCents = filters.maxPriceCents;
+
+  const filteredShows = candidates
+    .filter((show) => show.areaId === filters.areaId)
+    .filter((show) => isWithinDateWindow(show.startsAt, filters.dateWindow, filters.referenceNow))
+    .filter((show) =>
+      filters.onlyDeals ? show.ticketOffers.some((offer) => Boolean(offer.deal)) : true
+    )
+    .filter((show) =>
+      maxPriceCents === undefined
+        ? true
+        : show.ticketOffers.some(
+            (offer) => offer.priceCents !== undefined && offer.priceCents <= maxPriceCents
+          )
+    )
+    .filter((show) =>
+      filters.categories.length === 0 ? true : filters.categories.includes(show.category)
+    )
+    .filter((show) =>
+      neighborhoods.size === 0 ? true : neighborhoods.has(normalize(show.neighborhood))
+    )
+    .filter((show) => {
+      if (!query) {
+        return true;
+      }
+
+      const searchableText = [
+        show.title,
+        show.artistOrCompany,
+        show.venue,
+        show.neighborhood,
+        show.category,
+        ...show.vibe
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return normalize(searchableText).includes(query);
+    })
+    .sort((first, second) => compareShows(first, second, filters.sortMode ?? "soonest"));
+
+  return shapeDiscoveryResults(filteredShows, filters);
+}
+
+export function searchShows(filters: ShowSearchFilters): Show[] {
+  return filterShows(getCatalogShows(), filters);
+}
+
+export function getRecommendedShows(context: RecommendationContext): Recommendation[] {
+  return getRecommendedShowsFromCatalog(getCatalogShows(), context);
+}
+
+export function getRecommendedShowsFromCatalog(
+  candidates: Show[],
+  context: RecommendationContext
+): Recommendation[] {
+  const artistSignals = normalizeSignals(context.followedArtists ?? []);
+  const trackSignals = normalizeSignals(context.spotifyTopTracks ?? []);
+  const genreSignals = normalizeSignals(context.spotifyTopGenres ?? []);
+  const recentCategories = new Set(context.recentCategories ?? []);
+
+  return candidates
+    .filter((show) => show.areaId === context.areaId)
+    .map((show) => {
+      const showText = normalize(
+        [show.title, show.artistOrCompany, show.venue, show.category, ...show.vibe].join(" ")
+      );
+      const matches = getRecommendationMatches({
+        show,
+        showText,
+        artistSignals,
+        trackSignals,
+        genreSignals,
+        recentCategories
+      });
+      const matchScore = getRecommendationMatchScore(matches);
+      const score = matchScore ? matchScore + getMarketRecommendationBoost(show) : 0;
+
+      return {
+        show,
+        score,
+        reason: createRecommendationReason(show, matches),
+        matches
+      };
+    })
+    .filter(({ score }) => score > 0)
+    .sort(
+      (first, second) =>
+        second.score - first.score || first.show.startsAt.localeCompare(second.show.startsAt)
+    );
+}
+
+export function getSpotifyMatchableShows(candidates: Show[]): Show[] {
+  return candidates.filter(hasSpotifyRecommendationSignals);
+}
+
+function normalizeSignals(values: string[]): Map<string, string> {
+  const signals = new Map<string, string>();
+
+  for (const value of values) {
+    const normalizedValue = normalize(value);
+
+    if (normalizedValue) {
+      signals.set(normalizedValue, value);
+    }
+  }
+
+  return signals;
+}
+
+function findContainedSignal(showText: string, signals: Map<string, string>): string | undefined {
+  for (const [normalizedSignal, originalSignal] of signals) {
+    if (showText.includes(normalizedSignal)) {
+      return originalSignal;
+    }
+  }
+
+  return undefined;
+}
+
+function getRecommendationMatches({
+  show,
+  showText,
+  artistSignals,
+  trackSignals,
+  genreSignals,
+  recentCategories
+}: {
+  show: Show;
+  showText: string;
+  artistSignals: Map<string, string>;
+  trackSignals: Map<string, string>;
+  genreSignals: Map<string, string>;
+  recentCategories: Set<ShowCategory>;
+}): RecommendationMatch[] {
+  const matches: RecommendationMatch[] = [];
+  const matchedArtist = findContainedSignal(showText, artistSignals);
+  const matchedTrack = findContainedSignal(showText, trackSignals);
+
+  if (matchedArtist) {
+    matches.push({ kind: "artist", value: matchedArtist });
+  }
+
+  if (matchedTrack) {
+    matches.push({ kind: "track", value: matchedTrack });
+  }
+
+  for (const genre of getGenreMatches(show, genreSignals)) {
+    matches.push({ kind: "genre", value: genre });
+  }
+
+  if (recentCategories.has(show.category)) {
+    matches.push({ kind: "category", value: categoryLabels[show.category] });
+  }
+
+  return matches;
+}
+
+function getRecommendationMatchScore(matches: RecommendationMatch[]): number {
+  const weights: Record<RecommendationMatch["kind"], number> = {
+    artist: 8,
+    track: 5,
+    genre: 3,
+    category: 2
+  };
+
+  return matches.reduce((score, match) => score + weights[match.kind], 0);
+}
+
+function createRecommendationReason(show: Show, matches: RecommendationMatch[]): string {
+  const artistMatch = matches.find((match) => match.kind === "artist");
+  const trackMatch = matches.find((match) => match.kind === "track");
+  const genreMatches = matches.filter((match) => match.kind === "genre");
+  const categoryMatch = matches.find((match) => match.kind === "category");
+
+  if (artistMatch) {
+    return `Because you listen to ${artistMatch.value}`;
+  }
+
+  if (trackMatch) {
+    return `Because "${trackMatch.value}" is in your Spotify top tracks`;
+  }
+
+  if (genreMatches.length) {
+    const [firstGenre] = genreMatches;
+    const extraCount = genreMatches.length - 1;
+
+    return extraCount > 0
+      ? `Matches ${firstGenre!.value} and ${extraCount} more Spotify tastes`
+      : `Matches your ${firstGenre!.value} Spotify taste`;
+  }
+
+  if (categoryMatch) {
+    return `Because your Spotify taste points to ${categoryMatch.value.toLowerCase()}`;
+  }
+
+  return show.neighborhood;
+}
+
+function getMarketRecommendationBoost(show: Show): number {
+  return (
+    Math.round((sourceDisplayPriority[show.source] ?? 0) / 20) +
+    Math.max(0, 3 - Math.floor(show.distanceMiles / 3))
+  );
+}
+
+function getGenreMatches(show: Show, genreSignals: Map<string, string>): string[] {
+  const signalValues = [...show.vibe, ...(show.recommendationSignals ?? []).map(getSignalValue)];
+
+  return uniqueValues(
+    signalValues
+      .map((signal) => genreSignals.get(normalize(signal)))
+      .filter((genre): genre is string => Boolean(genre))
+  );
+}
+
+function hasSpotifyRecommendationSignals(show: Show): boolean {
+  return (show.recommendationSignals ?? []).some((signal) =>
+    ["spotify:", "category:"].some((prefix) => signal.startsWith(prefix))
+  );
+}
+
+function getSignalValue(signal: string): string {
+  const [, rawValue = signal] = signal.split(":");
+
+  return rawValue;
+}
+
+export function getShowById(showId: string): Show | undefined {
+  return runtimeShows.get(showId) ?? getCatalogShows().find((show) => show.id === showId);
+}
+
+export function getBestOffer(show: Show) {
+  return show.ticketOffers.reduce(
+    (best, offer) => {
+      if (!best) {
+        return offer;
+      }
+
+      if (Boolean(offer.deal) && !best.deal) {
+        return offer;
+      }
+
+      return getOfferPriceForSort(offer) < getOfferPriceForSort(best) ? offer : best;
+    },
+    undefined as Show["ticketOffers"][number] | undefined
+  );
+}
+
+function compareShows(
+  first: Show,
+  second: Show,
+  sortMode: NonNullable<ShowSearchFilters["sortMode"]>
+): number {
+  const dateDelta = getStartTime(first) - getStartTime(second);
+
+  if (sortMode === "cheapest") {
+    const priceDelta = getLowestOfferPrice(first) - getLowestOfferPrice(second);
+
+    return priceDelta || dateDelta || first.distanceMiles - second.distanceMiles;
+  }
+
+  if (sortMode === "nearby") {
+    return first.distanceMiles - second.distanceMiles || dateDelta;
+  }
+
+  return dateDelta || first.distanceMiles - second.distanceMiles;
+}
+
+function getLowestOfferPrice(show: Show): number {
+  const prices = show.ticketOffers
+    .map((offer) => offer.priceCents)
+    .filter((price): price is number => price !== undefined);
+
+  return prices.length ? Math.min(...prices) : Number.MAX_SAFE_INTEGER;
+}
+
+function shapeDiscoveryResults(shows: Show[], filters: ShowSearchFilters): Show[] {
+  const resultLimit = normalizePositiveInteger(filters.resultLimit);
+
+  if (!resultLimit || shows.length <= resultLimit) {
+    return shows;
+  }
+
+  if (shouldBalanceDefaultDiscovery(filters)) {
+    return selectBalancedDefaultShows(shows, resultLimit);
+  }
+
+  return shows.slice(0, resultLimit);
+}
+
+function shouldBalanceDefaultDiscovery(filters: ShowSearchFilters): boolean {
+  return (
+    (filters.sortMode ?? "soonest") === "soonest" &&
+    filters.categories.length === 0 &&
+    !filters.query.trim() &&
+    !filters.onlyDeals &&
+    filters.maxPriceCents === undefined &&
+    (filters.neighborhoods?.length ?? 0) === 0
+  );
+}
+
+function selectBalancedDefaultShows(shows: Show[], limit: number): Show[] {
+  const selectedIds = new Set<string>();
+  const originalIndexById = new Map(shows.map((show, index) => [show.id, index]));
+  const showsByCategory = new Map<ShowCategory, Show[]>();
+  const showsBySource = new Map<InventorySource, Show[]>();
+  const activeCategories = new Set<ShowCategory>();
+  const activeSources = new Set<InventorySource>();
+  const selectedCountsByCategory = new Map<ShowCategory, number>();
+
+  for (const show of shows) {
+    activeCategories.add(show.category);
+    activeSources.add(show.source);
+    showsByCategory.set(show.category, [...(showsByCategory.get(show.category) ?? []), show]);
+    showsBySource.set(show.source, [...(showsBySource.get(show.source) ?? []), show]);
+  }
+
+  const minimumPerCategory =
+    activeCategories.size >= limit ? 1 : Math.max(2, Math.min(8, Math.floor(limit / 12)));
+  const maximumPerCategory = Math.max(minimumPerCategory, Math.ceil(limit * 0.35));
+  const selectShow = (show: Show, enforceCategoryMaximum: boolean) => {
+    if (selectedIds.size >= limit || selectedIds.has(show.id)) {
+      return false;
+    }
+
+    const selectedCategoryCount = selectedCountsByCategory.get(show.category) ?? 0;
+
+    if (enforceCategoryMaximum && selectedCategoryCount >= maximumPerCategory) {
+      return false;
+    }
+
+    selectedIds.add(show.id);
+    selectedCountsByCategory.set(show.category, selectedCategoryCount + 1);
+
+    return true;
+  };
+
+  for (const category of activeCategories) {
+    const rankedCategoryShows = [...(showsByCategory.get(category) ?? [])].sort(
+      (first, second) =>
+        getDefaultDiscoveryQualityScore(second) - getDefaultDiscoveryQualityScore(first) ||
+        getStartTime(first) - getStartTime(second)
+    );
+
+    for (const show of rankedCategoryShows.slice(0, minimumPerCategory)) {
+      selectShow(show, true);
+    }
+
+    if (selectedIds.size >= limit) {
+      break;
+    }
+  }
+
+  const prioritizedSources = [...activeSources].sort(
+    (first, second) =>
+      (sourceDisplayPriority[second] ?? 0) - (sourceDisplayPriority[first] ?? 0) ||
+      first.localeCompare(second)
+  );
+
+  for (const source of prioritizedSources) {
+    if (selectedIds.size >= limit) {
+      break;
+    }
+
+    const rankedSourceShows = [...(showsBySource.get(source) ?? [])].sort(
+      (first, second) =>
+        getDefaultDiscoveryQualityScore(second) - getDefaultDiscoveryQualityScore(first) ||
+        getStartTime(first) - getStartTime(second)
+    );
+
+    for (const show of rankedSourceShows) {
+      if (selectShow(show, true)) {
+        break;
+      }
+    }
+  }
+
+  for (const show of shows) {
+    if (selectedIds.size >= limit) {
+      break;
+    }
+
+    selectShow(show, true);
+  }
+
+  if (selectedIds.size < limit) {
+    for (const show of shows) {
+      if (selectedIds.size >= limit) {
+        break;
+      }
+
+      selectShow(show, false);
+    }
+  }
+
+  return shows
+    .filter((show) => selectedIds.has(show.id))
+    .sort((first, second) => originalIndexById.get(first.id)! - originalIndexById.get(second.id)!);
+}
+
+function getDefaultDiscoveryQualityScore(show: Show): number {
+  const bestOffer = getBestOffer(show);
+  const hasTicketLink = show.ticketOffers.some((offer) => Boolean(offer.externalUrl));
+  const hasKnownPrice = show.ticketOffers.some((offer) => offer.priceCents !== undefined);
+
+  return (
+    (sourceDisplayPriority[show.source] ?? 0) +
+    (bestOffer?.deal ? 40 : 0) +
+    (hasTicketLink ? 18 : 0) +
+    (hasKnownPrice ? 8 : 0) +
+    Math.max(0, 16 - Math.round(show.distanceMiles))
+  );
+}
+
+function normalizePositiveInteger(value: number | undefined): number | undefined {
+  if (!Number.isFinite(value) || value === undefined) {
+    return undefined;
+  }
+
+  return Math.max(1, Math.floor(value));
+}
+
+function getStartTime(show: Show): number {
+  return new Date(show.startsAt).getTime();
+}
+
+export function getDealShows(areaId: string): Show[] {
+  return searchShows({ areaId, categories: [], query: "", onlyDeals: true, dateWindow: "all" });
+}
+
+export function isWithinDateWindow(
+  startsAt: string,
+  dateWindow: DateWindow,
+  referenceNow = new Date().toISOString()
+): boolean {
+  const showTime = new Date(startsAt).getTime();
+  const now = new Date(referenceNow).getTime();
+
+  if (showTime < now) {
+    return false;
+  }
+
+  if (dateWindow === "all") {
+    return true;
+  }
+
+  if (dateWindow === "tonight") {
+    return showTime <= now + 18 * 60 * 60 * 1000;
+  }
+
+  if (dateWindow === "week") {
+    return showTime <= now + 7 * 24 * 60 * 60 * 1000;
+  }
+
+  const localEventDay = getLocalDatePartDay(startsAt);
+  const isWeekendDay = localEventDay === 5 || localEventDay === 6 || localEventDay === 0;
+
+  return isWeekendDay && showTime <= now + 7 * 24 * 60 * 60 * 1000;
+}
+
+function getLocalDatePartDay(value: string): number {
+  const datePart = value.slice(0, 10);
+
+  return new Date(`${datePart}T12:00:00Z`).getUTCDay();
+}
+
+export class LocalCatalogProvider implements EventProvider {
+  id = "local-catalog";
+  label = "Local seed catalog";
+
+  async listShows(filters: ShowSearchFilters): Promise<Show[]> {
+    return filterShows(shows, filters);
+  }
+
+  async getShow(showId: string): Promise<Show | undefined> {
+    return shows.find((show) => show.id === showId);
+  }
+}
+
+export class PartnerFeedProvider implements EventProvider {
+  id = "partner-feed";
+  label = "Normalized partner feeds";
+
+  async listShows(filters: ShowSearchFilters): Promise<Show[]> {
+    return filterShows(normalizedPartnerFeedShows, filters);
+  }
+
+  async getShow(showId: string): Promise<Show | undefined> {
+    return normalizedPartnerFeedShows.find((show) => show.id === showId);
+  }
+}
+
+export class CalendarFeedProvider implements EventProvider {
+  id = "calendar-feed";
+  label = "Normalized local calendar feeds";
+
+  async listShows(filters: ShowSearchFilters): Promise<Show[]> {
+    return filterShows(normalizedLocalCalendarShows, filters);
+  }
+
+  async getShow(showId: string): Promise<Show | undefined> {
+    return normalizedLocalCalendarShows.find((show) => show.id === showId);
+  }
+}
+
+export class CompositeEventProvider implements EventProvider {
+  id = "composite-events";
+  label = "Composite event catalog";
+
+  constructor(private readonly providers: EventProvider[]) {}
+
+  async listShows(filters: ShowSearchFilters): Promise<Show[]> {
+    const providerResults = await Promise.allSettled(
+      this.providers.map((provider) => provider.listShows(filters))
+    );
+    const successfulResults = providerResults
+      .filter((result): result is PromiseFulfilledResult<Show[]> => result.status === "fulfilled")
+      .map((result) => result.value);
+
+    if (successfulResults.length === 0) {
+      const firstError = providerResults.find(
+        (result): result is PromiseRejectedResult => result.status === "rejected"
+      );
+
+      throw firstError?.reason instanceof Error
+        ? firstError.reason
+        : new Error("Unable to load event inventory.");
+    }
+
+    const uniqueShows = rememberShows(successfulResults.flat());
+
+    return filterShows(uniqueShows, filters);
+  }
+
+  async getShow(showId: string): Promise<Show | undefined> {
+    for (const provider of this.providers) {
+      const show = await provider.getShow(showId);
+
+      if (show) {
+        rememberShows([show]);
+        return show;
+      }
+    }
+
+    return undefined;
+  }
+}
+
+function dedupeShows(candidates: Show[]): Show[] {
+  const dedupedShows = new Map<string, Show>();
+
+  for (const show of candidates) {
+    const key = getShowDedupeKey(show);
+    const existingShow = dedupedShows.get(key);
+
+    dedupedShows.set(key, existingShow ? mergeDuplicateShows(existingShow, show) : show);
+  }
+
+  return Array.from(dedupedShows.values());
+}
+
+function mergeDuplicateShows(first: Show, second: Show): Show {
+  const displayShow =
+    getShowDisplayScore(second) > getShowDisplayScore(first) ? second : first;
+  const otherShow = displayShow.id === first.id ? second : first;
+
+  return {
+    ...displayShow,
+    description: getRicherText(displayShow.description, otherShow.description),
+    distanceMiles: Math.min(displayShow.distanceMiles, otherShow.distanceMiles),
+    vibe: uniqueValues([...displayShow.vibe, ...otherShow.vibe]),
+    ticketOffers: mergeTicketOffers(displayShow.ticketOffers, otherShow.ticketOffers),
+    recommendationSignals: uniqueValues([
+      ...(displayShow.recommendationSignals ?? []),
+      ...(otherShow.recommendationSignals ?? [])
+    ])
+  };
+}
+
+function mergeTicketOffers(first: TicketOffer[], second: TicketOffer[]): TicketOffer[] {
+  const offers = new Map<string, TicketOffer>();
+
+  for (const offer of [...first, ...second]) {
+    const key = `${offer.source}:${offer.id}`;
+    const existingOffer = offers.get(key);
+
+    if (!existingOffer || getOfferDisplayScore(offer) > getOfferDisplayScore(existingOffer)) {
+      offers.set(key, offer);
+    }
+  }
+
+  return Array.from(offers.values()).sort(
+    (firstOffer, secondOffer) =>
+      getOfferDisplayScore(secondOffer) - getOfferDisplayScore(firstOffer) ||
+      getOfferPriceForSort(firstOffer) - getOfferPriceForSort(secondOffer)
+  );
+}
+
+function getShowDedupeKey(show: Show): string {
+  return [
+    show.areaId,
+    normalizeForDedupe(show.title),
+    normalizeForDedupe(show.venue),
+    getCanonicalStartMinute(show.startsAt)
+  ].join("|");
+}
+
+function getShowDisplayScore(show: Show): number {
+  const hasDeal = show.ticketOffers.some((offer) => Boolean(offer.deal));
+
+  return (
+    sourceDisplayPriority[show.source] +
+    (hasDeal ? 100 : 0) +
+    show.ticketOffers.length * 4 +
+    Math.min(12, Math.round(show.description.length / 60))
+  );
+}
+
+function getOfferDisplayScore(offer: TicketOffer): number {
+  const discountScore = offer.deal ? 100 : 0;
+  const priceScore =
+    offer.priceCents === undefined ? 0 : Math.max(0, 50 - Math.round(offer.priceCents / 1000));
+
+  return sourceDisplayPriority[offer.source] + discountScore + priceScore;
+}
+
+export function getOfferPriceForSort(offer: TicketOffer): number {
+  return offer.priceCents ?? Number.MAX_SAFE_INTEGER;
+}
+
+function getRicherText(first: string, second: string): string {
+  return second.length > first.length ? second : first;
+}
+
+function normalizeForDedupe(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function getCanonicalStartMinute(startsAt: string): string {
+  const parsedTime = new Date(startsAt).getTime();
+
+  if (!Number.isFinite(parsedTime)) {
+    return startsAt.slice(0, 16);
+  }
+
+  return new Date(parsedTime).toISOString().slice(0, 16);
+}
+
+function uniqueValues(values: string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+
+  for (const value of values) {
+    const normalizedValue = value.trim();
+    const key = normalizedValue.toLowerCase();
+
+    if (!normalizedValue || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    unique.push(normalizedValue);
+  }
+
+  return unique;
+}

@@ -1,431 +1,217 @@
-# UCLA CS130 Ticket Tonight's requirement document
+# Tickets Tonight
 
-Introduction
-=============
+Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ballet, opera, plays, theater, comedy, variety, and adjacent live events. The active MVP is discovery, discount tracking, external ticket links, and Spotify-powered recommendations; checkout remains deferred.
 
-Purpose
--------
+## What is built
 
-The purpose of this Software Requirement Specifications (SRS) document
-is to provide a description about the features and use cases of the
-Tickets Tonight App 1.0. It will cover all functional and nonfunctional
-requirements of the product, as well as its UI and technologies being
-used. This document also details the internal software interfaces and
-external dependencies and interfaces. This document will describe the
-whole application system.
+- Expo React Native app with provider-backed local-area event discovery.
+- City selector, near-me area resolution, search, category filters, neighborhood filters, budget filters, sort controls, date windows, deal-only filtering, active-filter summary/reset, grouped result sections, event cards, and a show-detail sheet.
+- First-class category coverage for concerts, DJ sets, dance, ballet, opera, plays, theater, comedy, and variety/adjacent live events.
+- Deal-aware ticket inventory with list prices, savings, access method, inventory source, max quantities, and link-ready market snapshots.
+- Best-bets ranking that lifts urgent deals, local-source picks, nearby shows, and weekend options above the full chronological list.
+- Discount discovery ranking that prioritizes stronger savings and urgent deal windows before checkout is active.
+- Deal alerts can track the current area/category/date filters with optional under-$35, under-$50, or under-$75 price thresholds.
+- External ticket links can be opened from provider-backed offers while in-app checkout remains deferred, including link-only provider listings when live sources do not expose prices.
+- Market coverage audits target New York, Los Angeles, and Hudson with ticket-link, category-lane, and Spotify-matchable inventory counts.
+- Checkout groundwork remains behind services, but purchase UI, account sign-in, and wallet are out of the active MVP for now.
+- Saved shows, deal alerts, in-app deal notifications, and persisted discovery preferences through a replaceable repository layer.
+- Spotify PKCE auth can connect a listener with `user-top-read`, pull top artists, tracks, and genres, and rank provider-backed recommendations in-app.
+- Explicit discovery source plans for New York, Los Angeles, and Hudson so provider work stays focused.
+- Source planning separates broad event APIs from reusable local pipelines, so small venues can fill gaps without turning every venue into a bespoke integration.
+- Local source directory seeds venue calendars, newsletters, partner-feed leads, and permission-gated nightlife candidates by market with a repeatable discover-to-monitor onboarding process for new geographies.
+- Broad API acquisition planning ranks next candidate sources before any bespoke local venue work.
+- Category-level coverage planning flags where broad APIs are enough for baseline discovery and where local pipelines add meaningful depth.
+- Ticketmaster Discovery-shaped adapter for paginated live event ingestion plus normalizing real provider events, classifications, venues, price ranges, link-only ticket pages, and cached detail lookup.
+- Ticketmaster unfiltered area loads fan out across music/nightlife, stage/comedy, performing arts, and adjacent-live lanes to improve broad discovery coverage before bespoke local work.
+- Async event-provider pipeline with cross-source dedupe powering visible results, area inventory, deal rails, alerts, saved shows, and provider-fed future checkout groundwork.
+- Typed service boundaries for replacing seed data with real event feeds, taste providers, and ticket providers.
 
-Project Scope
--------------
+## Alpha Markets
 
-The goal of Tickets Tonight, as its name suggests, is to provide event
-recommendation, event search and ticket purchase service which are
-oriented to last minute decisions. Ticketmaster has been generally
-viewed as an endpoint for users to simply purchase the tickets to an
-event they already have in mind. Now, with this application,
-Ticketmaster can extend its services to even the event choosing phase
-and event discovery phase of a user’s whole purchasing process.
-Ticketmaster can better refine and cater to users who want to buy
-tickets at the last minute. Ticketmaster has provided sample data
-through xml files that contain artist, venue, category, and events data.
-Ticketmaster has also provided affinity data which denotes several
-recommended artists and their scores for a given artist. These data will
-be used to generate events available and provide users recommendations.
-Tickets Tonight will also send notifications to inform users about
-events which are still available tonight, based on users’ location,
-preference, event date and budget, and lead users to ticket purchase
-page once they have decided to go.
+- New York, NY: primary alpha market for the densest mix of theater, dance, opera, concerts, DJ sets, and last-minute discounts.
+- Los Angeles, CA: secondary validation market for West Coast concerts, DJ sets, opera, and venue-direct inventory.
+- Hudson, NY: arts-town test market for regional performing arts, weekend trips, and smaller-market discovery behavior.
 
-References
-----------
+## Run it
 
-Tickets Tonight will use [Parse.com](https://parse.com/) to store the
-data provided by Ticketmaster. In order to access the data stored,
-Ticket Tonight will use Parses [iOS
-SDK](https://parse.com/docs/ios_guide#top/iOS). To parse the given data
-from Ticketmaster, we will be using the python [XML
-library](https://docs.python.org/2/library/xml.etree.elementtree.html)
-and [JSON library](https://docs.python.org/2/library/json.html). Ticket
-Tonight app also uses iOS view controller, including
-[TabBarController](https://developer.apple.com/library/ios/documentation/WindowsViews/Conceptual/ViewControl
-	  	lerCatalog/Chapters/TabBarControllers.html) and
-[TableView](https://developer.apple.com/library/ios/documentation/UserExperience/Conceptual/TableView_
-	  	iPhone/CreateConfigureTableView/CreateConfigureTableView.htm). In
-order to populate the location map on Apple Maps, we use the [CLGeocoder
-object](https://developer.apple.com/library/mac/documentation/CoreLocation/Reference/CLGeocoder_
-	  	class/index.html)
+Requires Node.js `20.19.4` or newer.
 
-Overall Description
-===================
+On this Codex desktop workspace, the default shell can resolve an older Node. Prefix local checks with the bundled Node 20 runtime when needed:
 
-Product Perspective
--------------------
+```bash
+PATH=/Users/s/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH npm run typecheck
+PATH=/Users/s/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH npm run test:services
+PATH=/Users/s/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH npm run audit:galleries
+```
 
-Tickets Tonight is a follow-on member of Ticketmaster’s mobile app for
-ticket sales. Ticket Tonight will be focused and catered to users making
-last minute decisions to go to an event. Tickets Tonight will use the
-event, artist, category, venue, and affinity data provided by
-Ticketmaster to achieve its purpose. The data given by Ticketmaster will
-allow the Tickets Tonight to provide the user actual events that they
-may be interested in. If Ticketmaster desires, this application could be
-integrated with their actual database instead of pre-generated data. In
-order to better cater to the user, the application will use the user’s
-favorite artists to generate more relevant recommendations of events.
-Ticketmaster could later link their user database to this application
-but without any given API, this version of Tickets Tonight will generate
-its own user group separate from Ticketmaster users. Tickets Tonight’s
-user data and favorite artists will be stored on Parse. For preliminary
-and testing purposes, the application will use anonymous users and will
-not store actual user favorites.
+```bash
+npm install
+npm run web
+```
 
-![image](./Pics/pp1.png)
+Optional live Ticketmaster Discovery inventory can be enabled with public Expo env vars:
 
-Production Features
--------------------
+```bash
+EXPO_PUBLIC_TICKETMASTER_API_KEY=your_key npm run web
+```
 
-The overall application will have a Feed view, a Favorites view, a
-Explore view and a Settings(More) view. More details of the following
-views will be provided in Section 3. The following descriptions provide
-a high level summary. Each of the following views will be a view inside
-a UI tab bar controller object in the app. The views will be accessible
-through tabs on the bottom.
+For local CLI audits, copy `.env.example` to `.env.local` and set `EXPO_PUBLIC_TICKETMASTER_API_KEY` there. Local `.env` files are ignored by git.
 
-Feed View: In this view, the user would be able to see the events of
-their favorite artists and the events will be ordered by date. This view
-will be separated into recent, favorite and following tabs. The recent
-tab of the feed view will display the events that are happening near the
-user (if location turned on) and events will be sorted by date. The
-favorite tab in the feed view allows the user to view his or her
-favorited artists’ recent events. In addition, there is also the
-following tab which allows the user to easily track the events that he
-or she has followed. The events that the user has followed could be
-events he or she is going or simply the user just wants to track it.
-Furthermore, if the event that the user is following changes location,
-the user can easily track that change and get notified.
+```bash
+cp .env.example .env.local
+# edit .env.local and set EXPO_PUBLIC_TICKETMASTER_API_KEY=...
+npm run audit:live-inventory
+```
 
-Favorites view: In this view, the user would be able to see the artists
-they have selected as their favorite artists. The user would be able to
-click on any of the artist cells and untoggle the favorite selection if
-he or she so desires. At the top of this view the user can also manually
-search for artists by their names to find the artist the user wants to
-add and start tracking. The search will research and refine the results
-as the user types in letters. For each key stroke we can further reduce
-the result pool and create a almost search-auto complete feature.
+The adapter defaults to 100 results per page and up to 3 pages, which is the recommended local audit setting to avoid provider rate limits. Override the live fetch breadth for an intentionally deeper run with:
 
-Explore view: In this view, the user will be provided a slide card
-presentation of potential events that the user may be interested in. The
-user can slide away the cards if the user is not interested. The events
-presented in this view is generated through the affinity data by first
-joining the lists of artists that are similar to the user’s favorite
-artists, then finding events performed by those related/similar artists.
-If the user does not have a lot of favorite artists, the slide cards
-could eventually be emptied since the given data from Ticketmaster is
-not as expansive as their actual database. In the case where the cards
-are all swept out, there is a refresh button on top for the user to
-reset.
+```bash
+EXPO_PUBLIC_TICKETMASTER_PAGE_SIZE=100 EXPO_PUBLIC_TICKETMASTER_MAX_PAGES=5 npm run audit:providers
+```
 
-Settings view: In this view, the user will be able to search artists by
-category, toggle location control and a logout button. The logout button
-currently does not implement actual logging out or logging in action
-since this application will be using anonymous users hence the user
-favorite data will be stored locally on the phone. There is also another
-tab to allow the user to access the events nearby directly listing out
-all events nearby.
+Without that key, the app stays on the checked-in seed catalog, partner-feed fixtures, and reusable local calendar fixtures.
 
-User Classes and Characteristics
---------------------------------
+Optional Spotify recommendations can be enabled with a public Spotify app client id:
 
-Currently the main type of user will be potential ticket buyers. They
-will be notified when an event would be a good match for them based on
-their favorite artists and affinity data. The main user base will likely
-be users who intend on going to events last minute and have not made
-plans. These types of users are typically whimsical or perhaps are from
-out of town. This user class could potentially also be people who had
-plans cancelled and need to kill time. They would benefit from the
-explore view that generates events of artists relatable to their
-favorite artists based on the affinity data. These are our favored user
-class. Another user class could be event planners that are planning an
-event for their customer and intend on avoiding conflicts with other
-popular events or other similar artists’ events. In other words, these
-users use the application to find out openings and times that they could
-host their own events without coming into conflicting with other events.
-These users are not the primary users that Tickets Tonight want to
-satisfy as they will not likely be purchasing tickets from Ticketmaster.
+```bash
+EXPO_PUBLIC_SPOTIFY_CLIENT_ID=your_spotify_client_id npm run web
+```
 
-Operating Environment
----------------------
+Register the exact redirect URI in Spotify. Native builds default to `ticketstonight://spotify-auth`; web/local Expo testing should set `EXPO_PUBLIC_SPOTIFY_REDIRECT_URI` to the allowed callback registered in Spotify. Do not put a Spotify client secret in Expo public env or commit it to this repo.
 
-Initially, the Tickets Tonight app will be built for Apple’s iOS 8
-mobile operating system, but will be supported on devices with Apple’s
-iOS 7.0 and later. It will support all devices running iOS 8, including
-the new iPhone 6, iPhone 6 Plus, iPad Air 2, and iPad mini 3. The app
-will take advantage of these new display sizes and utilize the device’s
-location and TouchID sensors for a better user experience in receiving
-recommendations and completing ticket purchases. Given enough market
-demand, an Android version of the app will be developed. Tickets Tonight
-will also heavily rely on Parse to provide cloud services and database
-access on the mobile app. This software infrastructure may need to be
-changed if future versions decide to steer away from Parse and
-potentially Ticketmaster may want to provide its own infrastructure for
-database access.
+Run focused service checks:
 
-Design and Implementation Constraints
--------------------------------------
+```bash
+npm run test:services
+```
 
-One big limitation is the lack of access to the actual database of
-Ticketmaster. There is also no API’s to allow logging in to Ticketmaster
-or querying a user’s favorite artists. As such, the Tickets Tonight app
-will resort to creating its own user and have only the favorite artists
-stored for each user. This could limit Tickets Tonight’s portability in
-the future when it connects to the actual database instead of Parse.
-Using Parse, Tickets Tonight conforms to Parse’s iOS SDK infrastructure
-interface to store and query data. If an android app is to developed
-next, Parse also provides an infrastructure and Android SDK that could
-use the same Parse objects created for this app. Since no information
-has been given for the database, we also do not know how data curation
-occurs and how the affinity data will be generated. This limits
-portability as we cannot design how new information can be pipelined to
-update the data the app queries on Parse. Without actually connecting to
-Ticketmaster, the user cannot make an in app purchase and thus would be
-directed to the event page through their mobile device’s web browser.
-Another concern is security constraint involving parsing the XML file.
-If future data curation is continued through xml parsing through python
-then there is a security risk because python’s xml module is not secure
-against maliciously constructed data. Another constraint is that since
-Tickets Tonight is a mobile app and it requires accessing Parse,
-internet connection will be required. If the user is in a weak signal
-strength area then the app will have to rely on cached results that
-could be very outdated depending on when the app was last launched.
+Run the market coverage audit for New York, Los Angeles, and Hudson:
 
-### Ticketmaster Data Feeds
+```bash
+npm run audit:coverage
+```
 
-Ticketmaster did not provide us with an API to access their data, but
-instead provided us with two static data files: 1) an event info data
-feed formatted as an XML file and 2) an affinity feed formatted as a
-simple text file. Our implementation parses these data files and hosts
-them as Parse objects (*PFObject*), essentially a database (key-value
-pairs of JSON-compatible data), on Parse. Tickets Tonight will connect
-to Parse through the iOS SDK which provides access to objects on Parse
-through a query object (*PFQuery*).
+Run the live supply audit for New York, Los Angeles, and Hudson:
 
-#### Event Info Data Feed
+```bash
+npm run audit:live-supply
+```
 
-Ticketmaster provided us with a 118.9MB XML file that includes a list of
-artists, event venues, event categories, and event information. The XML
-file is parsed through Python’s built in XML module and uploaded to
-Parse to allow the application to access the data through Parse’s IOS
-SDK. The data feed is parsed into four sub trees. On Parse, there is the
-artist subtree, venues subtree, category subtree and events subtree. A
-section of the data file is displayed below.
+Run the live inventory audit for fixture, parser, and Ticketmaster source readiness:
 
-![image](./Pics/xml1.png)
+```bash
+npm run audit:live-inventory
+```
 
-For each artist, Ticketmaster has provided us the artist id, the
-category to which this artists belongs, an URL to the artist’s image
-(low resolution), the artist name, and an URL to the artist page on
-Ticketmaster’s website.
+Run the source-readiness audit for ranked next-source decisions, including RA partner/API posture and Hudson local-calendar lift:
 
-For each venue, Ticketmaster has provided us the city of the venue, the
-state of the venue, the street of the venue, an URL to the venue’s
-image, the name of the venue, an URL to the venue’s page on
-Ticketmaster’s website and the zip code of the venue.
+```bash
+npm run audit:sources
+```
 
-For each event, Ticketmaster has provided us the event id, the performer
-ids (artist ids), the category id of the event, the event date, event
-status, event time, on sale date, performance name, the URL to the
-Ticketmaster page, and the venue id.
+Run the local source directory audit for repeatable small-venue, bar, newsletter, and partner-feed source buildup:
 
-#### Affinity Data Feed
+```bash
+npm run audit:source-directory
+```
 
-The affinity data provided by Ticketmaster is a 11.1MB text file. The
-file contains an entry for artists. Each artist’s entry has a list of
-scores and corresponding artists. The artists under an entry are the
-recommended artists for the artist in question and each recommended
-artist is associated with a score ranging from 0 - 1.
+Run the default discovery quality audit for the app-facing shaped result lists:
 
-![image](./Pics/txt1.png)
+```bash
+npm run audit:quality
+```
 
-The format of the file is
+Run the non-secret Spotify readiness audit:
 
-{ *ArtistName*
-{*RecArtistID, RecArtistName, Score*}\* }*
+```bash
+npm run audit:spotify
+```
 
-“RecArtistID” can be related to the artist information in the event info
-data feed we have. The second value is the name of the recommended
-artist. The third value is the score ranging from 0-1, with higher score
-meaning that the recommended artist is a better match than other artists
-with lower scores. This file is parsed using our custom Python script
-and stored on Parse.
+Run live Ticketmaster provider diagnostics for New York, Los Angeles, and Hudson:
 
-###  Assumptions and Dependencies
+```bash
+EXPO_PUBLIC_TICKETMASTER_API_KEY=your_key npm run audit:providers
+```
 
-The major dependency for Tickets Tonight is its reliance on Parse.
-Tickets Tonight queries the data on Parse in order to generate its feed
-and explore views. If Parse cannot provide reliable service then the
-application interface with Parse will have to be changed and another
-form of data interface would be needed.
+The live inventory and provider diagnostics commands run in no-key mode without making Ticketmaster requests. When a key is configured, they redact API keys from printed request URLs and separate raw events, normalized events, duplicates, discarded events, priced offers, and link-only ticket pages.
 
-External Interface Requirements
-===============================
+For native preview, use:
 
-User Interfaces
----------------
+```bash
+npm run ios
+npm run android
+```
 
-Tickets tonight will follow iOS human interface guideline. Tickets
-Tonight has two major views, Feed and Explore. The views are contained
-in a tab bar controller object and the user is given tabs at the bottom
-of the screen to change into the views. In the Feed view, the user can
-view events of the artists in their favorites. Each event is displayed
-as a cell with the image of the event on the left followed by the title
-and performer text in the middle of the cell. The cells are in iOS table
-layout. If the user clicks on the cell, then the event information view
-is displayed in an event view page which displays the image of the event
-at the top followed by the date of the event, follow toggle for the
-event (places the event under the following tab in Feed view), the
-ticket price range, and the location of the event. If the data provides
-the ticket URL, then by clicking on the ticket price cell, the app will
-start an in-app embedded browser that allows the user to buy the ticket
-on Ticketmaster’s website. The location of the event is followed by a
-cell of Apple Maps that pins the event on the map. In the artist view
-page the user can favorite or unfavorite the artist. The artist page
-displays the artist name on top followed by his or her picture and event
-cells of the artist. In the Explore view, the user is presented events
-of not only his or her favorites but also events of artists recommended
-by their favorites’ affinity data. The events are displayed in a
-seemingly flashcard form that the user can swipe away or click on. Each
-card displays the event image in the top center and the performer image
-and location at the bottom of the card. The card will also indicate who
-this artist is similar to. In the more tab, the user can find artists by
-category and also query all the events that are near his or her current
-location directly.
+## Architecture
 
-<img width="320 px" src="./Pics/app1.png"/>
-<img width="320 px" src="./Pics/app2.png"/>
-<img width="320 px" src="./Pics/app3.png"/>
-<img width="320 px" src="./Pics/app4.png"/>
-<img width="320 px" src="./Pics/app5.png"/>
-<img width="320 px" src="./Pics/app6.png"/>
-<img width="320 px" src="./Pics/app7.png"/>
-<img width="320 px" src="./Pics/app8.png"/>
+- `src/data/catalog.ts`: alpha-market areas, categories, and seed event inventory.
+- `src/data/broadApiCandidates.ts`: ranked broad API candidates for baseline event coverage, ticket links, price inventory, and coverage-gap auditing.
+- `src/data/discoveryPlans.ts`: market-by-market discovery source strategy for New York, Los Angeles, and Hudson.
+- `src/data/htmlCalendarFixtures.ts`: sample HTML calendar payloads with JSON-LD event blocks for parser-backed local import tests.
+- `src/data/localCalendarFeeds.ts`: reusable calendar source metadata and fixture-backed/parser-ready local calendar examples for NYC performing arts, Hudson Hall, Fisher Center, and Basilica Hudson.
+- `src/data/localSourceCandidates.ts`: geography-aware source directory for small venues, bars, official calendars, newsletters, partner-feed leads, permission-gated nightlife candidates, and the repeatable onboarding stages.
+- `src/data/partnerFeeds.ts`: raw partner feed fixtures that mimic external inventory in the supported alpha markets.
+- `src/data/ticketmasterFixtures.ts`: Ticketmaster Discovery-shaped fixture payload for adapter tests.
+- `src/services/auth.ts`: dormant auth provider groundwork for future checkout/account features.
+- `src/services/checkoutBackend.ts`: dormant backend-style checkout groundwork for future purchase flow.
+- `src/services/calendarFeedProvider.ts`: generic local calendar feed normalizer for ICS/RSS/HTML/manual-import style listings.
+- `src/services/coverageAudit.ts`: 30-day market coverage audit for event-count, ticket-link, priced-offer, link-only-offer, category-lane, date-window, and source-breadth targets.
+- `src/services/dealAlerts.ts`: alert creation and discounted-ticket matching.
+- `src/services/discoveryAcquisition.ts`: broad API recommendation and local-pipeline trigger planning so provider work starts with scalable sources.
+- `src/services/discoveryFacets.ts`: market summaries, source diversity, link-ready show counts, neighborhood facets, category facets, and date-window availability with discounted-count signals for the selected market.
+- `src/services/discoveryFilterSummary.ts`: compact active-filter labels and reset affordance state for the discovery UI.
+- `src/services/dealDiscovery.ts`: discount insight scoring, savings math, urgency labels, and area deal summaries.
+- `src/services/discoveryPlanning.ts`: helper layer for broad-API/local-pipeline lanes, category coverage, source readiness, category gaps, primary-market ordering, and discount levers.
+- `src/services/discoveryRanking.ts`: best-bets scoring for urgent deals, local-source inventory, timing, and distance.
+- `src/services/discoveryResultSections.ts`: scan-friendly result grouping for soonest discovery while preserving cheapest/nearby sort order.
+- `src/services/feedProvider.ts`: feed normalization from provider taxonomy/inventory into the app `Show` model.
+- `src/services/htmlCalendarImporter.ts`: reusable JSON-LD HTML calendar importer that turns event pages/listings into local calendar events.
+- `src/services/eventCatalog.ts`: discovery search, date-window filtering, deal search, recommendation scoring, composite event providers, cross-source event dedupe, calendar-feed inventory, and runtime caching for provider-fed shows.
+- `src/services/eventProviderFactory.ts`: default provider stack that keeps fixtures active and adds Ticketmaster Discovery when public Expo config is present.
+- `src/services/location.ts`: location provider interface, demo location provider, distance calculation, and nearest-area resolution.
+- `src/services/liveSupplyAudit.ts`: focused NYC live-supply target audit for the current 50-event provider sprint.
+- `src/services/localSourcePlanning.ts`: ranks local source candidates, summarizes category/intake coverage, and returns the reusable source-onboarding checklist for new geographies.
+- `src/services/notifications.ts`: in-app notification provider for deal-alert matches, with read-state merge helpers for future push/email channels.
+- `src/services/payments.ts`: dormant payment provider groundwork shaped for future Stripe/provider-native checkout.
+- `src/services/personalization.ts`: Spotify PKCE auth, token exchange, top artists/tracks/genres fetches, demo taste provider, and recommendation-context creation.
+- `src/services/storage.ts`: repository for preferences and orders, backed by browser storage on web and memory fallback elsewhere.
+- `src/services/ticketLinks.ts`: safe external ticket-link intent selection for provider-backed offers while checkout is deferred.
+- `src/services/providerDiagnostics.ts`: live provider diagnostics for Ticketmaster fan-out, duplicate events, category mix, priced offers, link-only ticket pages, and redacted request URLs.
+- `src/services/sourceInventoryAudit.ts`: source-level freshness/import summaries for fixture, parsed calendar, and live API inventory.
+- `src/services/sourceReadinessAudit.ts`: ranked source-readiness decisions by market, category lift, ticket-link coverage, duplicate rate, legal/terms posture, and integration effort.
+- `src/services/ticketmasterProvider.ts`: Ticketmaster Discovery request builder, lane fan-out fetcher, fetch client, event normalizer, and `EventProvider` implementation.
+- `src/services/ticketing.ts`: ticketing provider interface plus a mock provider.
+- `src/types.ts`: shared app, ticketing, and recommendation types.
+- `src/App.tsx`: provider-backed mobile discovery, detail, saved-show, discount alert, inbox, and preference UI.
+- `scripts/env.ts`: local `.env.local` loader for audit scripts without committing provider keys.
+- `scripts/liveInventoryAudit.ts`: multi-market live inventory audit for fixture fallback, parsed calendar imports, and Ticketmaster no-key/keyed readiness.
+- `scripts/sourceDirectoryAudit.ts`: repeatable local source directory report for small venues, bars, newsletters, partner-feed leads, category coverage, and intake mix by market.
+- `scripts/sourceReadinessAudit.ts`: multi-market source-readiness report for broad APIs, local calendars, planned pipelines, and Resident Advisor partner/API feasibility.
+- `tests/serviceChecks.ts`: discovery, market scope, feed normalization, provider adapters, deal filtering, discount alerts, and dormant checkout groundwork checks.
 
-Software Interfaces
--------------------
+## Provider seams
 
-### Parse Interfaces and Parse iOS SDK
+- `EventProvider`: replace or extend `CompositeEventProvider` with `TicketmasterDiscoveryProvider`, Eventbrite, venue-direct, and promoter feed providers.
+- `AuthProvider`: replace `MockAuthProvider` with email/password, passkeys, OAuth, or a backend identity session.
+- `TicketingProvider`: dormant seam for Stripe Payment Sheet, provider-native checkout, or venue-direct order creation later.
+- `PaymentProvider`: dormant seam for Stripe Payment Sheet, Apple Pay/Google Pay, or provider-native payment confirmation later.
+- `CheckoutBackend`: dormant seam for future HTTPS endpoints so holds, payment intents, order creation, inventory checks, and seller-of-record logic stay server-side.
+- `TasteProfileProvider`: Spotify OAuth, saved auth token metadata, top artists/tracks/genres, and recommendation-context refresh groundwork.
+- `LocationProvider`: replace `DemoLocationProvider` with Expo Location or native permissions when device geolocation is ready.
+- `AppRepository`: replace browser/memory storage with AsyncStorage, SQLite, or authenticated backend sync.
+- `NotificationProvider`: extend in-app deal notifications to push notifications or email once notification permissions and backend delivery are added.
 
-Tickets Tonight connects to Parse services in order to access the data
-provided by Ticketmaster. The Parse iOS SDK connects the app to Parse if
-the application id and client key is provided. The data from the XML and
-the affinity text file is parsed by python and stored on Parse as
-*PFObjects*. Each *PFObject* contains key-value pairs of JSON-compatible
-data. This data is schemaless, which means that we don’t need to specify
-ahead of time what keys exist on each *PFObject*. We simply set the
-key-value pairs we want, and the Parse backend will store it. The
-*PFObject* has a method to save the data to the Parse backend and the
-data can be viewed on the Parse app page data browser section. A sample
-is shown in the following image.
+## Next integrations
 
-<span>1.</span> ![image](./Pics/parse_data_schema.png)
-
-Tickets Tonight will query the data stored on Parse through a *PFQuery*
-object that returns the *PFObject* on Parse. The *PFQuery* can find the
-*PFObject* if given the object id which will be created as a field when
-the *PFObject* is instantiated. Tickets Tonight can save the user’s
-favorite artists through similar means of querying the *PFObject* and
-modifying it then saving it. Saving a *PFObject* to the Parse server can
-be done offline as well, where we call the *saveEventually* method on
-the object and the method will store the update on the device until a
-network connection is re-established.
-
-The aforementioned interfaces of Parse outlines the overall
-infrastructure of communication and how Parse is used. More detailed
-documentation of each various method and relationships on query and
-object can be found in References. The data on Parse are used
-to generate the cells in the Feed view and the cards in the Explore
-view. For the Feed view of Tickets Tonight, we query the user’s favorite
-artists and then query their events and then order them by date and
-display in the Feed view. For the Explore view of Tickets Tonight, we
-query the user’s favorite artists and then query the affinity data to
-find recommended artists based on the user’s favorite artists. Once we
-have the recommended artists, we query their events and generate the
-cards for each of their event. When the user adds an artist to his or
-her favorite, the data is also saved to Parse.
-
-### iOS Application Interfaces
-
-In the actual application, each view, is handled by the UI Tab Bar
-controller object. The UI Tab Bar controller object displays a view
-corresponding to the tab selected at the bottom of the screen. Each view
-contained in the tab bar controller object will be linked by the tab.
-Under the UI Tab Bar controller object we have a Feed view controller,
-Favorite view controller, Explore view controller, and settings view
-controller. These view controllers are all table view controllers. Table
-view controllers in iOS displays table cells. We populate the tables
-views with Image table view cells which contain an image and text to the
-right of the image. In the Feed table view controller, we populate the
-view with Event cells which contain the image of the event and the title
-of the event. In Favorite table view controller we populate the view
-with artist cells which contain the image of the artist and the name of
-the artist. The event cells and artist cells lead to event views and
-artist views respectively. In the event views we display the image,
-artist, ticket URL and the location of the event. In the artist views we
-display the image of the artist and events the artist has. In order to
-populate the cells with actual data, we query the data on Parse through
-the aforementioned Parse interface. By querying Parse with the *PFQuery*
-object we can obtain the data we need in order to populate the cells.
-For detailed description of the object methods, the documentation for
-view controller objects for iOS is included in the reference section. In
-order to display the map in the events page, we convert the address to a
-geopoint using the *CLGeocoder* object and using it we could mark the
-venue on to the map. In order to open the URL inside the app, we create
-a webview to display it. In addition, when we query the data needed for
-the explore view, we first obtain the favorite artists objects then
-flatten them to names in order to query the affinity data, then acquire
-recommended artists objects, then flatten those objects into int ID’s,
-convert those ID’s into strings, then query the events and finally
-exclude the events that the user are already following.
-
-### Python parser
-
-For the data given to us by Ticketmaster, we use Python to parse them
-into essentially a JSON format to upload to Parse into Parse objects.
-For the XML we use the Python library to parse the XML into a tree like
-objects and create csv objects. For the text file containing affinity
-data, which was almost a csv file, we also use the python library to
-parse it into JSON formatted objects. These objects are then uploaded to
-Parse. Parse accepts csv and JSON to populate Parse objects. More
-detailed description for each of the python library methods can be found
-in the reference section. We parse the XML into a csv but the affinity
-data into JSON because for the affinity data, an artist can have an
-array of recommended artists and each artist has a different length of
-array. CSV requires column number to be the same for each entry. We
-could have also put all the recommended artist into one long string in a
-column for the CSV however, we chose JSON in order to gain easier access
-and without having to parse a string.
-
-Project Experience
-==================
-
-Project Design and Difficulties
--------------------------------
-
-Our initial design for the project was under the assumption that we
-would be receiving access to Ticketmaster’s database and API. Under this
-assumption, we wanted to create a great overall experience that would
-allow the user to actually be able to purchase the ticket through the
-app and connect to their Ticketmaster account in order to synchronize
-the product line. Our original design was using node.js as our server in
-order to retrieve data from Ticketmaster and have node.js serve as our
-platform for the data we needed on the app. We also originally wanted to
-connect the user favorites data to the user account on Ticketmaster’s
-website so ended up using an anonymous user and store favorites locally.
-
-One difficulty we had was the designing of the whole application. We
-really wanted an intuitive way to be able to present the data to the
-users. Another difficulty we had was combining all the data into a
-coherent application. Initially we thought about combining all the data
-to formulate the best recommendation for the user. Another difficulty
-was converting an actual address to a geopoint in order to mark the
-location on the map. We needed the geopoint of the location instead of
-addresses and currently we do this conversion on the mobile device. We
-could potentially convert all the event locations and save their
-geopoint instead of the address string.
+- Event inventory: follow the checked-in discovery source plans: New York first, Los Angeles second, Hudson as the smaller-market arts-town test.
+- Data strategy: keep Ticketmaster as the broad ticketed baseline, add reusable local calendar/feed pipelines next for measured arts-depth gaps, then evaluate Eventbrite for community/ticket-link breadth, SeatGeek for price-marketplace validation, and PredictHQ-style event intelligence for coverage-gap auditing.
+- Local-source prioritization: use category coverage to pick local pipeline work only when it adds depth beyond broad API coverage.
+- New geographies: start by adding at least five official HTML-calendar candidates, one partner/manual lead path, terms posture, sample listings, duplicate checks, and freshness monitoring through the local source directory before writing bespoke adapters.
+- New York performing arts: Ticketmaster remains the broad baseline, while the reusable calendar-feed path now supplies parser-ready dance, ballet, and opera depth before any venue-specific adapter work.
+- Los Angeles performing arts: keep Ticketmaster as the broad baseline, then evaluate reusable performing-arts calendars before venue-direct one-offs.
+- Hudson local pipeline: start with the generic regional calendar-feed path, keep it category-complete for concerts, dance, opera, plays, theater, and variety, and only add bespoke venue adapters after audits show durable gaps.
+- Resident Advisor: treat as a high-fit nightlife candidate for NYC/LA only through a permitted partner/API path; do not scrape or ingest RA without authorization.
+- Discounts: partner-funded promo codes, unsold inventory drops, preview allocations, early-arrival prices, matinee value, and simple last-minute deals.
+- Later checkout: Stripe Payment Sheet or provider-native checkout once seller-of-record and payout flow are decided.
+- Recommendations: deepen Spotify ranking with saved shows, clicked events, followed venues, and artist follow alerts.
+- Location: Expo Location for nearby search, plus explicit city selection for planning trips.
