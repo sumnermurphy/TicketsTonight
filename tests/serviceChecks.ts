@@ -80,6 +80,7 @@ import {
   completeGalleryWalk,
   createGalleryWalkSession,
   getActiveWalkProgress,
+  getGalleryWalkRecap,
   markGalleryWalkStopVisited,
   skipGalleryWalkStop
 } from "../src/services/galleryWalkSession";
@@ -621,6 +622,21 @@ async function main() {
     advancedWalkSession,
     "2026-07-09T16:30:00-04:00"
   );
+  const completedWalkRecap = getGalleryWalkRecap(
+    completedWalkSession,
+    chelseaTwoHourWalk,
+    upsertGalleryLogEntry(
+      [],
+      firstWalkStopId,
+      "visited",
+      "Quiet favorite from the route.",
+      galleryReferenceNow
+    )
+  );
+  const replacementWalkSession = createGalleryWalkSession(
+    nycLastChanceWalk,
+    "2026-07-09T16:35:00-04:00"
+  );
 
   assert(
     walkSession.areaId === "nyc" &&
@@ -648,6 +664,23 @@ async function main() {
       completedWalkSession.status === "completed" &&
       completedWalkSession.completedAt === "2026-07-09T16:30:00-04:00",
     "Advancing and completing a walk should mutate session progress predictably."
+  );
+  assert(
+    completedWalkRecap.status === "completed" &&
+      completedWalkRecap.totalStopCount === chelseaTwoHourWalk.stops.length &&
+      completedWalkRecap.visitedStopCount === completedWalkSession.visitedStopIds.length &&
+      completedWalkRecap.skippedStopCount === completedWalkSession.skippedStopIds.length &&
+      completedWalkRecap.notedStopCount === 1 &&
+      completedWalkRecap.neighborhoods.includes("Chelsea"),
+    "Completed walk recap should summarize visited, skipped, notes, and neighborhoods."
+  );
+  assert(
+    replacementWalkSession.id !== walkSession.id &&
+      replacementWalkSession.mode === nycLastChanceWalk.mode &&
+      replacementWalkSession.orderedStopIds.join("|") ===
+        nycLastChanceWalk.stops.map((stop) => stop.exhibition.id).join("|") &&
+      walkSession.mode === "two-hour",
+    "Starting a draft route should create a replacement walk session without mutating the preserved active walk."
   );
 
   const persistedStorageMap = new Map<string, string>();
@@ -680,18 +713,20 @@ async function main() {
     savedAlertGalleries: ["Tanya Bonakdar Gallery"],
     savedAlertNeighborhoods: ["Chelsea"],
     savedAlertMediums: ["sculpture" as const],
-    activeWalkSession: visitedWalkSession
+    activeWalkSession: completedWalkSession
   };
   const serializedGalleryState = serializeGalleryAppPersistedState(persistedState);
 
   writeGalleryAppPersistedState(persistedState, persistedStorage, "test-gallery-state");
+  const persistedRoundTrip = readGalleryAppPersistedState(persistedStorage, "test-gallery-state");
 
   assert(
-    deserializeGalleryAppPersistedState(serializedGalleryState)?.activeWalkSession?.currentStopId ===
-      secondWalkStopId &&
-      readGalleryAppPersistedState(persistedStorage, "test-gallery-state")?.verifiedOnly === true &&
-      readGalleryAppPersistedState(persistedStorage, "test-gallery-state")?.alertWindowDays === 7,
-    "Gallery app persistence should round-trip active walk, filters, alerts, and art log state."
+    deserializeGalleryAppPersistedState(serializedGalleryState)?.activeWalkSession?.status ===
+      "completed" &&
+      persistedRoundTrip?.verifiedOnly === true &&
+      persistedRoundTrip.alertWindowDays === 7 &&
+      persistedRoundTrip.activeWalkSession?.completedAt === "2026-07-09T16:30:00-04:00",
+    "Gallery app persistence should round-trip completed walk, filters, alerts, and art log state."
   );
   const routeOrderingWalk = createGalleryWalkPlan({
     areaId: "nyc",

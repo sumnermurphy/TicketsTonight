@@ -63,12 +63,13 @@ import {
   type GalleryVisualKey
 } from "./services/galleryVisuals";
 import {
-  advanceGalleryWalk,
   completeGalleryWalk,
   createGalleryWalkSession,
   getActiveWalkProgress,
+  getGalleryWalkRecap,
   markGalleryWalkStopVisited,
   skipGalleryWalkStop,
+  type GalleryWalkRecap,
   type GalleryWalkProgress,
   type GalleryWalkSession,
   type GalleryWalkStopProgress
@@ -199,6 +200,52 @@ function getFreshnessCopy(exhibition: GalleryExhibition): string {
 
 function getSourceCopy(exhibition: GalleryExhibition): string {
   return getGalleryInventoryTrust(exhibition).sourceLabel;
+}
+
+function getGalleryMapUrl(exhibition: GalleryExhibition): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    `${exhibition.galleryName} ${exhibition.address}`
+  )}`;
+}
+
+function getRouteProgressLabel(progress?: GalleryWalkStopProgress): string {
+  if (progress === "current") {
+    return "Current stop";
+  }
+
+  if (progress === "next") {
+    return "Next stop";
+  }
+
+  if (progress === "visited") {
+    return "Visited";
+  }
+
+  if (progress === "skipped") {
+    return "Skipped";
+  }
+
+  return "Planned";
+}
+
+function getRouteProgressDetail(progress?: GalleryWalkStopProgress): string {
+  if (progress === "current") {
+    return "This is your current stop.";
+  }
+
+  if (progress === "next") {
+    return "This is your next stop.";
+  }
+
+  if (progress === "visited") {
+    return "You marked this stop visited.";
+  }
+
+  if (progress === "skipped") {
+    return "You skipped this stop.";
+  }
+
+  return "This stop is still planned.";
 }
 
 function getAreaRoleCopy(areaId: GalleryAreaId): string {
@@ -371,17 +418,18 @@ function RouteCommandPanel({
   nextStop,
   activeWalkSession,
   activeWalkProgress,
+  activeWalkRecap,
   activeWalkPlan,
   activeWalkCurrentStop,
   activeWalkNextStop,
   activeWalkNextLeg,
   activeWalkIsDraft,
+  activeWalkRouteMatchesCurrent,
   onMode,
   onStartWalk,
   onResumeWalk,
   onMarkCurrentVisited,
   onSkipCurrent,
-  onAdvance,
   onEndWalk,
   compact = false
 }: {
@@ -394,17 +442,18 @@ function RouteCommandPanel({
   nextStop?: GalleryWalkStop;
   activeWalkSession?: GalleryWalkSession;
   activeWalkProgress?: GalleryWalkProgress;
+  activeWalkRecap?: GalleryWalkRecap;
   activeWalkPlan?: GalleryWalkPlan;
   activeWalkCurrentStop?: GalleryWalkStop;
   activeWalkNextStop?: GalleryWalkStop;
   activeWalkNextLeg?: GalleryWalkPlan["legs"][number];
   activeWalkIsDraft: boolean;
+  activeWalkRouteMatchesCurrent: boolean;
   onMode: (mode: GalleryWalkMode) => void;
   onStartWalk: () => void;
   onResumeWalk: () => void;
   onMarkCurrentVisited: () => void;
   onSkipCurrent: () => void;
-  onAdvance: () => void;
   onEndWalk: () => void;
   compact?: boolean;
 }) {
@@ -412,6 +461,10 @@ function RouteCommandPanel({
     activeWalkSession?.status === "active" &&
     !activeWalkIsDraft &&
     Boolean(activeWalkProgress && activeWalkPlan);
+  const showingCompletedWalk =
+    activeWalkSession?.status === "completed" &&
+    activeWalkRouteMatchesCurrent &&
+    Boolean(activeWalkRecap && activeWalkPlan);
   const displayPlan = showingActiveWalk && activeWalkPlan ? activeWalkPlan : walkPlan;
   const currentStop = showingActiveWalk ? activeWalkCurrentStop : startStop;
   const displayNextStop = showingActiveWalk ? activeWalkNextStop : nextStop;
@@ -419,15 +472,21 @@ function RouteCommandPanel({
     showingActiveWalk && activeWalkProgress
       ? `${activeWalkProgress.completedStopCount}/${activeWalkProgress.totalStopCount} stops complete - ${activeWalkProgress.remainingStopIds.length} remaining`
       : routeConfidenceCopy;
+  const activeNextCopy =
+    displayNextStop && activeWalkNextLeg
+      ? `${activeWalkNextLeg.walkingMinutes} min, ${activeWalkNextLeg.distanceMiles.toFixed(1)} mi`
+      : displayNextStop
+        ? galleryVisitStatusLabels[displayNextStop.status]
+        : "No next stop";
 
   return (
     <View style={[styles.routeFirstPanel, compact ? styles.compactRouteFirstPanel : null]}>
       {activeWalkSession?.status === "active" && activeWalkIsDraft ? (
         <View style={styles.activeWalkNotice}>
           <View style={styles.activeWalkNoticeCopy}>
-            <Text style={styles.activeWalkNoticeTitle}>Active walk preserved</Text>
+            <Text style={styles.activeWalkNoticeTitle}>Previewing a new route</Text>
             <Text style={styles.activeWalkNoticeText}>
-              Resume {galleryWalkModeLabels[activeWalkSession.mode]} in {activeWalkSession.neighborhood ?? activeWalkSession.areaId.toUpperCase()}, or start this draft route.
+              Your {galleryWalkModeLabels[activeWalkSession.mode]} in {activeWalkSession.neighborhood ?? activeWalkSession.areaId.toUpperCase()} is still saved. Start this route only when you want to replace it.
             </Text>
           </View>
           <Pressable
@@ -440,95 +499,146 @@ function RouteCommandPanel({
           </Pressable>
         </View>
       ) : null}
-      <View style={styles.routeFirstHeader}>
-        <View style={styles.routeFirstTitleBlock}>
-          <Text style={styles.routeFirstKicker}>
-            {showingActiveWalk ? "Active walk" : "Tonight's walk"}
-          </Text>
-          <Text style={styles.routeFirstTitle}>
-            {showingActiveWalk && currentStop
-              ? `Current stop: ${currentStop.exhibition.galleryName}`
-              : displayPlan.summary}
-          </Text>
-          <Text style={styles.routeFirstMeta}>
-            {showingActiveWalk && displayNextStop
-              ? `Next: ${displayNextStop.exhibition.galleryName}${
-                  activeWalkNextLeg
-                    ? ` - ${activeWalkNextLeg.walkingMinutes} min, ${activeWalkNextLeg.distanceMiles.toFixed(1)} mi`
-                    : ""
-                }`
-              : progressCopy}
-          </Text>
-        </View>
-        <View style={styles.routeFirstActionStack}>
-          {showingActiveWalk && currentStop ? (
+
+      {showingActiveWalk && currentStop && activeWalkProgress ? (
+        <View style={styles.activeWalkCommandSurface}>
+          <View style={styles.activeWalkCommandTop}>
+            <View style={styles.activeWalkCurrentCopy}>
+              <Text style={[styles.routeFirstKicker, styles.activeWalkKicker]}>Walking now</Text>
+              <Text style={styles.activeWalkCurrentTitle}>{currentStop.exhibition.galleryName}</Text>
+              <Text style={styles.activeWalkCurrentMeta}>
+                {currentStop.exhibition.address} - {galleryVisitStatusLabels[currentStop.status]}
+              </Text>
+            </View>
+            <View style={styles.activeWalkProgressMeter}>
+              <Text style={styles.activeWalkProgressValue}>
+                {activeWalkProgress.completedStopCount}/{activeWalkProgress.totalStopCount}
+              </Text>
+              <Text style={styles.activeWalkProgressLabel}>done</Text>
+            </View>
+          </View>
+
+          <View style={styles.activeWalkNextCard}>
+            <Text style={styles.activeWalkNextLabel}>Next stop</Text>
+            <Text style={styles.activeWalkNextTitle}>
+              {displayNextStop?.exhibition.galleryName ?? "Route complete after this stop"}
+            </Text>
+            <Text style={styles.activeWalkCurrentMeta}>{activeNextCopy}</Text>
+          </View>
+
+          <View style={styles.activeWalkProgressRow}>
+            <Text style={styles.activeWalkProgressPill}>{activeWalkProgress.visitedStopIds.length} visited</Text>
+            <Text style={styles.activeWalkProgressPill}>{activeWalkProgress.skippedStopIds.length} skipped</Text>
+            <Text style={styles.activeWalkProgressPill}>{activeWalkProgress.remainingStopIds.length} remaining</Text>
+          </View>
+
+          <View style={styles.activeWalkStickyActions}>
             <Pressable
               accessibilityRole="link"
               accessibilityLabel={`Open map for current stop ${currentStop.exhibition.galleryName}`}
               onPress={() => {
                 void Linking.openURL(currentStop.mapUrl);
               }}
-              style={styles.routeFirstMapButton}
+              style={styles.activeWalkMapButton}
             >
               <MapPin size={14} color={colors.paper} />
-              <Text style={styles.routeFirstMapButtonText}>Current map</Text>
+              <Text style={styles.activeWalkMapButtonText}>Open current map</Text>
             </Pressable>
-          ) : null}
-          {displayPlan.routeMapUrl ? (
             <Pressable
-              accessibilityRole="link"
-              accessibilityLabel={`Open full ${displayPlan.neighborhood} walking route in maps`}
-              onPress={() => {
-                if (displayPlan.routeMapUrl) {
-                  void Linking.openURL(displayPlan.routeMapUrl);
-                }
-              }}
-              style={styles.routeFirstMapButton}
+              accessibilityRole="button"
+              accessibilityLabel="Mark current stop visited"
+              onPress={onMarkCurrentVisited}
+              style={styles.activeWalkVisitButton}
             >
-              <ExternalLink size={14} color={colors.paper} />
-              <Text style={styles.routeFirstMapButtonText}>Open full route</Text>
+              <Check size={14} color={colors.ink} />
+              <Text style={styles.activeWalkVisitButtonText}>Mark visited</Text>
             </Pressable>
-          ) : null}
+            {displayPlan.routeMapUrl ? (
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel={`Open full ${displayPlan.neighborhood} walking route in maps`}
+                onPress={() => {
+                  if (displayPlan.routeMapUrl) {
+                    void Linking.openURL(displayPlan.routeMapUrl);
+                  }
+                }}
+                style={styles.secondaryRouteButton}
+              >
+                <Text style={styles.secondaryRouteButtonText}>Full route</Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Skip current stop"
+              onPress={onSkipCurrent}
+              style={styles.secondaryRouteButton}
+            >
+              <Text style={styles.secondaryRouteButtonText}>Skip</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="End active walk"
+              onPress={onEndWalk}
+              style={styles.secondaryRouteButton}
+            >
+              <Text style={styles.secondaryRouteButtonText}>End</Text>
+            </Pressable>
+          </View>
         </View>
-      </View>
-
-      {showingActiveWalk ? (
-        <View style={styles.activeWalkActionRow}>
+      ) : showingCompletedWalk && activeWalkRecap ? (
+        <View style={styles.walkRecapCard}>
+          <View style={styles.walkRecapHeader}>
+            <View>
+              <Text style={styles.routeFirstKicker}>Walk recap</Text>
+              <Text style={styles.walkRecapTitle}>Walk complete</Text>
+            </View>
+            <Text style={styles.walkRecapNeighborhood}>
+              {activeWalkRecap.neighborhoods.join(", ") || displayPlan.neighborhood}
+            </Text>
+          </View>
+          <Text style={styles.walkRecapCopy}>
+            {activeWalkRecap.visitedStopCount} visited, {activeWalkRecap.skippedStopCount} skipped, {activeWalkRecap.notedStopCount} notes saved.
+          </Text>
+          <View style={styles.activeWalkProgressRow}>
+            <Text style={[styles.activeWalkProgressPill, styles.walkRecapPill]}>{activeWalkRecap.totalStopCount} stops</Text>
+            <Text style={[styles.activeWalkProgressPill, styles.walkRecapPill]}>{activeWalkRecap.remainingStopCount} left open</Text>
+            {activeWalkRecap.completedAt ? (
+              <Text style={[styles.activeWalkProgressPill, styles.walkRecapPill]}>Ended {formatShortTime(activeWalkRecap.completedAt)}</Text>
+            ) : null}
+          </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Mark current stop visited"
-            onPress={onMarkCurrentVisited}
+            accessibilityLabel="Start another walk"
+            onPress={onStartWalk}
             style={styles.primaryLightButton}
           >
-            <Text style={styles.primaryLightButtonText}>Mark visited</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Skip current stop"
-            onPress={onSkipCurrent}
-            style={styles.secondaryRouteButton}
-          >
-            <Text style={styles.secondaryRouteButtonText}>Skip stop</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Go to next stop"
-            onPress={onAdvance}
-            style={styles.secondaryRouteButton}
-          >
-            <Text style={styles.secondaryRouteButtonText}>Next stop</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="End active walk"
-            onPress={onEndWalk}
-            style={styles.secondaryRouteButton}
-          >
-            <Text style={styles.secondaryRouteButtonText}>End walk</Text>
+            <Text style={styles.primaryLightButtonText}>Start another walk</Text>
           </Pressable>
         </View>
       ) : (
         <>
+          <View style={styles.routeFirstHeader}>
+            <View style={styles.routeFirstTitleBlock}>
+              <Text style={styles.routeFirstKicker}>Tonight's walk</Text>
+              <Text style={styles.routeFirstTitle}>{displayPlan.summary}</Text>
+              <Text style={styles.routeFirstMeta}>{progressCopy}</Text>
+            </View>
+            {displayPlan.routeMapUrl ? (
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel={`Open full ${displayPlan.neighborhood} walking route in maps`}
+                onPress={() => {
+                  if (displayPlan.routeMapUrl) {
+                    void Linking.openURL(displayPlan.routeMapUrl);
+                  }
+                }}
+                style={styles.routeFirstMapButton}
+              >
+                <ExternalLink size={14} color={colors.paper} />
+                <Text style={styles.routeFirstMapButtonText}>Open full route</Text>
+              </Pressable>
+            ) : null}
+          </View>
           <View style={styles.routeFirstModeGrid}>
             {walkModeOptions.map((mode) => (
               <RouteModeButton
@@ -552,28 +662,29 @@ function RouteCommandPanel({
               </Text>
             </Pressable>
           </View>
+
+          <View style={styles.routeFirstStats}>
+            <Metric label="stops" value={displayPlan.stops.length} tone="good" />
+            <Metric label="minutes" value={displayPlan.totalMinutes} />
+            <Metric label="verified" value={`${routeVerifiedStopCount}/${walkPlan.stops.length}`} tone="good" />
+            {routeFixtureStopCount > 0 ? (
+              <Metric label="demo" value={routeFixtureStopCount} tone="warn" />
+            ) : null}
+          </View>
+
+          <View style={styles.routeStartRow}>
+            <Text style={styles.routeStartPill}>Start {startStop?.exhibition.galleryName ?? "where open"}</Text>
+            <Text style={styles.routeStartPill}>Next {displayNextStop?.exhibition.galleryName ?? "best nearby stop"}</Text>
+            <Text style={styles.routeStartPill}>{displayPlan.canStartNow ? "Can start now" : "Timing check needed"}</Text>
+          </View>
+
+          <View style={styles.routeReasonRow}>
+            {displayPlan.selectionReasons.slice(0, 4).map((reason) => (
+              <Text key={reason} style={styles.routeReasonPill}>{reason}</Text>
+            ))}
+          </View>
         </>
       )}
-
-      <View style={styles.routeFirstStats}>
-        <Metric label="stops" value={displayPlan.stops.length} tone="good" />
-        <Metric label="minutes" value={displayPlan.totalMinutes} />
-        <Metric label="miles" value={displayPlan.totalDistanceMiles.toFixed(1)} />
-        <Metric label="verified" value={`${routeVerifiedStopCount}/${walkPlan.stops.length}`} tone="good" />
-        <Metric label="demo" value={routeFixtureStopCount} tone={routeFixtureStopCount > 0 ? "warn" : "neutral"} />
-      </View>
-
-      <View style={styles.routeStartRow}>
-        <Text style={styles.routeStartPill}>Start {startStop?.exhibition.galleryName ?? "where open"}</Text>
-        <Text style={styles.routeStartPill}>Next {displayNextStop?.exhibition.galleryName ?? "best nearby stop"}</Text>
-        <Text style={styles.routeStartPill}>{displayPlan.canStartNow ? "Can start now" : "Timing check needed"}</Text>
-      </View>
-
-      <View style={styles.routeReasonRow}>
-        {displayPlan.selectionReasons.slice(0, 4).map((reason) => (
-          <Text key={reason} style={styles.routeReasonPill}>{reason}</Text>
-        ))}
-      </View>
     </View>
   );
 }
@@ -605,24 +716,19 @@ function WalkStopRow({
   leg,
   isStart,
   isNext,
+  isLast,
   progress
 }: {
   stop: GalleryWalkPlan["stops"][number];
   leg?: GalleryWalkPlan["legs"][number];
   isStart: boolean;
   isNext: boolean;
+  isLast: boolean;
   progress?: GalleryWalkStopProgress;
 }) {
   const trust = getGalleryInventoryTrust(stop.exhibition);
   const groupedShows = stop.exhibitions ?? [stop.exhibition];
   const showCountLabel = `${groupedShows.length} show${groupedShows.length === 1 ? "" : "s"} on view`;
-  const progressLabel: Partial<Record<GalleryWalkStopProgress, string>> = {
-    current: "Current",
-    next: "Next",
-    visited: "Visited",
-    skipped: "Skipped",
-    planned: "Planned"
-  };
 
   return (
     <View
@@ -634,8 +740,18 @@ function WalkStopRow({
         progress === "skipped" ? styles.skippedWalkStop : null
       ]}
     >
-      <View style={styles.stopNumber}>
-        <Text style={styles.stopNumberText}>{stop.stopNumber}</Text>
+      <View style={styles.stopRail}>
+        <View
+          style={[
+            styles.stopNumber,
+            progress === "current" ? styles.currentStopNumber : null,
+            progress === "visited" ? styles.visitedStopNumber : null,
+            progress === "skipped" ? styles.skippedStopNumber : null
+          ]}
+        >
+          <Text style={styles.stopNumberText}>{stop.stopNumber}</Text>
+        </View>
+        {!isLast ? <View style={styles.stopRailLine} /> : null}
       </View>
       <View style={styles.walkStopCopy}>
         <View style={styles.stopLabelRow}>
@@ -646,7 +762,7 @@ function WalkStopRow({
             <Text style={styles.routePill}>Next stop</Text>
           ) : null}
           {progress ? (
-            <Text style={styles.routePill}>{progressLabel[progress]}</Text>
+            <Text style={styles.routePill}>{getRouteProgressLabel(progress)}</Text>
           ) : null}
         </View>
         <Text style={styles.walkStopTitle}>{stop.exhibition.galleryName}</Text>
@@ -959,39 +1075,20 @@ function ExhibitionDetailSheet({
           </View>
         </View>
 
-        <Text style={styles.cardDescription}>{exhibition.description}</Text>
-
-        <View style={styles.cardSignalRow}>
-          <Text style={styles.factText}>{exhibition.address}</Text>
-          <Text style={styles.factText}>{formatShortDate(exhibition.opensAt)} to {formatShortDate(exhibition.closesAt)}</Text>
-          <Text style={[styles.factText, getDaysUntilGalleryCloses(exhibition, referenceNow) <= 7 ? styles.urgentFactText : null]}>
-            {getClosingCopy(exhibition)}
-          </Text>
-          {openingTonight ? <Text style={styles.openingFactText}>Opening tonight</Text> : null}
-        </View>
-
-        <View style={styles.sourceRow}>
-          <Text style={styles.sourceText}>{getFreshnessCopy(exhibition)}</Text>
-          <Text style={styles.sourceText}>{getSourceCopy(exhibition)}</Text>
-          <Text style={styles.sourceText}>{exhibition.mediums.map((medium) => mediumLabels[medium]).join(", ")}</Text>
-        </View>
-
         {routeProgress ? (
-          <View style={styles.activeRouteDetail}>
-            <View style={styles.activeRouteDetailCopy}>
-              <Text style={styles.activeRouteDetailTitle}>In active walk</Text>
-              <Text style={styles.activeRouteDetailText}>
-                {routeProgress === "current"
-                  ? "This is your current stop."
-                  : routeProgress === "next"
-                    ? "This is your next stop."
-                    : routeProgress === "visited"
-                      ? "You marked this stop visited."
-                      : routeProgress === "skipped"
-                        ? "You skipped this stop."
-                        : "This stop is still planned."}
-              </Text>
+          <View
+            style={[
+              styles.activeRouteDetail,
+              routeProgress === "current" ? styles.currentActiveRouteDetail : null
+            ]}
+          >
+            <View style={styles.activeRouteDetailHeader}>
+              <Text style={styles.activeRouteStatusPill}>{getRouteProgressLabel(routeProgress)}</Text>
+              <Text style={styles.activeRouteDetailTitle}>In your walk</Text>
             </View>
+            <Text style={styles.activeRouteDetailText}>
+              {getRouteProgressDetail(routeProgress)}
+            </Text>
             {routeProgress !== "visited" && routeProgress !== "skipped" ? (
               <View style={styles.activeWalkActionRow}>
                 <Pressable
@@ -1015,6 +1112,23 @@ function ExhibitionDetailSheet({
           </View>
         ) : null}
 
+        <Text style={styles.cardDescription}>{exhibition.description}</Text>
+
+        <View style={styles.cardSignalRow}>
+          <Text style={styles.factText}>{exhibition.address}</Text>
+          <Text style={styles.factText}>{formatShortDate(exhibition.opensAt)} to {formatShortDate(exhibition.closesAt)}</Text>
+          <Text style={[styles.factText, getDaysUntilGalleryCloses(exhibition, referenceNow) <= 7 ? styles.urgentFactText : null]}>
+            {getClosingCopy(exhibition)}
+          </Text>
+          {openingTonight ? <Text style={styles.openingFactText}>Opening tonight</Text> : null}
+        </View>
+
+        <View style={styles.sourceRow}>
+          <Text style={styles.sourceText}>{getFreshnessCopy(exhibition)}</Text>
+          <Text style={styles.sourceText}>{getSourceCopy(exhibition)}</Text>
+          <Text style={styles.sourceText}>{exhibition.mediums.map((medium) => mediumLabels[medium]).join(", ")}</Text>
+        </View>
+
         <View style={styles.reasonRow}>
           {reasons.map((reason) => (
             <View key={reason} style={styles.reasonPill}>
@@ -1034,6 +1148,17 @@ function ExhibitionDetailSheet({
               onPress={() => onStatus(statusOption)}
             />
           ))}
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={`Open map for ${exhibition.galleryName}`}
+            onPress={() => {
+              void Linking.openURL(getGalleryMapUrl(exhibition));
+            }}
+            style={styles.linkButton}
+          >
+            <MapPin size={14} color={colors.ink} />
+            <Text style={styles.linkButtonText}>Map</Text>
+          </Pressable>
           <Pressable
             accessibilityRole="link"
             accessibilityLabel={`Open source listing for ${exhibition.title} at ${exhibition.galleryName}`}
@@ -1211,11 +1336,25 @@ export function GalleryApp() {
         : undefined,
     [activeWalkPlan, activeWalkSession]
   );
+  const activeWalkRecap = useMemo(
+    () =>
+      activeWalkSession && activeWalkPlan
+        ? getGalleryWalkRecap(activeWalkSession, activeWalkPlan, logEntries)
+        : undefined,
+    [activeWalkPlan, activeWalkSession, logEntries]
+  );
+  const activeWalkRouteMatchesCurrent = Boolean(
+    activeWalkSession &&
+      activeWalkSession.areaId === selectedAreaId &&
+      activeWalkSession.mode === walkMode &&
+      (activeWalkSession.neighborhood ?? undefined) === walkPlan.neighborhood
+  );
   const activeWalkIsDraft =
-    activeWalkSession?.status === "active" &&
-    (activeWalkSession.areaId !== selectedAreaId ||
-      activeWalkSession.mode !== walkMode ||
-      (activeWalkSession.neighborhood ?? undefined) !== walkPlan.neighborhood);
+    activeWalkSession?.status === "active" && !activeWalkRouteMatchesCurrent;
+  const showRouteProgress =
+    Boolean(activeWalkSession) &&
+    activeWalkRouteMatchesCurrent &&
+    (activeWalkSession?.status === "active" || activeWalkSession?.status === "completed");
   const activeWalkCurrentStop = activeWalkProgress?.currentStopId
     ? activeWalkPlan?.stops.find(
         (stop) => stop.exhibition.id === activeWalkProgress.currentStopId
@@ -1300,7 +1439,7 @@ export function GalleryApp() {
   const startStop = walkPlan.stops.find((stop) => stop.exhibition.id === walkPlan.startStopId);
   const nextStop = walkPlan.stops.find((stop) => stop.exhibition.id === walkPlan.nextStopId);
   const routeStopProgressById =
-    activeWalkSession?.status === "active" && !activeWalkIsDraft
+    showRouteProgress
       ? activeWalkProgress?.stopProgressById
       : undefined;
   const selectedActiveWalkStop = selectedExhibition
@@ -1388,20 +1527,6 @@ export function GalleryApp() {
 
     if (exhibitionId) {
       setLogStatus(exhibitionId, "skipped");
-    }
-  }
-
-  function advanceActiveWalk() {
-    if (!activeWalkSession || !activeWalkPlan) {
-      return;
-    }
-
-    const currentStopId = activeWalkProgress?.currentStopId;
-
-    setActiveWalkSession(advanceGalleryWalk(activeWalkSession, activeWalkPlan, referenceNow));
-
-    if (currentStopId) {
-      setLogStatus(currentStopId, "visited");
     }
   }
 
@@ -1509,11 +1634,13 @@ export function GalleryApp() {
             nextStop={nextStop}
             activeWalkSession={activeWalkSession}
             activeWalkProgress={activeWalkProgress}
+            activeWalkRecap={activeWalkRecap}
             activeWalkPlan={activeWalkPlan}
             activeWalkCurrentStop={activeWalkCurrentStop}
             activeWalkNextStop={activeWalkNextStop}
             activeWalkNextLeg={activeWalkNextLeg}
             activeWalkIsDraft={activeWalkIsDraft}
+            activeWalkRouteMatchesCurrent={activeWalkRouteMatchesCurrent}
             onMode={setWalkMode}
             onStartWalk={startWalk}
             onResumeWalk={resumeWalk}
@@ -1526,7 +1653,6 @@ export function GalleryApp() {
             onSkipCurrent={() =>
               skipRouteStop(activeWalkProgress?.currentStopId, activeWalkCurrentStop?.exhibition.id)
             }
-            onAdvance={advanceActiveWalk}
             onEndWalk={endActiveWalk}
             compact={isCompactLayout}
           />
@@ -1580,12 +1706,6 @@ export function GalleryApp() {
           >
             <TonightStat label="Open now" value={openNowCount} detail={`${sourceTrust.exhibitionCount} listings`} dark />
             <TonightStat label="Verified" value={sourceTrust.verifiedExhibitionCount} detail="Official-page checked" />
-            <TonightStat
-              label="Demo"
-              value={sourceTrust.fixtureExhibitionCount}
-              detail={`${sourceTrust.needsReviewExhibitionCount} needs review`}
-            />
-            <TonightStat label="Sources" value={dataAudit.sourceCount} detail={`${dataAudit.officialLinkCoveragePercent}% official links`} />
             <TonightStat label="Closing soon" value={closingSoonCount} detail="Within 7 days" />
           </ScrollView>
 
@@ -1743,22 +1863,29 @@ export function GalleryApp() {
               </Text>
             </View>
           </View>
-          <View style={styles.routeModeGrid}>
-            {walkModeOptions.map((mode) => (
-              <RouteModeButton
-                key={mode}
-                label={galleryWalkModeLabels[mode]}
-                detail={walkModeDetails[mode]}
-                active={walkMode === mode}
-                onPress={() => setWalkMode(mode)}
-              />
-            ))}
-          </View>
-          <View style={styles.walkStats}>
-            <Metric label="stops" value={walkPlan.stops.length} tone="good" />
-            <Metric label="minutes" value={walkPlan.totalMinutes} />
-            <Metric label="route miles" value={walkPlan.totalDistanceMiles.toFixed(1)} />
-            <Metric label="saved stops" value={walkPlan.savedStopCount} tone={walkPlan.savedStopCount > 0 ? "good" : "neutral"} />
+          {activeWalkSession?.status === "active" ? (
+            <View style={styles.routePlannerModeBlock}>
+              <Text style={styles.routePlannerModeHint}>
+                Switch modes here to preview a draft route without changing your active walk.
+              </Text>
+              <View style={styles.routeModeGrid}>
+                {walkModeOptions.map((mode) => (
+                  <RouteModeButton
+                    key={mode}
+                    label={galleryWalkModeLabels[mode]}
+                    detail={walkModeDetails[mode]}
+                    active={walkMode === mode}
+                    onPress={() => setWalkMode(mode)}
+                  />
+                ))}
+              </View>
+            </View>
+          ) : null}
+          <View style={styles.routePlannerFacts}>
+            <Text style={styles.routePlannerFact}>{walkPlan.stops.length} stops</Text>
+            <Text style={styles.routePlannerFact}>{walkPlan.totalMinutes} min</Text>
+            <Text style={styles.routePlannerFact}>{walkPlan.totalDistanceMiles.toFixed(1)} mi</Text>
+            <Text style={styles.routePlannerFact}>{walkPlan.savedStopCount} saved</Text>
           </View>
           <View style={styles.routeGuidance}>
             <Text style={styles.guidanceTitle}>Why this route works</Text>
@@ -1801,6 +1928,7 @@ export function GalleryApp() {
                   leg={index > 0 ? walkPlan.legs[index - 1] : undefined}
                   isStart={walkPlan.startStopId === stop.exhibition.id}
                   isNext={walkPlan.nextStopId === stop.exhibition.id}
+                  isLast={index === walkPlan.stops.length - 1}
                   progress={routeStopProgressById?.[stop.exhibition.id]}
                 />
               ))
@@ -2289,6 +2417,9 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textTransform: "uppercase"
   },
+  activeWalkKicker: {
+    color: "#DAD8D0"
+  },
   routeFirstTitle: {
     color: colors.ink,
     fontSize: 22,
@@ -2302,6 +2433,179 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     lineHeight: 18,
     marginTop: spacing.xs
+  },
+  activeWalkCommandSurface: {
+    backgroundColor: colors.ink,
+    borderRadius: radii.md,
+    gap: spacing.md,
+    padding: spacing.md
+  },
+  activeWalkCommandTop: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+    justifyContent: "space-between"
+  },
+  activeWalkCurrentCopy: {
+    flex: 1,
+    minWidth: 210
+  },
+  activeWalkCurrentTitle: {
+    color: colors.paper,
+    fontSize: 24,
+    fontWeight: "900",
+    lineHeight: 29,
+    marginTop: spacing.xs
+  },
+  activeWalkCurrentMeta: {
+    color: "#DAD8D0",
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17,
+    marginTop: spacing.xs
+  },
+  activeWalkProgressMeter: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderRadius: radii.md,
+    minWidth: 76,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
+  },
+  activeWalkProgressValue: {
+    color: colors.ink,
+    fontSize: 20,
+    fontWeight: "900"
+  },
+  activeWalkProgressLabel: {
+    color: colors.mutedInk,
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  activeWalkNextCard: {
+    backgroundColor: "rgba(255, 253, 248, 0.08)",
+    borderColor: "rgba(255, 253, 248, 0.18)",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    padding: spacing.md
+  },
+  activeWalkNextLabel: {
+    color: "#DAD8D0",
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  activeWalkNextTitle: {
+    color: colors.paper,
+    fontSize: 16,
+    fontWeight: "900",
+    lineHeight: 21,
+    marginTop: spacing.xs
+  },
+  activeWalkProgressRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  activeWalkProgressPill: {
+    backgroundColor: "rgba(255, 253, 248, 0.12)",
+    borderColor: "rgba(255, 253, 248, 0.16)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.paper,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  activeWalkStickyActions: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderRadius: radii.md,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    padding: spacing.sm
+  },
+  activeWalkMapButton: {
+    alignItems: "center",
+    backgroundColor: colors.ink,
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    flexGrow: 1,
+    gap: spacing.xs,
+    justifyContent: "center",
+    minHeight: 38,
+    minWidth: 170,
+    paddingHorizontal: spacing.md
+  },
+  activeWalkMapButtonText: {
+    color: colors.paper,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  activeWalkVisitButton: {
+    alignItems: "center",
+    backgroundColor: colors.tealSoft,
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    gap: spacing.xs,
+    justifyContent: "center",
+    minHeight: 38,
+    paddingHorizontal: spacing.md
+  },
+  activeWalkVisitButtonText: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  walkRecapCard: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.md
+  },
+  walkRecapHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+    justifyContent: "space-between"
+  },
+  walkRecapTitle: {
+    color: colors.ink,
+    fontSize: 22,
+    fontWeight: "900",
+    lineHeight: 27,
+    marginTop: spacing.xs
+  },
+  walkRecapNeighborhood: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  walkRecapCopy: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 18
+  },
+  walkRecapPill: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    color: colors.ink
   },
   routeFirstMapButton: {
     alignItems: "center",
@@ -2614,6 +2918,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md
   },
+  routePlannerModeBlock: {
+    gap: spacing.sm,
+    paddingTop: spacing.md
+  },
+  routePlannerModeHint: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17,
+    paddingHorizontal: spacing.lg
+  },
   routeModeButton: {
     backgroundColor: colors.fog,
     borderColor: colors.line,
@@ -2653,6 +2968,25 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md
+  },
+  routePlannerFacts: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md
+  },
+  routePlannerFact: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
   },
   routeGuidance: {
     backgroundColor: "transparent",
@@ -2809,25 +3143,33 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md
   },
   currentWalkStop: {
-    backgroundColor: colors.fog,
+    backgroundColor: colors.paper,
     borderColor: colors.ink,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    ...shadows.card,
+    paddingHorizontal: spacing.md
+  },
+  nextWalkStop: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
     borderRadius: radii.md,
     borderWidth: 1,
     paddingHorizontal: spacing.md
   },
-  nextWalkStop: {
-    backgroundColor: "#F8FAF5",
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md
-  },
   visitedWalkStop: {
-    opacity: 0.72
+    opacity: 0.68
   },
   skippedWalkStop: {
-    backgroundColor: "#F7F1ED",
+    backgroundColor: colors.fog,
     borderRadius: radii.md,
-    opacity: 0.76,
+    opacity: 0.7,
     paddingHorizontal: spacing.md
+  },
+  stopRail: {
+    alignItems: "center",
+    alignSelf: "stretch",
+    width: 34
   },
   stopLabelRow: {
     flexDirection: "row",
@@ -2853,6 +3195,22 @@ const styles = StyleSheet.create({
     height: 32,
     justifyContent: "center",
     width: 32
+  },
+  currentStopNumber: {
+    backgroundColor: colors.gold
+  },
+  visitedStopNumber: {
+    backgroundColor: colors.mutedInk
+  },
+  skippedStopNumber: {
+    backgroundColor: colors.line
+  },
+  stopRailLine: {
+    backgroundColor: colors.line,
+    flex: 1,
+    marginTop: spacing.xs,
+    minHeight: 42,
+    width: 2
   },
   stopNumberText: {
     color: colors.paper,
@@ -3265,6 +3623,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: spacing.md,
     padding: spacing.md
+  },
+  currentActiveRouteDetail: {
+    backgroundColor: colors.paper,
+    borderColor: colors.ink
+  },
+  activeRouteDetailHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm
+  },
+  activeRouteStatusPill: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 10,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    textTransform: "uppercase"
   },
   activeRouteDetailCopy: {
     gap: spacing.xs

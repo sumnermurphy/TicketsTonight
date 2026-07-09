@@ -1,4 +1,4 @@
-import type { GalleryAreaId } from "../types";
+import type { GalleryAreaId, GalleryLogEntry } from "../types";
 import type { GalleryWalkMode, GalleryWalkPlan } from "./galleryDiscovery";
 
 export type GalleryWalkStopProgress = "current" | "next" | "visited" | "skipped" | "planned";
@@ -35,6 +35,18 @@ export type GalleryWalkProgress = {
   completedStopCount: number;
   totalStopCount: number;
   stopProgressById: Record<string, GalleryWalkStopProgress>;
+};
+
+export type GalleryWalkRecap = {
+  status: GalleryWalkSession["status"];
+  totalStopCount: number;
+  visitedStopCount: number;
+  skippedStopCount: number;
+  remainingStopCount: number;
+  notedStopCount: number;
+  neighborhoods: string[];
+  startedAt: string;
+  completedAt?: string;
 };
 
 function uniqueIds(values: string[]): string[] {
@@ -246,5 +258,40 @@ export function completeGalleryWalk(session: GalleryWalkSession, now: string): G
     status: "completed",
     completedAt: now,
     updatedAt: now
+  };
+}
+
+export function getGalleryWalkRecap(
+  session: GalleryWalkSession,
+  walkPlan: GalleryWalkPlan,
+  logEntries: GalleryLogEntry[]
+): GalleryWalkRecap {
+  const progress = getActiveWalkProgress(session, walkPlan);
+  const orderedStopIds = getSessionOrder(session, walkPlan);
+  const stopById = new Map(walkPlan.stops.map((stop) => [stop.exhibition.id, stop]));
+  const logEntryById = new Map(logEntries.map((entry) => [entry.exhibitionId, entry]));
+  const notedStopCount = orderedStopIds.filter((stopId) => {
+    const entry = logEntryById.get(stopId);
+
+    return Boolean(entry?.note?.trim());
+  }).length;
+  const neighborhoods = Array.from(
+    new Set(
+      orderedStopIds
+        .map((stopId) => stopById.get(stopId)?.exhibition.neighborhood)
+        .filter((neighborhood): neighborhood is string => Boolean(neighborhood))
+    )
+  );
+
+  return {
+    status: session.status,
+    totalStopCount: progress.totalStopCount,
+    visitedStopCount: progress.visitedStopIds.length,
+    skippedStopCount: progress.skippedStopIds.length,
+    remainingStopCount: progress.remainingStopIds.length,
+    notedStopCount,
+    neighborhoods,
+    startedAt: session.startedAt,
+    completedAt: session.completedAt
   };
 }
