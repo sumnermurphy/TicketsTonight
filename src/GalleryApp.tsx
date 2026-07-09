@@ -30,6 +30,7 @@ import {
   useWindowDimensions,
   View
 } from "react-native";
+import Svg, { Polyline } from "react-native-svg";
 
 import {
   galleryAreas,
@@ -120,6 +121,7 @@ import {
 } from "./services/galleryWalkSharing";
 import {
   createGalleryFreshnessAudit,
+  createGallerySourceReceipt,
   getGalleryFreshnessState
 } from "./services/galleryFreshness";
 import {
@@ -277,6 +279,10 @@ function getGalleryMapUrl(exhibition: GalleryExhibition): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
     `${exhibition.galleryName} ${exhibition.address}`
   )}`;
+}
+
+function percentPosition(value: number): DimensionValue {
+  return `${value}%` as DimensionValue;
 }
 
 function getRouteProgressLabel(progress?: GalleryWalkStopProgress): string {
@@ -600,7 +606,7 @@ function GalleryConciergePanel({
         <View style={styles.conciergeTitleBlock}>
           <View style={styles.conciergeBadgeRow}>
             <Text style={styles.conciergeBadge}>Concierge</Text>
-            <Text style={styles.conciergeBadgeMeta}>{suggestions.length} live moves</Text>
+            <Text style={styles.conciergeBadgeMeta}>{suggestions.length} moves</Text>
           </View>
           <Text style={styles.conciergeTitle}>{primarySuggestion?.title ?? "What to do next"}</Text>
           <Text style={styles.conciergeCopy}>
@@ -1082,6 +1088,7 @@ function WalkStopRow({
   freshnessLabel?: string;
 }) {
   const trust = getGalleryInventoryTrust(stop.exhibition);
+  const receipt = createGallerySourceReceipt(stop.exhibition, referenceNow);
   const groupedShows = stop.exhibitions ?? [stop.exhibition];
   const showCountLabel = `${groupedShows.length} show${groupedShows.length === 1 ? "" : "s"} on view`;
 
@@ -1146,7 +1153,10 @@ function WalkStopRow({
           ))}
         </View>
         <Text style={styles.walkStopTrust}>
-          {freshnessLabel ?? trust.label} - {trust.sourceLabel}
+          {freshnessLabel ?? trust.label} - {receipt.evidenceLabel}
+        </Text>
+        <Text style={styles.walkStopReceipt} numberOfLines={1}>
+          {receipt.label} - {receipt.actionLabel}
         </Text>
       </View>
       {stop.isSaved ? (
@@ -1174,6 +1184,10 @@ function RoutePreview({ routeMapModel }: { routeMapModel: GalleryRouteMapModel }
   if (routeMapModel.pins.length === 0) {
     return null;
   }
+
+  const routePath = routeMapModel.pathPoints
+    .map((point) => `${point.xPercent},${point.yPercent}`)
+    .join(" ");
 
   return (
     <View style={styles.routePreview}>
@@ -1226,6 +1240,73 @@ function RoutePreview({ routeMapModel }: { routeMapModel: GalleryRouteMapModel }
             <Text style={styles.routeMapSecondaryActionText}>Full route</Text>
           </Pressable>
         ) : null}
+      </View>
+      <View style={styles.routeMapCanvas}>
+        <View style={[styles.routeMapRoadBand, styles.routeMapRoadBandNorth]} />
+        <View style={[styles.routeMapRoadBand, styles.routeMapRoadBandSouth]} />
+        <View style={[styles.routeMapRoadBandVertical, styles.routeMapRoadBandWest]} />
+        <View style={[styles.routeMapRoadBandVertical, styles.routeMapRoadBandEast]} />
+        <Svg style={styles.routeMapSvg} viewBox="0 0 100 100" pointerEvents="none">
+          <Polyline
+            points={routePath}
+            fill="none"
+            stroke={colors.ink}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2.4}
+          />
+        </Svg>
+        {routeMapModel.segments.slice(0, 4).map((segment) => {
+          const fromPin = routeMapModel.pins.find((pin) => pin.id === segment.fromStopId);
+          const toPin = routeMapModel.pins.find((pin) => pin.id === segment.toStopId);
+
+          if (!fromPin || !toPin) {
+            return null;
+          }
+
+          return (
+            <Text
+              key={segment.id}
+              style={[
+                styles.routeMapSegmentLabel,
+                {
+                  left: percentPosition((fromPin.xPercent + toPin.xPercent) / 2),
+                  top: percentPosition((fromPin.yPercent + toPin.yPercent) / 2)
+                }
+              ]}
+            >
+              {segment.walkingMinutes}m
+            </Text>
+          );
+        })}
+        {routeMapModel.pins.map((pin) => (
+          <Pressable
+            key={pin.id}
+            accessibilityRole="link"
+            accessibilityLabel={`Open map for stop ${pin.stopNumber}, ${pin.galleryName}`}
+            onPress={() => {
+              void Linking.openURL(pin.mapUrl);
+            }}
+            style={[
+              styles.routeMapPin,
+              pin.isCurrent || pin.isNext ? styles.routeMapPinActive : null,
+              pin.progress === "visited" ? styles.routeMapPinVisited : null,
+              pin.progress === "skipped" ? styles.routeMapPinSkipped : null,
+              {
+                left: percentPosition(pin.xPercent),
+                top: percentPosition(pin.yPercent)
+              }
+            ]}
+          >
+            <Text style={styles.routeMapPinText}>{pin.stopNumber}</Text>
+          </Pressable>
+        ))}
+        <View style={styles.routeMapCanvasLegend}>
+          <Text style={styles.routeMapCanvasTitle}>{routeMapModel.title}</Text>
+          <Text style={styles.routeMapCanvasMeta}>
+            {routeMapModel.pins.length} stops - tap a pin for maps
+          </Text>
+        </View>
       </View>
       <ScrollView
         horizontal
@@ -1867,6 +1948,7 @@ function ExhibitionDetailSheet({
 }) {
   const status = getGalleryVisitStatus(exhibition, referenceNow);
   const trust = getGalleryInventoryTrust(exhibition);
+  const sourceReceipt = createGallerySourceReceipt(exhibition, referenceNow);
   const reasons = getGalleryWhyGoReasons(exhibition, allExhibitions, referenceNow, savedIds);
   const visual = getGalleryVisual(exhibition);
   const openingTonight = isGalleryOpeningTonight(exhibition, referenceNow);
@@ -1992,6 +2074,39 @@ function ExhibitionDetailSheet({
           <Text style={styles.sourceText}>{getFreshnessCopy(exhibition)}</Text>
           <Text style={styles.sourceText}>{getSourceCopy(exhibition)}</Text>
           <Text style={styles.sourceText}>{exhibition.mediums.map((medium) => mediumLabels[medium]).join(", ")}</Text>
+        </View>
+
+        <View
+          style={[
+            styles.sourceReceiptBlock,
+            sourceReceipt.needsReview ? styles.sourceReceiptNeedsReview : null
+          ]}
+        >
+          <View style={styles.sourceReceiptHeader}>
+            <Check size={14} color={colors.ink} />
+            <Text style={styles.sourceReceiptTitle}>{sourceReceipt.label}</Text>
+          </View>
+          <Text style={styles.sourceReceiptCopy}>
+            {sourceReceipt.evidenceLabel} - {sourceReceipt.detail}
+          </Text>
+          <View style={styles.activeWalkActionRow}>
+            {sourceReceipt.officialUrl ? (
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel={`Open official gallery source for ${exhibition.title}`}
+                onPress={() => {
+                  if (sourceReceipt.officialUrl) {
+                    void Linking.openURL(sourceReceipt.officialUrl);
+                  }
+                }}
+                style={styles.secondaryRouteButton}
+              >
+                <ExternalLink size={13} color={colors.ink} />
+                <Text style={styles.secondaryRouteButtonText}>Official gallery link</Text>
+              </Pressable>
+            ) : null}
+            <Text style={styles.sourceReceiptAction}>{sourceReceipt.actionLabel}</Text>
+          </View>
         </View>
 
         <View style={styles.reasonRow}>
@@ -2477,6 +2592,17 @@ export function GalleryApp() {
         ? `Usable: ${routeVerifiedStopCount} verified stops, ${routeFixtureStopCount} demo.`
         : "Thin: verified route supply is still limited.";
   const routeScopeLabel = selectedNeighborhood ?? walkPlan.neighborhood;
+  const compactAreaName =
+    selectedAreaId === "nyc" ? "NYC" : selectedAreaId === "la" ? "LA" : "Hudson";
+  const heroTitle = isCompactLayout
+    ? `${compactAreaName} Tonight`
+    : `Tonight in ${selectedArea?.name ?? "the city"}`;
+  const heroSubtitle = isCompactLayout
+    ? `${routeScopeLabel} route`
+    : `${walkPlan.title} for ${routeScopeLabel}. Open now, nearby, and source-labeled.`;
+  const heroRouteSummary = isCompactLayout
+    ? `${walkPlan.stops.length} stops`
+    : walkPlan.summary;
   const activeFilterCopy = [
     activeLens !== "all" ? lensLabels[activeLens] : undefined,
     verifiedOnly ? "Verified only" : undefined,
@@ -2994,18 +3120,18 @@ export function GalleryApp() {
               </View>
               <View style={styles.heroTitleBlock}>
                 <Text style={[styles.title, isCompactLayout ? styles.compactTitle : null]}>
-                  Tonight in {selectedArea?.name ?? "the city"}
+                  {heroTitle}
                 </Text>
                 <Text style={styles.subtitle}>
-                  {walkPlan.title} for {routeScopeLabel}. Open now, nearby, and source-labeled.
+                  {heroSubtitle}
                 </Text>
               </View>
-              <View style={styles.heroRouteCard}>
+              <View style={[styles.heroRouteCard, isCompactLayout ? styles.compactHeroRouteCard : null]}>
                 <View>
                   <Text style={styles.heroRouteLabel}>Suggested route</Text>
-                  <Text style={styles.heroRouteTitle}>{walkPlan.summary}</Text>
+                  <Text style={[styles.heroRouteTitle, isCompactLayout ? styles.compactHeroRouteTitle : null]}>{heroRouteSummary}</Text>
                 </View>
-                <Text style={styles.heroRouteMeta}>{walkPlan.totalMinutes} min - {walkPlan.totalDistanceMiles.toFixed(1)} mi</Text>
+                <Text style={[styles.heroRouteMeta, isCompactLayout ? styles.compactHeroRouteMeta : null]}>{walkPlan.totalMinutes} min - {walkPlan.totalDistanceMiles.toFixed(1)} mi</Text>
               </View>
             </View>
           </ImageBackground>
@@ -3131,10 +3257,13 @@ export function GalleryApp() {
                 <View style={styles.savedWalkCopy}>
                   <Text style={styles.savedWalkTitle}>{item.galleryName}</Text>
                   <Text style={styles.savedWalkMeta}>
-                    {item.neighborhood} - {item.freshness.label} - {item.actionLabel}
+                    {item.neighborhood} - {item.receipt.label} - {item.receipt.evidenceLabel}
+                  </Text>
+                  <Text style={styles.savedWalkMeta}>
+                    {item.receipt.detail}
                   </Text>
                 </View>
-                <Text style={styles.routePlannerFact}>{item.priority}</Text>
+                <Text style={styles.routePlannerFact}>{item.receipt.actionLabel}</Text>
               </View>
             ))}
             {freshnessAudit.needsReviewNext.length === 0 ? (
@@ -3631,21 +3760,24 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.paper,
+    flexShrink: 1,
     fontSize: 44,
     fontWeight: "900",
     letterSpacing: 0,
-    lineHeight: 48
+    lineHeight: 48,
+    maxWidth: "100%"
   },
   compactTitle: {
-    fontSize: 34,
-    lineHeight: 38
+    fontSize: 24,
+    lineHeight: 29
   },
   subtitle: {
     color: "#F0ECE4",
+    flexShrink: 1,
     fontSize: 15,
     lineHeight: 21,
     marginTop: spacing.sm,
-    maxWidth: 680
+    maxWidth: "100%"
   },
   heroRouteCard: {
     alignItems: "flex-end",
@@ -3656,6 +3788,11 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.md
   },
+  compactHeroRouteCard: {
+    alignItems: "flex-start",
+    flexDirection: "column",
+    minWidth: 0
+  },
   heroRouteLabel: {
     color: "#D9D2C6",
     fontSize: 11,
@@ -3664,16 +3801,29 @@ const styles = StyleSheet.create({
   },
   heroRouteTitle: {
     color: colors.paper,
+    flexShrink: 1,
     fontSize: 16,
     fontWeight: "900",
-    marginTop: spacing.sm
+    lineHeight: 21,
+    marginTop: spacing.sm,
+    maxWidth: "100%"
+  },
+  compactHeroRouteTitle: {
+    fontSize: 15,
+    lineHeight: 20
   },
   heroRouteMeta: {
     color: "#F0ECE4",
+    flexShrink: 1,
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 18,
-    marginTop: spacing.xs
+    marginTop: spacing.xs,
+    maxWidth: "100%"
+  },
+  compactHeroRouteMeta: {
+    fontSize: 12,
+    lineHeight: 17
   },
   areaRow: {
     flexDirection: "row",
@@ -4192,11 +4342,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.md,
-    justifyContent: "space-between"
+    justifyContent: "space-between",
+    minWidth: 0
   },
   conciergeTitleBlock: {
     flex: 1,
-    minWidth: 220
+    minWidth: 0
   },
   conciergeBadgeRow: {
     alignItems: "center",
@@ -4217,6 +4368,7 @@ const styles = StyleSheet.create({
   },
   conciergeBadgeMeta: {
     color: "#DAD8D0",
+    flexShrink: 1,
     fontSize: 11,
     fontWeight: "900",
     textTransform: "uppercase"
@@ -5117,6 +5269,123 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900"
   },
+  routeMapCanvas: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    height: 252,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.md,
+    overflow: "hidden",
+    position: "relative"
+  },
+  routeMapSvg: {
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0
+  },
+  routeMapRoadBand: {
+    backgroundColor: "rgba(255, 253, 248, 0.86)",
+    borderColor: "rgba(17, 17, 17, 0.06)",
+    borderWidth: 1,
+    height: 34,
+    left: "-10%",
+    position: "absolute",
+    width: "122%"
+  },
+  routeMapRoadBandNorth: {
+    top: "20%",
+    transform: [{ rotate: "-9deg" }]
+  },
+  routeMapRoadBandSouth: {
+    bottom: "16%",
+    transform: [{ rotate: "7deg" }]
+  },
+  routeMapRoadBandVertical: {
+    backgroundColor: "rgba(255, 253, 248, 0.72)",
+    borderColor: "rgba(17, 17, 17, 0.05)",
+    borderWidth: 1,
+    height: "118%",
+    position: "absolute",
+    top: "-8%",
+    width: 30
+  },
+  routeMapRoadBandWest: {
+    left: "24%",
+    transform: [{ rotate: "12deg" }]
+  },
+  routeMapRoadBandEast: {
+    right: "18%",
+    transform: [{ rotate: "-7deg" }]
+  },
+  routeMapSegmentLabel: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 10,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    position: "absolute",
+    transform: [{ translateX: -14 }, { translateY: -10 }]
+  },
+  routeMapPin: {
+    alignItems: "center",
+    backgroundColor: colors.ink,
+    borderColor: colors.paper,
+    borderRadius: radii.pill,
+    borderWidth: 2,
+    height: 30,
+    justifyContent: "center",
+    position: "absolute",
+    transform: [{ translateX: -15 }, { translateY: -15 }],
+    width: 30,
+    ...shadows.card
+  },
+  routeMapPinActive: {
+    backgroundColor: colors.gold
+  },
+  routeMapPinVisited: {
+    backgroundColor: colors.mutedInk
+  },
+  routeMapPinSkipped: {
+    backgroundColor: colors.line,
+    borderColor: colors.mutedInk
+  },
+  routeMapPinText: {
+    color: colors.paper,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  routeMapCanvasLegend: {
+    backgroundColor: "rgba(255, 253, 248, 0.92)",
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    bottom: spacing.sm,
+    left: spacing.sm,
+    maxWidth: "72%",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    position: "absolute"
+  },
+  routeMapCanvasTitle: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  routeMapCanvasMeta: {
+    color: colors.mutedInk,
+    fontSize: 10,
+    fontWeight: "800",
+    marginTop: 2
+  },
   walkStops: {
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
@@ -5265,6 +5534,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     marginTop: spacing.xs
+  },
+  walkStopReceipt: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 2
   },
   routeReasonRow: {
     flexDirection: "row",
@@ -5686,6 +5961,46 @@ const styles = StyleSheet.create({
     color: colors.mutedInk,
     fontSize: 12,
     fontWeight: "700"
+  },
+  sourceReceiptBlock: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md
+  },
+  sourceReceiptNeedsReview: {
+    backgroundColor: colors.paper
+  },
+  sourceReceiptHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.xs
+  },
+  sourceReceiptTitle: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  sourceReceiptCopy: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17
+  },
+  sourceReceiptAction: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
   },
   feedbackRow: {
     flexDirection: "row",

@@ -28,6 +28,7 @@ export type GalleryFreshnessSummary = {
   needsReviewCount: number;
   fixtureDemoCount: number;
   officialLinkCount: number;
+  sourceReceiptSummary: GallerySourceReceiptSummary;
   needsReviewNext: GalleryFreshnessReviewItem[];
   summaryLabel: string;
   nextAction: string;
@@ -40,6 +41,39 @@ export type GalleryFreshnessReviewReason =
   | "aging-verification"
   | "missing-official-link";
 
+export type GallerySourceReceiptKind =
+  | "official-verified"
+  | "official-needs-review"
+  | "partner-submitted"
+  | "manual-review"
+  | "fixture-demo";
+
+export type GallerySourceReceipt = {
+  exhibitionId: string;
+  kind: GallerySourceReceiptKind;
+  label: string;
+  evidenceLabel: string;
+  checkedLabel: string;
+  detail: string;
+  actionLabel: string;
+  officialUrl?: string;
+  checkedAt?: string;
+  hasOfficialEvidence: boolean;
+  needsReview: boolean;
+};
+
+export type GallerySourceReceiptSummary = {
+  areaId: GalleryAreaId;
+  totalCount: number;
+  officialReceiptCount: number;
+  verifiedReceiptCount: number;
+  needsReviewCount: number;
+  fixtureDemoCount: number;
+  partnerSubmittedCount: number;
+  manualReviewCount: number;
+  summaryLabel: string;
+};
+
 export type GalleryFreshnessReviewItem = {
   exhibitionId: string;
   title: string;
@@ -47,6 +81,7 @@ export type GalleryFreshnessReviewItem = {
   areaId: GalleryAreaId;
   neighborhood: string;
   freshness: GalleryFreshnessState;
+  receipt: GallerySourceReceipt;
   reasons: GalleryFreshnessReviewReason[];
   priority: "high" | "medium" | "low";
   actionLabel: string;
@@ -175,9 +210,134 @@ export function getGalleryFreshnessState(
   };
 }
 
+export function createGallerySourceReceipt(
+  exhibition: GalleryExhibition,
+  referenceNow: string,
+  freshnessState = getGalleryFreshnessState(exhibition, referenceNow)
+): GallerySourceReceipt {
+  const trust = getGalleryInventoryTrust(exhibition);
+  const checkedAt = freshnessState.checkedAt;
+  const formattedDate = formatFreshnessDate(checkedAt);
+  const hasOfficialEvidence = trust.hasOfficialLink && exhibition.sourceLegalStatus === "official-public-page";
+
+  if (trust.isFixture) {
+    return {
+      exhibitionId: exhibition.id,
+      kind: "fixture-demo",
+      label: "Fixture/demo",
+      evidenceLabel: "Demo inventory",
+      checkedLabel: "No current source check",
+      detail: "Seeded demo record; do not treat as a verified current exhibition.",
+      actionLabel: "Replace with official page",
+      checkedAt,
+      hasOfficialEvidence: false,
+      needsReview: true
+    };
+  }
+
+  if (trust.isVerified) {
+    return {
+      exhibitionId: exhibition.id,
+      kind: "official-verified",
+      label: `Official page checked ${formattedDate}`,
+      evidenceLabel: "Verified from gallery page",
+      checkedLabel: `Verified as of ${formattedDate}`,
+      detail:
+        freshnessState.kind === "verified-aging"
+          ? "Official gallery link is present, but the source date should be refreshed soon."
+          : "Official gallery link and manual verification date are present.",
+      actionLabel: "Open official link",
+      officialUrl: exhibition.externalUrl,
+      checkedAt,
+      hasOfficialEvidence: true,
+      needsReview: freshnessState.kind === "verified-aging"
+    };
+  }
+
+  if (exhibition.sourceLegalStatus === "partner-submission") {
+    return {
+      exhibitionId: exhibition.id,
+      kind: "partner-submitted",
+      label: checkedAt ? `Submitted source checked ${formattedDate}` : "Partner/submitted",
+      evidenceLabel: "Submitted listing",
+      checkedLabel: checkedAt ? `Source checked ${formattedDate}` : "Awaiting source check",
+      detail: "Submitted inventory needs review before being promoted as verified.",
+      actionLabel: "Review submission",
+      officialUrl: trust.hasOfficialLink ? exhibition.externalUrl : undefined,
+      checkedAt,
+      hasOfficialEvidence: false,
+      needsReview: true
+    };
+  }
+
+  if (hasOfficialEvidence) {
+    return {
+      exhibitionId: exhibition.id,
+      kind: "official-needs-review",
+      label: `Official link needs review`,
+      evidenceLabel: "Official link present",
+      checkedLabel: checkedAt ? `Source checked ${formattedDate}` : "Source date missing",
+      detail: "Official link exists, but freshness or verification status is not strong enough to feature.",
+      actionLabel: "Re-check official page",
+      officialUrl: exhibition.externalUrl,
+      checkedAt,
+      hasOfficialEvidence: true,
+      needsReview: true
+    };
+  }
+
+  return {
+    exhibitionId: exhibition.id,
+    kind: "manual-review",
+    label: "Needs review",
+    evidenceLabel: "Manual review needed",
+    checkedLabel: checkedAt ? `Source checked ${formattedDate}` : "Source date missing",
+    detail: "This record is not backed by a current official gallery page yet.",
+    actionLabel: "Add official evidence",
+    officialUrl: trust.hasOfficialLink ? exhibition.externalUrl : undefined,
+    checkedAt,
+    hasOfficialEvidence: false,
+    needsReview: true
+  };
+}
+
+export function createGallerySourceReceiptSummary(input: {
+  areaId: GalleryAreaId;
+  exhibitions: GalleryExhibition[];
+  referenceNow: string;
+}): GallerySourceReceiptSummary {
+  const receipts = input.exhibitions
+    .filter((exhibition) => exhibition.areaId === input.areaId)
+    .map((exhibition) => createGallerySourceReceipt(exhibition, input.referenceNow));
+  const verifiedReceiptCount = receipts.filter((receipt) => receipt.kind === "official-verified").length;
+  const needsReviewCount = receipts.filter((receipt) => receipt.needsReview).length;
+  const fixtureDemoCount = receipts.filter((receipt) => receipt.kind === "fixture-demo").length;
+  const partnerSubmittedCount = receipts.filter((receipt) => receipt.kind === "partner-submitted").length;
+  const manualReviewCount = receipts.filter((receipt) => receipt.kind === "manual-review").length;
+  const officialReceiptCount = receipts.filter((receipt) => receipt.hasOfficialEvidence).length;
+
+  return {
+    areaId: input.areaId,
+    totalCount: receipts.length,
+    officialReceiptCount,
+    verifiedReceiptCount,
+    needsReviewCount,
+    fixtureDemoCount,
+    partnerSubmittedCount,
+    manualReviewCount,
+    summaryLabel:
+      verifiedReceiptCount >= 30 && input.areaId === "nyc"
+        ? "Review-ready source receipts"
+        : verifiedReceiptCount >= 6
+          ? "Useful source receipts"
+          : "Thin receipt coverage"
+  };
+}
+
 function createReviewItem(
   exhibition: GalleryExhibition,
-  freshness: GalleryFreshnessState
+  freshness: GalleryFreshnessState,
+  referenceNow: string
 ): GalleryFreshnessReviewItem | undefined {
   const reasons: GalleryFreshnessReviewReason[] = [];
 
@@ -217,6 +377,7 @@ function createReviewItem(
       : freshness.kind === "verified-aging"
         ? "Re-check official page"
         : "Review source freshness";
+  const receipt = createGallerySourceReceipt(exhibition, referenceNow, freshness);
 
   return {
     exhibitionId: exhibition.id,
@@ -225,10 +386,11 @@ function createReviewItem(
     areaId: exhibition.areaId,
     neighborhood: exhibition.neighborhood,
     freshness,
+    receipt,
     reasons,
     priority,
     actionLabel,
-    officialUrl: freshness.hasOfficialLink ? exhibition.externalUrl : undefined
+    officialUrl: receipt.officialUrl
   };
 }
 
@@ -247,7 +409,11 @@ export function createGalleryFreshnessReview(input: {
   return input.exhibitions
     .filter((exhibition) => exhibition.areaId === input.areaId)
     .map((exhibition) =>
-      createReviewItem(exhibition, getGalleryFreshnessState(exhibition, input.referenceNow))
+      createReviewItem(
+        exhibition,
+        getGalleryFreshnessState(exhibition, input.referenceNow),
+        input.referenceNow
+      )
     )
     .filter((item): item is GalleryFreshnessReviewItem => Boolean(item))
     .sort((left, right) => {
@@ -282,6 +448,7 @@ export function createGalleryFreshnessAudit(input: {
   const needsReviewCount = states.filter((state) => state.kind === "needs-review").length;
   const fixtureDemoCount = states.filter((state) => state.kind === "fixture-demo").length;
   const officialLinkCount = states.filter((state) => state.hasOfficialLink).length;
+  const sourceReceiptSummary = createGallerySourceReceiptSummary(input);
   const needsReviewNext = createGalleryFreshnessReview({
     ...input,
     limit: 5
@@ -309,6 +476,7 @@ export function createGalleryFreshnessAudit(input: {
     needsReviewCount,
     fixtureDemoCount,
     officialLinkCount,
+    sourceReceiptSummary,
     needsReviewNext,
     summaryLabel,
     nextAction

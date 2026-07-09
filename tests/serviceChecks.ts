@@ -113,6 +113,8 @@ import {
 import {
   createGalleryFreshnessAudit,
   createGalleryFreshnessReview,
+  createGallerySourceReceipt,
+  createGallerySourceReceiptSummary,
   getGalleryFreshnessState
 } from "../src/services/galleryFreshness";
 import { createGalleryRouteMapModel } from "../src/services/galleryRouteMap";
@@ -1121,19 +1123,29 @@ async function main() {
     exhibitions: galleryExhibitions,
     referenceNow: galleryReferenceNow
   });
-  const verifiedFreshnessState = getGalleryFreshnessState(
+  const verifiedReceiptSummary = createGallerySourceReceiptSummary({
+    areaId: "nyc",
+    exhibitions: galleryExhibitions,
+    referenceNow: galleryReferenceNow
+  });
+  const verifiedExhibition =
     galleryExhibitions.find((exhibition) => getGalleryInventoryTrust(exhibition).isVerified) ??
-      galleryExhibitions[0],
+    galleryExhibitions[0];
+  const fixtureReceiptExhibition = createSyntheticGalleryExhibition({
+    id: "freshness-fixture-demo",
+    title: "Fixture Demo",
+    coordinates: { latitude: 40.747, longitude: -74.006 },
+    source: "seed-fixture",
+    externalUrl: "https://example.org/demo"
+  });
+  const verifiedFreshnessState = getGalleryFreshnessState(verifiedExhibition, galleryReferenceNow);
+  const fixtureFreshnessState = getGalleryFreshnessState(
+    fixtureReceiptExhibition,
     galleryReferenceNow
   );
-  const fixtureFreshnessState = getGalleryFreshnessState(
-    createSyntheticGalleryExhibition({
-      id: "freshness-fixture-demo",
-      title: "Fixture Demo",
-      coordinates: { latitude: 40.747, longitude: -74.006 },
-      source: "seed-fixture",
-      externalUrl: "https://example.org/demo"
-    }),
+  const verifiedSourceReceipt = createGallerySourceReceipt(verifiedExhibition, galleryReferenceNow);
+  const fixtureSourceReceipt = createGallerySourceReceipt(
+    fixtureReceiptExhibition,
     galleryReferenceNow
   );
   const freshnessReviewQueue = createGalleryFreshnessReview({
@@ -1199,17 +1211,35 @@ async function main() {
       ["high", "medium"].includes(freshnessReviewQueue[0]?.priority ?? "") &&
       verifiedFreshnessState.isVerified &&
       verifiedFreshnessState.label.includes("Verified") &&
-      fixtureFreshnessState.kind === "fixture-demo",
-    "Gallery freshness lite should distinguish recent verified official links from fixture/demo inventory and expose a review queue."
+      fixtureFreshnessState.kind === "fixture-demo" &&
+      freshnessAudit.sourceReceiptSummary.verifiedReceiptCount >= 30 &&
+      verifiedReceiptSummary.officialReceiptCount >= verifiedReceiptSummary.verifiedReceiptCount &&
+      verifiedSourceReceipt.kind === "official-verified" &&
+      Boolean(verifiedSourceReceipt.officialUrl?.startsWith("https://")) &&
+      verifiedSourceReceipt.label.includes("Official page checked") &&
+      fixtureSourceReceipt.kind === "fixture-demo" &&
+      !fixtureSourceReceipt.hasOfficialEvidence,
+    "Gallery freshness lite should distinguish recent verified official links from fixture/demo inventory and expose source receipts."
   );
   assert(
     routeMapModel.pins.length === socialEventPlan.stops.length &&
+      routeMapModel.pathPoints.length === routeMapModel.pins.length &&
       routeMapModel.segments.length === Math.max(0, socialEventPlan.stops.length - 1) &&
       routeMapModel.routeMapUrl === socialEventPlan.routeMapUrl &&
       routeMapModel.pins.every((pin) => pin.mapUrl.includes("google.com/maps")) &&
+      routeMapModel.pins.every(
+        (pin) =>
+          pin.xPercent >= 0 &&
+          pin.xPercent <= 100 &&
+          pin.yPercent >= 0 &&
+          pin.yPercent <= 100
+      ) &&
+      routeMapModel.pathPoints.every((point) => point.id.trim().length > 0) &&
+      routeMapModel.bounds.north >= routeMapModel.bounds.south &&
+      routeMapModel.bounds.east >= routeMapModel.bounds.west &&
       activeRouteMapModel.currentPin?.progress === "current" &&
       activeRouteMapModel.nextPin?.progress === "next",
-    "Gallery route map model should expose ordered pins, walking segments, current/next state, and external map links."
+    "Gallery route map model should expose projected pins, route path points, current/next state, and external map links."
   );
   assert(
     shareCard.shareText.includes(socialEventPlan.title) &&
