@@ -179,6 +179,62 @@ function getAreaRoleCopy(areaId: GalleryAreaId): string {
   return "Arts-town test";
 }
 
+function getMarketReadinessCopy({
+  verifiedCount,
+  fixtureCount,
+  staleCount,
+  uniqueGalleryCount,
+  walkReadyCount
+}: {
+  verifiedCount: number;
+  fixtureCount: number;
+  staleCount: number;
+  uniqueGalleryCount: number;
+  walkReadyCount: number;
+}): string {
+  if (verifiedCount >= 40 && uniqueGalleryCount >= 20 && walkReadyCount >= 4) {
+    return "Strong verified walk supply";
+  }
+
+  if (verifiedCount >= 10 && walkReadyCount >= 2) {
+    return "Light verified walk supply";
+  }
+
+  if (verifiedCount > 0) {
+    return "Verified supply still thin";
+  }
+
+  if (fixtureCount > 0 || staleCount > 0) {
+    return "Needs more verified supply";
+  }
+
+  return "No current verified supply";
+}
+
+function getNeighborhoodReadinessCopy({
+  verifiedCount,
+  uniqueGalleryCount,
+  canSupportWalk
+}: {
+  verifiedCount: number;
+  uniqueGalleryCount: number;
+  canSupportWalk: boolean;
+}): string {
+  if (verifiedCount >= 4 && uniqueGalleryCount >= 3 && canSupportWalk) {
+    return "Strong verified walk";
+  }
+
+  if (verifiedCount >= 2 && canSupportWalk) {
+    return "Light verified walk";
+  }
+
+  if (verifiedCount > 0) {
+    return "Verified supply thin";
+  }
+
+  return "Needs verification";
+}
+
 function ChipButton({
   label,
   active,
@@ -719,6 +775,10 @@ export function GalleryApp() {
       ).length,
     [areaInventory]
   );
+  const uniqueGalleryCount = useMemo(
+    () => new Set(areaInventory.map((exhibition) => exhibition.galleryName.toLowerCase())).size,
+    [areaInventory]
+  );
   const closingSoonCount = useMemo(
     () =>
       areaInventory.filter((exhibition) => getDaysUntilGalleryCloses(exhibition, referenceNow) <= 7)
@@ -726,9 +786,34 @@ export function GalleryApp() {
     [areaInventory]
   );
   const walkReadyCount = neighborhoodIntelligence.filter((item) => item.canSupportWalk).length;
+  const marketReadinessCopy = getMarketReadinessCopy({
+    verifiedCount: sourceTrust.verifiedExhibitionCount,
+    fixtureCount: sourceTrust.fixtureExhibitionCount,
+    staleCount: sourceTrust.staleSourceRiskCount + sourceTrust.needsReviewExhibitionCount,
+    uniqueGalleryCount,
+    walkReadyCount
+  });
   const selectedNeighborhoodInsight = selectedNeighborhood
     ? neighborhoodIntelligence.find((item) => item.neighborhood === selectedNeighborhood)
     : undefined;
+  const routeVerifiedStopCount = walkPlan.stops.filter((stop) =>
+    getGalleryInventoryTrust(stop.exhibition).isVerified
+  ).length;
+  const routeFixtureStopCount = walkPlan.stops.filter((stop) =>
+    getGalleryInventoryTrust(stop.exhibition).isFixture
+  ).length;
+  const routeUniqueGalleryCount = new Set(
+    walkPlan.stops.map((stop) => stop.exhibition.galleryName.toLowerCase())
+  ).size;
+  const routeConfidenceCopy =
+    walkPlan.stops.length === 0
+      ? "Not ready: no verified route stops yet."
+      : routeVerifiedStopCount === walkPlan.stops.length &&
+          routeUniqueGalleryCount === walkPlan.stops.length
+      ? "Reliable: all stops verified and unique."
+      : routeVerifiedStopCount >= Math.min(2, walkPlan.stops.length)
+        ? `Usable: ${routeVerifiedStopCount} verified stops, ${routeFixtureStopCount} demo.`
+        : "Thin: verified route supply is still limited.";
   const routeScopeLabel = selectedNeighborhood ?? walkPlan.neighborhood;
   const activeFilterCopy = [
     activeLens !== "all" ? lensLabels[activeLens] : undefined,
@@ -890,13 +975,16 @@ export function GalleryApp() {
             <View style={styles.trustBriefIcon}>
               <Check size={16} color={colors.teal} />
             </View>
-            <Text style={styles.trustBriefText}>
-              {isCompactLayout
-                ? `${sourceTrust.verifiedExhibitionCount} verified official-page. ${sourceTrust.fixtureExhibitionCount} demo. ${dataAudit.sourceCount} sources.`
-                : selectedAreaId === "nyc"
-                  ? `NYC mixes ${sourceTrust.verifiedExhibitionCount} manually verified official-page listings with ${sourceTrust.fixtureExhibitionCount} fixture/demo listings still marked as demo. Source directory: ${dataAudit.sourceCount} candidates, ${dataAudit.officialLinkCoveragePercent}% official links.`
-                  : `${selectedArea?.name ?? "Market"} has ${sourceTrust.verifiedExhibitionCount} verified listings and ${sourceTrust.fixtureExhibitionCount} fixture/demo listings; thin walks are labeled honestly. Source directory: ${dataAudit.sourceCount} candidates, ${dataAudit.officialLinkCoveragePercent}% official links.`}
-            </Text>
+            <View style={styles.trustBriefCopy}>
+              <Text style={styles.trustBriefStatus}>{marketReadinessCopy}</Text>
+              <Text style={styles.trustBriefText}>
+                {isCompactLayout
+                  ? `${sourceTrust.verifiedExhibitionCount} verified official-page. ${sourceTrust.fixtureExhibitionCount} demo. ${dataAudit.sourceCount} sources.`
+                  : selectedAreaId === "nyc"
+                    ? `NYC mixes ${sourceTrust.verifiedExhibitionCount} manually verified official-page listings with ${sourceTrust.fixtureExhibitionCount} fixture/demo listings still marked as demo. Source directory: ${dataAudit.sourceCount} candidates, ${dataAudit.officialLinkCoveragePercent}% official links.`
+                    : `${selectedArea?.name ?? "Market"} has ${sourceTrust.verifiedExhibitionCount} verified listings and ${sourceTrust.fixtureExhibitionCount} fixture/demo listings; thin walks are labeled honestly. Source directory: ${dataAudit.sourceCount} candidates, ${dataAudit.officialLinkCoveragePercent}% official links.`}
+              </Text>
+            </View>
           </View>
 
           {tonightPick ? (
@@ -942,6 +1030,9 @@ export function GalleryApp() {
             {!selectedNeighborhood ? <Text style={styles.selectedMiniLabel}>Active view</Text> : null}
             <Text style={styles.neighborhoodName}>All clusters</Text>
             <Text style={styles.neighborhoodMeta}>{areaInventory.length} listings - {openNowCount} open now</Text>
+            <Text style={styles.neighborhoodTrustMeta}>
+              {sourceTrust.verifiedExhibitionCount} verified - {sourceTrust.fixtureExhibitionCount} demo - {uniqueGalleryCount} galleries
+            </Text>
             <Text style={styles.neighborhoodReason}>Scan the full market</Text>
           </Pressable>
           {neighborhoodIntelligence.map((item) => (
@@ -960,10 +1051,13 @@ export function GalleryApp() {
               <Text style={styles.neighborhoodMeta}>
                 {item.exhibitionCount} shows - {item.openNowCount} open now
               </Text>
+              <Text style={styles.neighborhoodTrustMeta}>
+                {item.verifiedCount} verified - {item.fixtureCount + item.needsReviewCount} review/demo - {item.uniqueGalleryCount} galleries
+              </Text>
               <Text style={styles.neighborhoodReason}>{item.topReason}</Text>
               <View style={styles.neighborhoodFooter}>
                 <Text style={styles.neighborhoodFooterText}>
-                  {item.canSupportWalk ? "Walk-ready" : "Thin today"}
+                  {getNeighborhoodReadinessCopy(item)}
                 </Text>
               </View>
             </Pressable>
@@ -1048,6 +1142,7 @@ export function GalleryApp() {
           </View>
           <View style={styles.routeGuidance}>
             <Text style={styles.guidanceTitle}>Why this route works</Text>
+            <Text style={styles.routeConfidenceText}>{routeConfidenceCopy}</Text>
             <Text style={styles.guidanceCopy}>{walkPlan.readinessCopy}</Text>
             <View style={styles.routeReasonRow}>
               {walkPlan.selectionReasons.slice(0, 4).map((reason) => (
@@ -1402,13 +1497,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 30
   },
+  trustBriefCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  trustBriefStatus: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "900",
+    lineHeight: 18
+  },
   trustBriefText: {
     color: colors.mutedInk,
-    flex: 1,
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 18,
-    minWidth: 0
+    marginTop: spacing.xs
   },
   tonightPick: {
     alignItems: "center",
@@ -1589,6 +1693,13 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginTop: spacing.sm
   },
+  neighborhoodTrustMeta: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "800",
+    lineHeight: 16,
+    marginTop: spacing.xs
+  },
   neighborhoodReason: {
     color: colors.teal,
     fontSize: 13,
@@ -1768,6 +1879,12 @@ const styles = StyleSheet.create({
     color: colors.mutedInk,
     fontSize: 13,
     fontWeight: "700",
+    lineHeight: 18
+  },
+  routeConfidenceText: {
+    color: colors.teal,
+    fontSize: 13,
+    fontWeight: "900",
     lineHeight: 18
   },
   routeMapButton: {

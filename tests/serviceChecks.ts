@@ -368,13 +368,13 @@ async function main() {
 
   assert(
     nycTrust.exhibitionCount >= 30 &&
-      nycTrust.verifiedExhibitionCount >= 35 &&
+      nycTrust.verifiedExhibitionCount >= 45 &&
       laTrust.exhibitionCount >= 8 &&
       hudsonTrust.exhibitionCount >= 6,
     "Gallery source trust should report expanded verified NYC inventory while preserving LA and Hudson coverage."
   );
   assert(
-    nycVerifiedInventory.length >= 35 &&
+    nycVerifiedInventory.length >= 45 &&
       hudsonVerifiedInventory.length >= 1 &&
       fixtureInventory.length > 0,
     "Verified inventory should materially increase NYC while leaving fixture/demo records explicitly identifiable."
@@ -382,7 +382,7 @@ async function main() {
   assert(
     nycChinatownVerifiedInventory.length >= 3 &&
       nycLowerEastSideVerifiedInventory.length >= 3 &&
-      nycTribecaVerifiedInventory.length >= 4 &&
+      nycTribecaVerifiedInventory.length >= 8 &&
       nycUpperEastSideVerifiedInventory.length >= 4,
     "Verified NYC inventory should add route-useful Lower East Side, Chinatown, Tribeca, and Upper East Side depth."
   );
@@ -915,6 +915,12 @@ async function main() {
   const chelseaAfterVerified = neighborhoodReadiness.find(
     (neighborhood) => neighborhood.neighborhood === "Chelsea"
   );
+  const tribecaAfterVerified = neighborhoodReadiness.find(
+    (neighborhood) => neighborhood.neighborhood === "Tribeca"
+  );
+  const chinatownAfterVerified = neighborhoodReadiness.find(
+    (neighborhood) => neighborhood.neighborhood === "Chinatown"
+  );
 
   assert(
     neighborhoodReadiness.some(
@@ -925,8 +931,20 @@ async function main() {
   assert(
     (chelseaAfterVerified?.exhibitionCount ?? 0) >
       (chelseaBeforeVerified?.exhibitionCount ?? 0) + 20 &&
+      (chelseaAfterVerified?.verifiedCount ?? 0) >= 20 &&
       chelseaAfterVerified?.canSupportWalk,
     "Walk readiness should improve materially as verified Chelsea inventory is added."
+  );
+  assert(
+    (tribecaAfterVerified?.verifiedCount ?? 0) >= 8 &&
+      (tribecaAfterVerified?.uniqueGalleryCount ?? 0) >= 5 &&
+      (tribecaAfterVerified?.fixtureCount ?? 0) >= 0,
+    "Neighborhood intelligence should expose verified, fixture/demo, and unique-gallery confidence for Tribeca."
+  );
+  assert(
+    (chinatownAfterVerified?.verifiedCount ?? 0) >= 5 &&
+      (chinatownAfterVerified?.uniqueGalleryCount ?? 0) >= 3,
+    "Neighborhood confidence should improve as verified Chinatown inventory is added."
   );
   assert(
     laReadiness.some((neighborhood) => neighborhood.canSupportWalk),
@@ -1087,6 +1105,10 @@ async function main() {
   const skarstedtSource = gallerySourceCandidates.find(
     (source) => source.id === "source-skarstedt-ues"
   );
+  const ppowSource = gallerySourceCandidates.find((source) => source.id === "source-ppow-tribeca");
+  const magentaPlainsSource = gallerySourceCandidates.find(
+    (source) => source.id === "source-magenta-plains-chinatown"
+  );
 
   assert(staleMiguelAbreuSource, "Stale source fixture should exist.");
   assert(jamesCohanSource, "James Cohan source fixture should exist.");
@@ -1095,6 +1117,8 @@ async function main() {
   assert(derosiaSource, "Derosia source fixture should exist.");
   assert(derekEllerSource, "Derek Eller source fixture should exist.");
   assert(skarstedtSource, "Skarstedt source fixture should exist.");
+  assert(ppowSource, "PPOW source fixture should exist.");
+  assert(magentaPlainsSource, "Magenta Plains source fixture should exist.");
   assert(
     getGallerySourceEffectiveFreshness(staleMiguelAbreuSource, galleryReferenceNow) ===
       "stale-risk",
@@ -1105,7 +1129,15 @@ async function main() {
     "Gallery data foundation should preserve fresh official source candidates."
   );
   assert(
-    [chapterSource, companySource, derosiaSource, derekEllerSource, skarstedtSource].every(
+    [
+      chapterSource,
+      companySource,
+      derosiaSource,
+      derekEllerSource,
+      skarstedtSource,
+      ppowSource,
+      magentaPlainsSource
+    ].every(
       (source) =>
         source?.preferredImportLane === "official-page-ready" &&
         source.sourceFreshness === "fresh" &&

@@ -95,6 +95,10 @@ export type GalleryNeighborhoodIntelligence = {
   neighborhood: string;
   walkLabel: string;
   exhibitionCount: number;
+  verifiedCount: number;
+  fixtureCount: number;
+  needsReviewCount: number;
+  uniqueGalleryCount: number;
   openNowCount: number;
   opensLaterCount: number;
   openingTonightCount: number;
@@ -1482,6 +1486,18 @@ export function createNeighborhoodIntelligence(
         exhibition.neighborhood === neighborhood.name &&
         isOnView(exhibition, referenceNow)
     );
+    const verifiedCount = neighborhoodExhibitions.filter(
+      (exhibition) => getGalleryInventoryTrust(exhibition).isVerified
+    ).length;
+    const fixtureCount = neighborhoodExhibitions.filter(
+      (exhibition) => getGalleryInventoryTrust(exhibition).isFixture
+    ).length;
+    const needsReviewCount = neighborhoodExhibitions.filter((exhibition) => {
+      const trust = getGalleryInventoryTrust(exhibition);
+
+      return trust.kind === "needs-review" || trust.kind === "stale-needs-review";
+    }).length;
+    const uniqueGalleryCount = new Set(neighborhoodExhibitions.map(getGalleryRouteNameKey)).size;
     const openNowCount = neighborhoodExhibitions.filter(
       (exhibition) => getGalleryVisitStatus(exhibition, referenceNow) === "open-now"
     ).length;
@@ -1513,6 +1529,10 @@ export function createNeighborhoodIntelligence(
       neighborhood: neighborhood.name,
       walkLabel: neighborhood.walkLabel,
       exhibitionCount: neighborhoodExhibitions.length,
+      verifiedCount,
+      fixtureCount,
+      needsReviewCount,
+      uniqueGalleryCount,
       openNowCount,
       opensLaterCount,
       openingTonightCount,
