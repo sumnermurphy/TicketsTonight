@@ -21,6 +21,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View
 } from "react-native";
 
@@ -221,17 +222,23 @@ function SignalCard({
   label,
   value,
   detail,
+  compact = false,
+  compactWidth,
   tone = "neutral"
 }: {
   label: string;
   value: string | number;
   detail: string;
+  compact?: boolean;
+  compactWidth?: number;
   tone?: "neutral" | "good" | "warn" | "dark";
 }) {
   return (
     <View
       style={[
         styles.signalCard,
+        compact ? styles.compactSignalCard : null,
+        compact && compactWidth ? { flexBasis: compactWidth, maxWidth: compactWidth, width: compactWidth } : null,
         tone === "good" ? styles.goodSignalCard : null,
         tone === "warn" ? styles.warnSignalCard : null,
         tone === "dark" ? styles.darkSignalCard : null
@@ -591,6 +598,7 @@ function ExhibitionCard({
 }
 
 export function GalleryApp() {
+  const { width: viewportWidth } = useWindowDimensions();
   const [selectedAreaId, setSelectedAreaId] = useState<GalleryAreaId>("nyc");
   const [selectedNeighborhood, setSelectedNeighborhood] = useState<string | undefined>();
   const [selectedMedium, setSelectedMedium] = useState<GalleryMedium | undefined>();
@@ -604,6 +612,10 @@ export function GalleryApp() {
   const [savedAlertNeighborhoods, setSavedAlertNeighborhoods] = useState<string[]>([]);
   const [savedAlertMediums, setSavedAlertMediums] = useState<GalleryMedium[]>([]);
   const selectedArea = galleryAreas.find((area) => area.id === selectedAreaId) ?? galleryAreas[0];
+  const isCompactLayout = viewportWidth < 720;
+  const compactSignalCardWidth = isCompactLayout
+    ? Math.min(175, Math.max(120, Math.floor((viewportWidth - spacing.lg * 2 - spacing.sm) / 2)))
+    : undefined;
   const areaInventory = useMemo(
     () => galleryExhibitions.filter((exhibition) => exhibition.areaId === selectedAreaId),
     [selectedAreaId]
@@ -783,9 +795,9 @@ export function GalleryApp() {
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.headerBand}>
-          <View style={styles.headerTopline}>
+          <View style={[styles.headerTopline, isCompactLayout ? styles.compactHeaderTopline : null]}>
             <Text style={styles.heroEyebrow}>{getAreaRoleCopy(selectedAreaId)}</Text>
-            <Text style={styles.marketClock}>Demo clock {formatShortDate(referenceNow)}, {formatShortTime(referenceNow)}</Text>
+            <Text style={[styles.marketClock, isCompactLayout ? styles.compactMarketClock : null]}>Demo clock {formatShortDate(referenceNow)}, {formatShortTime(referenceNow)}</Text>
           </View>
           <View style={styles.heroTitleRow}>
             <View style={styles.heroTitleBlock}>
@@ -828,36 +840,48 @@ export function GalleryApp() {
               label="Open now"
               value={openNowCount}
               detail={`${sourceTrust.exhibitionCount} total listings`}
+              compact={isCompactLayout}
+              compactWidth={compactSignalCardWidth}
               tone="dark"
             />
             <SignalCard
               label="Verified"
               value={sourceTrust.verifiedExhibitionCount}
               detail="Official-page checked"
+              compact={isCompactLayout}
+              compactWidth={compactSignalCardWidth}
               tone="good"
             />
             <SignalCard
               label="Demo/review"
               value={sourceTrust.fixtureExhibitionCount + sourceTrust.needsReviewExhibitionCount}
               detail={`${sourceTrust.fixtureExhibitionCount} demo, ${sourceTrust.needsReviewExhibitionCount} review`}
+              compact={isCompactLayout}
+              compactWidth={compactSignalCardWidth}
               tone={sourceTrust.fixtureExhibitionCount + sourceTrust.needsReviewExhibitionCount > 0 ? "warn" : "good"}
             />
             <SignalCard
               label="Walkable"
               value={walkReadyCount}
               detail={discoveryLead}
+              compact={isCompactLayout}
+              compactWidth={compactSignalCardWidth}
               tone="good"
             />
             <SignalCard
               label="Opening"
               value={sourceTrust.openingCount}
               detail="Social signals tonight"
+              compact={isCompactLayout}
+              compactWidth={compactSignalCardWidth}
               tone={sourceTrust.openingCount > 0 ? "warn" : "neutral"}
             />
             <SignalCard
               label="Closing soon"
               value={closingSoonCount}
               detail="Within 7 days"
+              compact={isCompactLayout}
+              compactWidth={compactSignalCardWidth}
               tone={closingSoonCount > 0 ? "warn" : "neutral"}
             />
           </View>
@@ -867,15 +891,17 @@ export function GalleryApp() {
               <Check size={16} color={colors.teal} />
             </View>
             <Text style={styles.trustBriefText}>
-              {selectedAreaId === "nyc"
-                ? `NYC mixes ${sourceTrust.verifiedExhibitionCount} manually verified official-page listings with ${sourceTrust.fixtureExhibitionCount} fixture/demo listings still marked as demo.`
-                : `${selectedArea?.name ?? "Market"} has ${sourceTrust.verifiedExhibitionCount} verified listings and ${sourceTrust.fixtureExhibitionCount} fixture/demo listings; thin walks are labeled honestly.`} Source directory: {dataAudit.sourceCount} candidates, {dataAudit.officialLinkCoveragePercent}% official links.
+              {isCompactLayout
+                ? `${sourceTrust.verifiedExhibitionCount} verified official-page. ${sourceTrust.fixtureExhibitionCount} demo. ${dataAudit.sourceCount} sources.`
+                : selectedAreaId === "nyc"
+                  ? `NYC mixes ${sourceTrust.verifiedExhibitionCount} manually verified official-page listings with ${sourceTrust.fixtureExhibitionCount} fixture/demo listings still marked as demo. Source directory: ${dataAudit.sourceCount} candidates, ${dataAudit.officialLinkCoveragePercent}% official links.`
+                  : `${selectedArea?.name ?? "Market"} has ${sourceTrust.verifiedExhibitionCount} verified listings and ${sourceTrust.fixtureExhibitionCount} fixture/demo listings; thin walks are labeled honestly. Source directory: ${dataAudit.sourceCount} candidates, ${dataAudit.officialLinkCoveragePercent}% official links.`}
             </Text>
           </View>
 
           {tonightPick ? (
-            <View style={styles.tonightPick}>
-              <View style={styles.tonightPickCopy}>
+            <View style={[styles.tonightPick, isCompactLayout ? styles.compactTonightPick : null]}>
+              <View style={[styles.tonightPickCopy, isCompactLayout ? styles.compactTonightPickCopy : null]}>
                 <Text style={styles.tonightPickLabel}>Start browsing here</Text>
                 <Text style={styles.tonightPickTitle}>{tonightPick.title}</Text>
                 <Text style={styles.tonightPickMeta}>
@@ -888,7 +914,7 @@ export function GalleryApp() {
                 onPress={() => {
                   void Linking.openURL(tonightPick.externalUrl);
                 }}
-                style={styles.heroLinkButton}
+                style={[styles.heroLinkButton, isCompactLayout ? styles.compactHeroLinkButton : null]}
               >
                 <ExternalLink size={14} color={colors.paper} />
                 <Text style={styles.heroLinkButtonText}>Open link</Text>
@@ -1167,8 +1193,13 @@ const styles = StyleSheet.create({
   headerTopline: {
     alignItems: "center",
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
     gap: spacing.md
+  },
+  compactHeaderTopline: {
+    alignItems: "flex-start",
+    justifyContent: "flex-start"
   },
   heroEyebrow: {
     color: colors.coralDark,
@@ -1186,8 +1217,14 @@ const styles = StyleSheet.create({
   },
   marketClock: {
     color: colors.mutedInk,
+    flexShrink: 1,
     fontSize: 12,
-    fontWeight: "700"
+    fontWeight: "700",
+    textAlign: "right"
+  },
+  compactMarketClock: {
+    textAlign: "left",
+    width: "100%"
   },
   heroTitleRow: {
     alignItems: "stretch",
@@ -1300,9 +1337,15 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: radii.md,
     borderWidth: 1,
+    flexBasis: 160,
     flexGrow: 1,
+    flexShrink: 1,
     minWidth: 132,
     padding: spacing.md
+  },
+  compactSignalCard: {
+    flexGrow: 0,
+    minWidth: 0
   },
   goodSignalCard: {
     backgroundColor: colors.tealSoft,
@@ -1364,7 +1407,8 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     fontWeight: "700",
-    lineHeight: 18
+    lineHeight: 18,
+    minWidth: 0
   },
   tonightPick: {
     alignItems: "center",
@@ -1375,12 +1419,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.md,
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     padding: spacing.md
+  },
+  compactTonightPick: {
+    alignItems: "flex-start",
+    flexDirection: "column",
+    justifyContent: "flex-start"
   },
   tonightPickCopy: {
     flex: 1,
-    minWidth: 230
+    flexShrink: 1,
+    minWidth: 0
+  },
+  compactTonightPickCopy: {
+    minWidth: 0,
+    width: "100%"
   },
   tonightPickLabel: {
     color: colors.coralDark,
@@ -1409,6 +1463,9 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     minHeight: 36,
     paddingHorizontal: spacing.md
+  },
+  compactHeroLinkButton: {
+    alignSelf: "flex-start"
   },
   heroLinkButtonText: {
     color: colors.paper,
