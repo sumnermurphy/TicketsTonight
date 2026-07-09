@@ -4,6 +4,27 @@ export type LocalCalendarSourceKind = "ics" | "rss" | "html-calendar" | "manual-
 
 export type LocalCalendarPipelineStatus = "fixture-backed" | "parser-ready";
 
+export type LocalCalendarParserMode = "auto" | "json-ld" | "event-list";
+
+export type LocalCalendarLegalStatus =
+  | "public-calendar-review"
+  | "partner-permission-required"
+  | "blocked";
+
+export type LocalCalendarParserProfile = {
+  mode: LocalCalendarParserMode;
+  legalStatus: LocalCalendarLegalStatus;
+  sourceShape: string;
+  defaultVenueName?: string;
+  defaultNeighborhood?: string;
+  defaultDistanceMiles?: number;
+  defaultImageTone?: string;
+  defaultTags?: string[];
+  defaultTaxonomy?: string[];
+  externalIdPrefix?: string;
+  linkBaseUrl?: string;
+};
+
 export type LocalCalendarSource = {
   id: string;
   label: string;
@@ -14,6 +35,7 @@ export type LocalCalendarSource = {
   status: LocalCalendarPipelineStatus;
   parserNotes: string;
   exampleExternalIds: string[];
+  parserProfile?: LocalCalendarParserProfile;
 };
 
 export type LocalCalendarEvent = {
@@ -55,7 +77,19 @@ export const localCalendarSources: LocalCalendarSource[] = [
     status: "fixture-backed",
     parserNotes:
       "Use the shared HTML-calendar normalizer for event pages with date rows, buy-link anchors, venue names, and category hints before adding venue-specific adapters.",
-    exampleExternalIds: ["nyc-pa-101", "nyc-pa-102", "nyc-pa-103", "nyc-pa-104"]
+    exampleExternalIds: ["nyc-pa-101", "nyc-pa-102", "nyc-pa-103", "nyc-pa-104"],
+    parserProfile: {
+      mode: "auto",
+      legalStatus: "public-calendar-review",
+      sourceShape:
+        "Performing-arts event pages and list rows with titles, performance dates, venues, and buy-link anchors.",
+      defaultNeighborhood: "Chelsea",
+      defaultDistanceMiles: 1.8,
+      defaultImageTone: "#246A73",
+      defaultTags: ["performing arts"],
+      defaultTaxonomy: ["dance"],
+      externalIdPrefix: "nycpa"
+    }
   },
   {
     id: "hudson-arts-calendar",
@@ -64,10 +98,23 @@ export const localCalendarSources: LocalCalendarSource[] = [
     sourceKind: "html-calendar",
     sourceUrl: "https://hudsonhall.org/events/",
     categories: ["concert", "dance", "opera", "play", "theater", "variety"],
-    status: "fixture-backed",
+    status: "parser-ready",
     parserNotes:
       "Start with one regional calendar parser for list pages, event detail URLs, category filters, and price/free-ticket copy; only add venue-specific adapters after measured gaps remain.",
-    exampleExternalIds: ["hac-101", "hac-102", "hac-103", "hac-104", "hac-105", "hac-106"]
+    exampleExternalIds: ["hac-101", "hac-102", "hac-103", "hac-104", "hac-105", "hac-106"],
+    parserProfile: {
+      mode: "auto",
+      legalStatus: "public-calendar-review",
+      sourceShape:
+        "Hudson Hall pages expose JSON-LD event blocks plus public event links and price/free-ticket copy.",
+      defaultVenueName: "Hudson Hall",
+      defaultNeighborhood: "Warren Street",
+      defaultDistanceMiles: 0.4,
+      defaultImageTone: "#4A6B5F",
+      defaultTags: ["regional calendar"],
+      defaultTaxonomy: ["concert"],
+      externalIdPrefix: "hudsonhall"
+    }
   },
   {
     id: "hudson-fisher-center-calendar",
@@ -76,14 +123,28 @@ export const localCalendarSources: LocalCalendarSource[] = [
     sourceKind: "html-calendar",
     sourceUrl: "https://fishercenter.bard.edu/whats-on/",
     categories: ["concert", "opera", "theater", "variety"],
-    status: "fixture-backed",
+    status: "parser-ready",
     parserNotes:
       "Public event pages expose titles, date blocks, venue/location, ticketing copy, and Buy Tickets links; use as a regional performing-arts parser candidate after legal review.",
     exampleExternalIds: [
       "fisher-2026-egyptian-helen",
       "fisher-2026-mozart-program-one",
       "fisher-2026-abduction-seraglio"
-    ]
+    ],
+    parserProfile: {
+      mode: "event-list",
+      legalStatus: "public-calendar-review",
+      sourceShape:
+        "What’s On list rows expose title, date text, venue/series labels, detail links, and a site-level Buy Tickets path.",
+      defaultVenueName: "Fisher Center",
+      defaultNeighborhood: "Annandale-on-Hudson",
+      defaultDistanceMiles: 8.8,
+      defaultImageTone: "#514066",
+      defaultTags: ["regional performing arts"],
+      defaultTaxonomy: ["concert", "classical"],
+      externalIdPrefix: "fisher",
+      linkBaseUrl: "https://fishercenter.bard.edu"
+    }
   },
   {
     id: "hudson-basilica-calendar",
@@ -92,14 +153,54 @@ export const localCalendarSources: LocalCalendarSource[] = [
     sourceKind: "html-calendar",
     sourceUrl: "https://basilicahudson.org/events/",
     categories: ["concert", "dj", "variety"],
-    status: "fixture-backed",
+    status: "parser-ready",
     parserNotes:
       "Public event index exposes upcoming event dates and detail links; use as a Hudson music and electronic-adjacent calendar candidate before bespoke venue adapters.",
     exampleExternalIds: [
       "basilica-2026-wednesday",
       "basilica-2026-houndmouth",
       "basilica-2026-boy-harsher"
-    ]
+    ],
+    parserProfile: {
+      mode: "event-list",
+      legalStatus: "public-calendar-review",
+      sourceShape:
+        "Upcoming Events list exposes dates, titles, and public event detail links for concert/electronic programming.",
+      defaultVenueName: "Basilica Hudson",
+      defaultNeighborhood: "South Front Street",
+      defaultDistanceMiles: 0.9,
+      defaultImageTone: "#334E4B",
+      defaultTags: ["basilica hudson", "regional music"],
+      defaultTaxonomy: ["concert"],
+      externalIdPrefix: "basilica",
+      linkBaseUrl: "https://basilicahudson.org"
+    }
+  },
+  {
+    id: "la-performing-arts-calendar",
+    label: "LA performing arts calendars",
+    areaId: "la",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://www.laopera.org/performances/",
+    categories: ["dance", "opera", "play", "theater", "variety"],
+    status: "parser-ready",
+    parserNotes:
+      "LA Opera and Music Center-style pages expose upcoming show cards with detail links; use the reusable list importer before venue-direct one-offs.",
+    exampleExternalIds: ["laopera-cosi-fan-tutte", "laopera-ainadamar"],
+    parserProfile: {
+      mode: "event-list",
+      legalStatus: "public-calendar-review",
+      sourceShape:
+        "Upcoming-shows pages expose title/detail links and show-level date pages; ticket paths need source health validation before production ingestion.",
+      defaultVenueName: "LA Opera",
+      defaultNeighborhood: "Downtown",
+      defaultDistanceMiles: 1.5,
+      defaultImageTone: "#67597A",
+      defaultTags: ["performing arts", "opera"],
+      defaultTaxonomy: ["opera"],
+      externalIdPrefix: "laopera",
+      linkBaseUrl: "https://www.laopera.org"
+    }
   }
 ];
 
@@ -466,5 +567,49 @@ export const localCalendarEvents: LocalCalendarEvent[] = [
     remainingEstimate: 26,
     maxQuantity: 4,
     recommendationSignals: ["category:dj", "spotify:electronic", "spotify:darkwave"]
+  },
+  {
+    calendarId: "hudson-basilica-calendar",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://basilicahudson.org/events/",
+    externalId: "basilica-2026-sugar",
+    title: "SUGAR",
+    presenter: "Basilica Hudson",
+    taxonomy: ["concert", "rock"],
+    startsAt: "2026-10-18T20:00:00-04:00",
+    venueName: "Basilica Hudson",
+    neighborhood: "South Front Street",
+    areaId: "hudson",
+    distanceMiles: 0.9,
+    description:
+      "A Basilica Hudson upcoming-event listing for October 18, preserved from the reusable local calendar source.",
+    tags: ["rock", "basilica hudson", "regional music"],
+    imageTone: "#5D3B45",
+    ticketUrl: "https://basilicahudson.org/events/sugar/",
+    remainingEstimate: 24,
+    maxQuantity: 4,
+    recommendationSignals: ["category:concert", "spotify:rock"]
+  },
+  {
+    calendarId: "hudson-basilica-calendar",
+    sourceKind: "html-calendar",
+    sourceUrl: "https://basilicahudson.org/events/",
+    externalId: "basilica-2026-sleep",
+    title: "SLEEP",
+    presenter: "Basilica Hudson",
+    taxonomy: ["concert", "metal"],
+    startsAt: "2026-11-13T20:00:00-05:00",
+    venueName: "Basilica Hudson",
+    neighborhood: "South Front Street",
+    areaId: "hudson",
+    distanceMiles: 0.9,
+    description:
+      "A Basilica Hudson upcoming-event listing for November 13, preserved from the reusable local calendar source.",
+    tags: ["metal", "basilica hudson", "regional music"],
+    imageTone: "#3D3A45",
+    ticketUrl: "https://basilicahudson.org/events/sleep/",
+    remainingEstimate: 24,
+    maxQuantity: 4,
+    recommendationSignals: ["category:concert", "spotify:metal"]
   }
 ];

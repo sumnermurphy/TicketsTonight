@@ -18,6 +18,7 @@ Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ball
 - Spotify PKCE auth can connect a listener with `user-top-read`, pull top artists, tracks, and genres, and rank provider-backed recommendations in-app.
 - Explicit discovery source plans for New York, Los Angeles, and Hudson so provider work stays focused.
 - Source planning separates broad event APIs from reusable local pipelines, so small venues can fill gaps without turning every venue into a bespoke integration.
+- Local source directory seeds venue calendars, newsletters, partner-feed leads, and permission-gated nightlife candidates by market with a repeatable discover-to-monitor onboarding process for new geographies.
 - Broad API acquisition planning ranks next candidate sources before any bespoke local venue work.
 - Category-level coverage planning flags where broad APIs are enough for baseline discovery and where local pipelines add meaningful depth.
 - Ticketmaster Discovery-shaped adapter for paginated live event ingestion plus normalizing real provider events, classifications, venues, price ranges, link-only ticket pages, and cached detail lookup.
@@ -100,6 +101,12 @@ Run the source-readiness audit for ranked next-source decisions, including RA pa
 npm run audit:sources
 ```
 
+Run the local source directory audit for repeatable small-venue, bar, newsletter, and partner-feed source buildup:
+
+```bash
+npm run audit:source-directory
+```
+
 Run the default discovery quality audit for the app-facing shaped result lists:
 
 ```bash
@@ -134,6 +141,7 @@ npm run android
 - `src/data/discoveryPlans.ts`: market-by-market discovery source strategy for New York, Los Angeles, and Hudson.
 - `src/data/htmlCalendarFixtures.ts`: sample HTML calendar payloads with JSON-LD event blocks for parser-backed local import tests.
 - `src/data/localCalendarFeeds.ts`: reusable calendar source metadata and fixture-backed/parser-ready local calendar examples for NYC performing arts, Hudson Hall, Fisher Center, and Basilica Hudson.
+- `src/data/localSourceCandidates.ts`: geography-aware source directory for small venues, bars, official calendars, newsletters, partner-feed leads, permission-gated nightlife candidates, and the repeatable onboarding stages.
 - `src/data/partnerFeeds.ts`: raw partner feed fixtures that mimic external inventory in the supported alpha markets.
 - `src/data/ticketmasterFixtures.ts`: Ticketmaster Discovery-shaped fixture payload for adapter tests.
 - `src/services/auth.ts`: dormant auth provider groundwork for future checkout/account features.
@@ -154,6 +162,7 @@ npm run android
 - `src/services/eventProviderFactory.ts`: default provider stack that keeps fixtures active and adds Ticketmaster Discovery when public Expo config is present.
 - `src/services/location.ts`: location provider interface, demo location provider, distance calculation, and nearest-area resolution.
 - `src/services/liveSupplyAudit.ts`: focused NYC live-supply target audit for the current 50-event provider sprint.
+- `src/services/localSourcePlanning.ts`: ranks local source candidates, summarizes category/intake coverage, and returns the reusable source-onboarding checklist for new geographies.
 - `src/services/notifications.ts`: in-app notification provider for deal-alert matches, with read-state merge helpers for future push/email channels.
 - `src/services/payments.ts`: dormant payment provider groundwork shaped for future Stripe/provider-native checkout.
 - `src/services/personalization.ts`: Spotify PKCE auth, token exchange, top artists/tracks/genres fetches, demo taste provider, and recommendation-context creation.
@@ -168,6 +177,7 @@ npm run android
 - `src/App.tsx`: provider-backed mobile discovery, detail, saved-show, discount alert, inbox, and preference UI.
 - `scripts/env.ts`: local `.env.local` loader for audit scripts without committing provider keys.
 - `scripts/liveInventoryAudit.ts`: multi-market live inventory audit for fixture fallback, parsed calendar imports, and Ticketmaster no-key/keyed readiness.
+- `scripts/sourceDirectoryAudit.ts`: repeatable local source directory report for small venues, bars, newsletters, partner-feed leads, category coverage, and intake mix by market.
 - `scripts/sourceReadinessAudit.ts`: multi-market source-readiness report for broad APIs, local calendars, planned pipelines, and Resident Advisor partner/API feasibility.
 - `tests/serviceChecks.ts`: discovery, market scope, feed normalization, provider adapters, deal filtering, discount alerts, and dormant checkout groundwork checks.
 
@@ -188,6 +198,7 @@ npm run android
 - Event inventory: follow the checked-in discovery source plans: New York first, Los Angeles second, Hudson as the smaller-market arts-town test.
 - Data strategy: keep Ticketmaster as the broad ticketed baseline, add reusable local calendar/feed pipelines next for measured arts-depth gaps, then evaluate Eventbrite for community/ticket-link breadth, SeatGeek for price-marketplace validation, and PredictHQ-style event intelligence for coverage-gap auditing.
 - Local-source prioritization: use category coverage to pick local pipeline work only when it adds depth beyond broad API coverage.
+- New geographies: start by adding at least five official HTML-calendar candidates, one partner/manual lead path, terms posture, sample listings, duplicate checks, and freshness monitoring through the local source directory before writing bespoke adapters.
 - New York performing arts: Ticketmaster remains the broad baseline, while the reusable calendar-feed path now supplies parser-ready dance, ballet, and opera depth before any venue-specific adapter work.
 - Los Angeles performing arts: keep Ticketmaster as the broad baseline, then evaluate reusable performing-arts calendars before venue-direct one-offs.
 - Hudson local pipeline: start with the generic regional calendar-feed path, keep it category-complete for concerts, dance, opera, plays, theater, and variety, and only add bespoke venue adapters after audits show durable gaps.

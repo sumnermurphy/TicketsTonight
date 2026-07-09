@@ -253,7 +253,7 @@ function createLocalCalendarCandidates(areaId: string): SourceReadinessCandidate
         ticketLinkCount,
         duplicateRatePercent: getDuplicateRatePercent(shows),
         categoryLift: source.categories,
-        legalStatus: "public-calendar-review",
+        legalStatus: getLocalCalendarLegalStatus(source),
         integrationEffort: source.status === "parser-ready" ? "low" : "medium",
         recommendedNextAction: getLocalCalendarRecommendedAction(source, events.length),
         notes: source.parserNotes,
@@ -501,6 +501,18 @@ function getLocalCalendarRecommendedAction(
   }
 
   return "Measure category lift and ticket-link preservation before adding venue-specific adapters.";
+}
+
+function getLocalCalendarLegalStatus(source: LocalCalendarSource): SourceReadinessLegalStatus {
+  if (source.parserProfile?.legalStatus === "blocked") {
+    return "deferred";
+  }
+
+  if (source.parserProfile?.legalStatus === "partner-permission-required") {
+    return "partner-or-api-required";
+  }
+
+  return "public-calendar-review";
 }
 
 function getPlanLegalStatus(source: DiscoverySourcePlan): SourceReadinessLegalStatus {

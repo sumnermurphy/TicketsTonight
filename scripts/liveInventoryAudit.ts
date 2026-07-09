@@ -1,10 +1,13 @@
 import { areas, categoryLabels, shows as seedShows } from "../src/data/catalog";
-import { hudsonHallHtmlCalendarFixture } from "../src/data/htmlCalendarFixtures";
-import { localCalendarSources } from "../src/data/localCalendarFeeds";
 import {
   normalizeCalendarEvent,
   normalizedLocalCalendarShows
 } from "../src/services/calendarFeedProvider";
+import {
+  getImportedCalendarEvents,
+  runConfiguredCalendarImports,
+  type CalendarImportRun
+} from "../src/services/calendarImportPipeline";
 import {
   createCoverageAudit,
   getCoverageAuditActionCopy
@@ -12,7 +15,6 @@ import {
 import { filterShows, rememberShows } from "../src/services/eventCatalog";
 import { readPublicDiscoveryConfig } from "../src/services/eventProviderFactory";
 import { normalizedPartnerFeedShows } from "../src/services/feedProvider";
-import { importHtmlCalendarEvents } from "../src/services/htmlCalendarImporter";
 import {
   createLiveSupplyAudit,
   getLiveSupplyAuditActionCopy,
@@ -31,20 +33,7 @@ async function main() {
   const config = readPublicDiscoveryConfig();
   const apiKey = config.ticketmasterApiKey?.trim();
   const liveTicketmasterEnabled = Boolean(apiKey);
-  const hudsonCalendarSource = localCalendarSources.find(
-    (source) => source.id === "hudson-arts-calendar"
-  );
-  const parsedHudsonCalendar = hudsonCalendarSource
-    ? importHtmlCalendarEvents(hudsonHallHtmlCalendarFixture, hudsonCalendarSource, {
-        importedAt: referenceNow,
-        defaultVenueName: "Hudson Hall",
-        defaultNeighborhood: "Warren Street",
-        defaultDistanceMiles: 0.4,
-        defaultImageTone: "#4A6B5F",
-        defaultTags: ["regional calendar"],
-        externalIdPrefix: "hudsonhall"
-      })
-    : undefined;
+  const calendarImportRuns = runConfiguredCalendarImports({ importedAt: referenceNow });
 
   console.log("Live inventory audit");
   console.log(`Live Ticketmaster: ${liveTicketmasterEnabled ? "enabled" : "not configured"}`);
@@ -81,8 +70,10 @@ async function main() {
           return undefined;
         })
       : undefined;
-    const parsedCalendarEvents =
-      area.id === "hudson" && parsedHudsonCalendar ? parsedHudsonCalendar.events : [];
+    const areaCalendarImportRuns = calendarImportRuns.filter(
+      (run) => run.source.areaId === area.id
+    );
+    const parsedCalendarEvents = getImportedCalendarEvents(areaCalendarImportRuns);
     const appFacingShows = createAppFacingAuditShows(
       filters,
       parsedCalendarEvents.map(normalizeCalendarEvent),
@@ -101,7 +92,7 @@ async function main() {
       areaId: area.id,
       referenceNow,
       parsedCalendarEvents,
-      parsedCalendarImportedAt: parsedHudsonCalendar?.importedAt,
+      parsedCalendarImportedAt: getLatestCalendarImportTimestamp(areaCalendarImportRuns),
       ticketmasterConfigured: liveTicketmasterEnabled,
       ticketmasterDiagnostics,
       ticketmasterError
@@ -154,10 +145,14 @@ async function main() {
       console.log("Ticketmaster: not configured");
     }
 
-    if (area.id === "hudson" && parsedHudsonCalendar) {
-      console.log(
-        `HTML calendar pilot: ${parsedHudsonCalendar.importedEventCount}/${parsedHudsonCalendar.rawEventCount} imported, ${parsedHudsonCalendar.skippedEventCount} skipped`
-      );
+    if (areaCalendarImportRuns.length) {
+      console.log("HTML calendar pilots:");
+
+      for (const run of areaCalendarImportRuns) {
+        console.log(
+          `- ${run.source.label}: ${run.health.importedEventCount}/${run.health.rawEventCount} imported, ${run.health.ticketLinkCoveragePercent}% links, ${run.health.duplicateRatePercent}% duplicate rate, ${run.health.skippedEventCount} skipped`
+        );
+      }
     }
 
     console.log("");
@@ -196,4 +191,11 @@ function getReadinessThresholdCopy(summary: ReturnType<typeof createLiveSupplyAu
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function getLatestCalendarImportTimestamp(runs: CalendarImportRun[]): string | undefined {
+  return runs
+    .map((run) => run.result.importedAt)
+    .sort()
+    .at(-1);
 }

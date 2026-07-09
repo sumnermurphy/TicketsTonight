@@ -1,8 +1,10 @@
 import { areas } from "../src/data/catalog";
-import { hudsonHallHtmlCalendarFixture } from "../src/data/htmlCalendarFixtures";
-import { localCalendarSources } from "../src/data/localCalendarFeeds";
 import { normalizeCalendarEvent } from "../src/services/calendarFeedProvider";
-import { importHtmlCalendarEvents } from "../src/services/htmlCalendarImporter";
+import {
+  getImportedCalendarEvents,
+  runConfiguredCalendarImports,
+  type CalendarImportRun
+} from "../src/services/calendarImportPipeline";
 import { createLiveSupplyAudit } from "../src/services/liveSupplyAudit";
 import { createTicketmasterProviderDiagnostics } from "../src/services/providerDiagnostics";
 import {
@@ -31,7 +33,7 @@ async function main() {
   const config = readPublicDiscoveryConfig();
   const apiKey = config.ticketmasterApiKey?.trim();
   const liveTicketmasterEnabled = Boolean(apiKey);
-  const parsedHudsonCalendar = createParsedHudsonCalendar(referenceNow);
+  const calendarImportRuns = runConfiguredCalendarImports({ importedAt: referenceNow });
 
   console.log("Source readiness audit");
   console.log(`Live Ticketmaster: ${liveTicketmasterEnabled ? "enabled" : "not configured"}`);
@@ -65,13 +67,15 @@ async function main() {
           return undefined;
         })
       : undefined;
-    const parsedCalendarEvents =
-      area.id === "hudson" && parsedHudsonCalendar ? parsedHudsonCalendar.events : [];
+    const areaCalendarImportRuns = calendarImportRuns.filter(
+      (run) => run.source.areaId === area.id
+    );
+    const parsedCalendarEvents = getImportedCalendarEvents(areaCalendarImportRuns);
     const sourceSummaries = createSourceInventorySummaries({
       areaId: area.id,
       referenceNow,
       parsedCalendarEvents,
-      parsedCalendarImportedAt: parsedHudsonCalendar?.importedAt,
+      parsedCalendarImportedAt: getLatestCalendarImportTimestamp(areaCalendarImportRuns),
       ticketmasterConfigured: liveTicketmasterEnabled,
       ticketmasterDiagnostics,
       ticketmasterError
@@ -98,6 +102,7 @@ async function main() {
       eventCount: liveSupplyAudit.eventCount,
       ticketLinkCoveragePercent: liveSupplyAudit.ticketLinkCoveragePercent,
       sourceSummaries,
+      calendarImportRuns: areaCalendarImportRuns,
       rankedCandidates: readinessAudit.rankedCandidates
     });
     console.log(`Recommended next action: ${readinessAudit.recommendedNextAction}`);
@@ -108,35 +113,19 @@ async function main() {
   }
 }
 
-function createParsedHudsonCalendar(referenceNow: string) {
-  const hudsonCalendarSource = localCalendarSources.find(
-    (source) => source.id === "hudson-arts-calendar"
-  );
-
-  return hudsonCalendarSource
-    ? importHtmlCalendarEvents(hudsonHallHtmlCalendarFixture, hudsonCalendarSource, {
-        importedAt: referenceNow,
-        defaultVenueName: "Hudson Hall",
-        defaultNeighborhood: "Warren Street",
-        defaultDistanceMiles: 0.4,
-        defaultImageTone: "#4A6B5F",
-        defaultTags: ["regional calendar"],
-        externalIdPrefix: "hudsonhall"
-      })
-    : undefined;
-}
-
 function printMarketReadiness({
   areaLabel,
   eventCount,
   ticketLinkCoveragePercent,
   sourceSummaries,
+  calendarImportRuns,
   rankedCandidates
 }: {
   areaLabel: string;
   eventCount: number;
   ticketLinkCoveragePercent: number;
   sourceSummaries: SourceInventorySummary[];
+  calendarImportRuns: CalendarImportRun[];
   rankedCandidates: SourceReadinessCandidate[];
 }) {
   console.log(`${areaLabel} source readiness`);
@@ -148,6 +137,20 @@ function printMarketReadiness({
     console.log(
       `- ${summary.label}: ${summary.eventCount} events, ${summary.ticketLinkCount} links, ${summary.activeCategoryCount} categories, duplicate rate ${summary.duplicateRatePercent ?? 0}%`
     );
+  }
+
+  if (calendarImportRuns.length) {
+    console.log("Calendar import health:");
+
+    for (const run of calendarImportRuns) {
+      const issueCopy = run.health.issueCounts
+        .map((issue) => `${issue.issue}:${issue.count}`)
+        .join(", ") || "none";
+
+      console.log(
+        `- ${run.source.label}: ${run.health.importedEventCount}/${run.health.rawEventCount} imported, ${run.health.skippedEventCount} skipped, ${run.health.ticketLinkCoveragePercent}% links, ${run.health.duplicateRatePercent}% duplicates, category lift ${run.health.categoryLift.join(", ") || "none"}, issues ${issueCopy}. ${run.health.recommendedNextAction}`
+      );
+    }
   }
 
   console.log("Ranked next sources:");
@@ -192,6 +195,13 @@ function createAppFacingAuditShows(
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function getLatestCalendarImportTimestamp(runs: CalendarImportRun[]): string | undefined {
+  return runs
+    .map((run) => run.result.importedAt)
+    .sort()
+    .at(-1);
 }
 
 main().catch((error: unknown) => {
