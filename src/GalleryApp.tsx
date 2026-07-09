@@ -118,6 +118,20 @@ import {
   createSavedGalleryWalk,
   type GallerySavedWalk
 } from "./services/galleryWalkSharing";
+import {
+  createGalleryFreshnessAudit,
+  getGalleryFreshnessState
+} from "./services/galleryFreshness";
+import {
+  createGalleryRouteMapModel,
+  type GalleryRouteMapModel
+} from "./services/galleryRouteMap";
+import {
+  createGalleryPassportMemory,
+  createGalleryWalkShareCard,
+  type GalleryPassportMemory,
+  type GalleryWalkShareCard
+} from "./services/galleryPassportMemory";
 import { colors, radii, shadows, spacing } from "./theme";
 import type {
   GalleryAreaId,
@@ -357,14 +371,16 @@ function toggleMediumPreference(
   field: "preferredMediums" | "avoidedMediums"
 ): GalleryEditableTastePreference {
   const otherField = field === "preferredMediums" ? "avoidedMediums" : "preferredMediums";
-  const values = preferences[field].includes(medium)
-    ? preferences[field].filter((candidate) => candidate !== medium)
-    : [...preferences[field], medium];
+  const fieldValues = Array.isArray(preferences[field]) ? preferences[field] : [];
+  const otherFieldValues = Array.isArray(preferences[otherField]) ? preferences[otherField] : [];
+  const values = fieldValues.includes(medium)
+    ? fieldValues.filter((candidate) => candidate !== medium)
+    : [...fieldValues, medium];
 
   return {
     ...preferences,
     [field]: values,
-    [otherField]: preferences[otherField].filter((candidate) => candidate !== medium)
+    [otherField]: otherFieldValues.filter((candidate) => candidate !== medium)
   };
 }
 
@@ -698,6 +714,8 @@ function RouteCommandPanel({
   onShareRoute,
   onSaveWalk,
   walkRecapRewardCopy,
+  routeMapModel,
+  shareCard,
   compact = false
 }: {
   walkPlan: GalleryWalkPlan;
@@ -726,6 +744,8 @@ function RouteCommandPanel({
   onShareRoute: () => void;
   onSaveWalk: () => void;
   walkRecapRewardCopy?: string;
+  routeMapModel: GalleryRouteMapModel;
+  shareCard?: GalleryWalkShareCard;
   compact?: boolean;
 }) {
   const showingActiveWalk =
@@ -801,6 +821,7 @@ function RouteCommandPanel({
             <Text style={styles.activeWalkProgressPill}>{activeWalkProgress.visitedStopIds.length} visited</Text>
             <Text style={styles.activeWalkProgressPill}>{activeWalkProgress.skippedStopIds.length} skipped</Text>
             <Text style={styles.activeWalkProgressPill}>{activeWalkProgress.remainingStopIds.length} remaining</Text>
+            <Text style={styles.activeWalkProgressPill}>{routeMapModel.mapReadinessLabel}</Text>
           </View>
 
           <View style={styles.activeWalkStickyActions}>
@@ -872,6 +893,15 @@ function RouteCommandPanel({
           </Text>
           {walkRecapRewardCopy ? (
             <Text style={styles.walkRecapRewardCopy}>{walkRecapRewardCopy}</Text>
+          ) : null}
+          {shareCard ? (
+            <View style={styles.walkShareCard}>
+              <Text style={styles.walkShareCardTitle}>{shareCard.subtitle}</Text>
+              <Text style={styles.walkShareCardMeta}>{shareCard.stats.join(" - ")}</Text>
+              {shareCard.highlights.slice(0, 2).map((highlight) => (
+                <Text key={highlight} style={styles.walkShareCardHighlight}>{highlight}</Text>
+              ))}
+            </View>
           ) : null}
           <View style={styles.activeWalkProgressRow}>
             <Text style={[styles.activeWalkProgressPill, styles.walkRecapPill]}>{activeWalkRecap.totalStopCount} stops</Text>
@@ -1040,7 +1070,8 @@ function WalkStopRow({
   isStart,
   isNext,
   isLast,
-  progress
+  progress,
+  freshnessLabel
 }: {
   stop: GalleryWalkPlan["stops"][number];
   leg?: GalleryWalkPlan["legs"][number];
@@ -1048,6 +1079,7 @@ function WalkStopRow({
   isNext: boolean;
   isLast: boolean;
   progress?: GalleryWalkStopProgress;
+  freshnessLabel?: string;
 }) {
   const trust = getGalleryInventoryTrust(stop.exhibition);
   const groupedShows = stop.exhibitions ?? [stop.exhibition];
@@ -1113,7 +1145,9 @@ function WalkStopRow({
             <Text key={reason} style={styles.walkStopReason}>{reason}</Text>
           ))}
         </View>
-        <Text style={styles.walkStopTrust}>{trust.label} - {trust.sourceLabel}</Text>
+        <Text style={styles.walkStopTrust}>
+          {freshnessLabel ?? trust.label} - {trust.sourceLabel}
+        </Text>
       </View>
       {stop.isSaved ? (
         <View style={styles.savedPill}>
@@ -1136,8 +1170,8 @@ function WalkStopRow({
   );
 }
 
-function RoutePreview({ walkPlan }: { walkPlan: GalleryWalkPlan }) {
-  if (walkPlan.stops.length === 0) {
+function RoutePreview({ routeMapModel }: { routeMapModel: GalleryRouteMapModel }) {
+  if (routeMapModel.pins.length === 0) {
     return null;
   }
 
@@ -1145,9 +1179,20 @@ function RoutePreview({ walkPlan }: { walkPlan: GalleryWalkPlan }) {
     <View style={styles.routePreview}>
       <View style={styles.routePreviewHeader}>
         <MapPin size={15} color={colors.teal} />
-        <Text style={styles.routePreviewTitle}>Route preview</Text>
+        <Text style={styles.routePreviewTitle}>Route map</Text>
         <Text style={styles.routePreviewMeta}>
-          {walkPlan.totalMinutes} min - {walkPlan.totalDistanceMiles.toFixed(1)} mi
+          {routeMapModel.mapReadinessLabel} - {routeMapModel.totalDistanceMiles.toFixed(1)} mi
+        </Text>
+      </View>
+      <View style={styles.routeMapSummaryRow}>
+        <Text style={styles.routeMapSummaryPill}>
+          Current {routeMapModel.currentPin?.galleryName ?? "best start"}
+        </Text>
+        <Text style={styles.routeMapSummaryPill}>
+          Next {routeMapModel.nextPin?.galleryName ?? "finish"}
+        </Text>
+        <Text style={styles.routeMapSummaryPill}>
+          {routeMapModel.totalWalkingMinutes} min walking
         </Text>
       </View>
       <ScrollView
@@ -1156,41 +1201,34 @@ function RoutePreview({ walkPlan }: { walkPlan: GalleryWalkPlan }) {
         style={styles.routePreviewScroll}
         contentContainerStyle={styles.routePreviewStrip}
       >
-        {walkPlan.stops.map((stop, index) => {
-          const nextLeg = walkPlan.legs[index];
-          const isStart = walkPlan.startStopId === stop.exhibition.id;
-          const isNext = walkPlan.nextStopId === stop.exhibition.id;
-          const groupedCount = stop.groupedExhibitionCount ?? 1;
+        {routeMapModel.pins.map((pin, index) => {
+          const nextSegment = routeMapModel.segments[index];
 
           return (
-            <View key={stop.exhibition.id} style={styles.routePreviewStop}>
+            <View key={pin.id} style={styles.routePreviewStop}>
               <View style={styles.routePreviewNodeRow}>
                 <View
                   style={[
                     styles.routePreviewNode,
-                    isStart || isNext ? styles.routePreviewNodeActive : undefined
+                    pin.isCurrent || pin.isNext ? styles.routePreviewNodeActive : undefined,
+                    pin.progress === "visited" ? styles.routePreviewNodeVisited : undefined,
+                    pin.progress === "skipped" ? styles.routePreviewNodeSkipped : undefined
                   ]}
                 >
-                  <Text style={styles.routePreviewNodeText}>{stop.stopNumber}</Text>
+                  <Text style={styles.routePreviewNodeText}>{pin.stopNumber}</Text>
                 </View>
-                {index < walkPlan.stops.length - 1 ? (
+                {index < routeMapModel.pins.length - 1 ? (
                   <View style={styles.routePreviewLine} />
                 ) : null}
               </View>
               <Text style={styles.routePreviewGallery} numberOfLines={1}>
-                {stop.exhibition.galleryName}
+                {pin.galleryName}
               </Text>
               <Text style={styles.routePreviewStatus} numberOfLines={1}>
-                {groupedCount > 1
-                  ? `${groupedCount} shows here`
-                  : isStart
-                    ? "Start here"
-                    : isNext
-                      ? "Next stop"
-                      : galleryVisitStatusLabels[stop.status]}
+                {getRouteProgressLabel(pin.progress)}
               </Text>
               <Text style={styles.routePreviewLeg}>
-                {nextLeg ? `${nextLeg.walkingMinutes} min to next` : "Finish"}
+                {nextSegment ? nextSegment.label : "Finish"}
               </Text>
             </View>
           );
@@ -1363,6 +1401,7 @@ function GalleryPassportPanel({
   badges,
   stamps,
   quests,
+  memory,
   newBadgeCount,
   activeWalkMode,
   feedback,
@@ -1384,6 +1423,7 @@ function GalleryPassportPanel({
   badges: GalleryPassportBadge[];
   stamps: GalleryPassportStamp[];
   quests: GalleryQuest[];
+  memory: GalleryPassportMemory;
   newBadgeCount: number;
   activeWalkMode: GalleryWalkMode;
   feedback: GalleryTasteFeedback[];
@@ -1402,6 +1442,18 @@ function GalleryPassportPanel({
   const answerByArtworkId = new Map(quizAnswers.map((answer) => [answer.artworkId, answer]));
   const topSignals = passport.signals.filter((signal) => signal.weight > 0).slice(0, 5);
   const feedbackById = new Map(feedback.map((item) => [item.exhibitionId, item]));
+  const normalizedPreferences: GalleryEditableTastePreference = {
+    preferredMediums: Array.isArray(preferences.preferredMediums)
+      ? preferences.preferredMediums
+      : [],
+    avoidedMediums: Array.isArray(preferences.avoidedMediums)
+      ? preferences.avoidedMediums
+      : [],
+    preferredNeighborhoods: Array.isArray(preferences.preferredNeighborhoods)
+      ? preferences.preferredNeighborhoods
+      : [],
+    preferredTags: Array.isArray(preferences.preferredTags) ? preferences.preferredTags : []
+  };
   const tagOptions = Array.from(
     new Set([...passport.styleLabels, ...passport.subjectLabels, "quiet", "social", "last-look"])
   ).slice(0, 8);
@@ -1457,6 +1509,15 @@ function GalleryPassportPanel({
             ))}
             {stamps.length === 0 ? <Text style={styles.passportStamp}>No stamps yet</Text> : null}
           </View>
+          <View style={styles.passportMemoryCard}>
+            <Text style={styles.passportMemoryTitle}>Passport memory</Text>
+            <Text style={styles.passportMemoryCopy}>{memory.summary}</Text>
+            <View style={styles.routeReasonRow}>
+              <Text style={styles.passportSignalPill}>{memory.visitedStopCount} visited</Text>
+              <Text style={styles.passportSignalPill}>{memory.notedStopCount} notes</Text>
+              <Text style={styles.passportSignalPill}>{memory.stamps.length} stamps</Text>
+            </View>
+          </View>
           <View style={styles.preferenceBlock}>
             <Text style={styles.preferenceLabel}>Tune mediums</Text>
             <View style={styles.preferenceRow}>
@@ -1468,13 +1529,13 @@ function GalleryPassportPanel({
                   onPress={() => onTogglePreferredMedium(medium)}
                   style={[
                     styles.preferenceChip,
-                    preferences.preferredMediums.includes(medium) ? styles.activePreferenceChip : null
+                    normalizedPreferences.preferredMediums.includes(medium) ? styles.activePreferenceChip : null
                   ]}
                 >
                   <Text
                     style={[
                       styles.preferenceChipText,
-                      preferences.preferredMediums.includes(medium) ? styles.activePreferenceChipText : null
+                      normalizedPreferences.preferredMediums.includes(medium) ? styles.activePreferenceChipText : null
                     ]}
                   >
                     + {mediumLabels[medium]}
@@ -1491,13 +1552,13 @@ function GalleryPassportPanel({
                   onPress={() => onToggleAvoidedMedium(medium)}
                   style={[
                     styles.preferenceChip,
-                    preferences.avoidedMediums.includes(medium) ? styles.activePreferenceChip : null
+                    normalizedPreferences.avoidedMediums.includes(medium) ? styles.activePreferenceChip : null
                   ]}
                 >
                   <Text
                     style={[
                       styles.preferenceChipText,
-                      preferences.avoidedMediums.includes(medium) ? styles.activePreferenceChipText : null
+                      normalizedPreferences.avoidedMediums.includes(medium) ? styles.activePreferenceChipText : null
                     ]}
                   >
                     - {mediumLabels[medium]}
@@ -1515,13 +1576,13 @@ function GalleryPassportPanel({
                   onPress={() => onTogglePreferredNeighborhood(neighborhood)}
                   style={[
                     styles.preferenceChip,
-                    preferences.preferredNeighborhoods.includes(neighborhood) ? styles.activePreferenceChip : null
+                    normalizedPreferences.preferredNeighborhoods.includes(neighborhood) ? styles.activePreferenceChip : null
                   ]}
                 >
                   <Text
                     style={[
                       styles.preferenceChipText,
-                      preferences.preferredNeighborhoods.includes(neighborhood) ? styles.activePreferenceChipText : null
+                      normalizedPreferences.preferredNeighborhoods.includes(neighborhood) ? styles.activePreferenceChipText : null
                     ]}
                   >
                     {neighborhood}
@@ -1539,13 +1600,13 @@ function GalleryPassportPanel({
                   onPress={() => onTogglePreferredTag(tag)}
                   style={[
                     styles.preferenceChip,
-                    preferences.preferredTags.includes(tag) ? styles.activePreferenceChip : null
+                    normalizedPreferences.preferredTags.includes(tag) ? styles.activePreferenceChip : null
                   ]}
                 >
                   <Text
                     style={[
                       styles.preferenceChipText,
-                      preferences.preferredTags.includes(tag) ? styles.activePreferenceChipText : null
+                      normalizedPreferences.preferredTags.includes(tag) ? styles.activePreferenceChipText : null
                     ]}
                   >
                     {tag}
@@ -2136,6 +2197,15 @@ export function GalleryApp() {
     () => createGallerySourceTrustSummary(selectedAreaId, galleryExhibitions, referenceNow),
     [selectedAreaId]
   );
+  const freshnessAudit = useMemo(
+    () =>
+      createGalleryFreshnessAudit({
+        areaId: selectedAreaId,
+        exhibitions: galleryExhibitions,
+        referenceNow
+      }),
+    [selectedAreaId]
+  );
   const dataAudit = useMemo(
     () =>
       createGalleryMarketDataAudit(selectedAreaId, {
@@ -2287,6 +2357,14 @@ export function GalleryApp() {
         ? getGalleryWalkRecap(activeWalkSession, activeWalkPlan, logEntries)
         : undefined,
     [activeWalkPlan, activeWalkSession, logEntries]
+  );
+  const displayRouteMapModel = useMemo(
+    () =>
+      createGalleryRouteMapModel(
+        activeWalkSession?.status === "active" && activeWalkPlan ? activeWalkPlan : walkPlan,
+        activeWalkSession?.status === "active" ? activeWalkSession : undefined
+      ),
+    [activeWalkPlan, activeWalkSession, walkPlan]
   );
   const activeWalkRouteMatchesCurrent = Boolean(
     activeWalkSession &&
@@ -2490,6 +2568,17 @@ export function GalleryApp() {
     () => getGalleryPassportStamps(completedWalkSessions),
     [completedWalkSessions]
   );
+  const passportMemory = useMemo(
+    () =>
+      createGalleryPassportMemory({
+        completedWalks: completedWalkSessions,
+        logEntries,
+        badges: passportBadges,
+        stamps: passportStamps,
+        passport: tastePassport
+      }),
+    [completedWalkSessions, logEntries, passportBadges, passportStamps, tastePassport]
+  );
   const galleryQuests = useMemo(
     () =>
       createGalleryQuests({
@@ -2523,6 +2612,17 @@ export function GalleryApp() {
           .filter(Boolean)
           .join(" - ")
       : undefined;
+  const activeWalkShareCard = useMemo(
+    () =>
+      createGalleryWalkShareCard({
+        walkPlan: activeWalkPlan ?? walkPlan,
+        session: activeWalkSession,
+        recap: activeWalkRecap,
+        badges: passportBadges,
+        stamps: passportStamps
+      }),
+    [activeWalkPlan, activeWalkRecap, activeWalkSession, passportBadges, passportStamps, walkPlan]
+  );
 
   function resetMarket(areaId: GalleryAreaId) {
     setSelectedAreaId(areaId);
@@ -2580,7 +2680,9 @@ export function GalleryApp() {
     setTastePreferences((preferences) => ({
       ...preferences,
       preferredNeighborhoods: toggleStringPreference(
-        preferences.preferredNeighborhoods,
+        Array.isArray(preferences.preferredNeighborhoods)
+          ? preferences.preferredNeighborhoods
+          : [],
         neighborhood
       )
     }));
@@ -2589,7 +2691,10 @@ export function GalleryApp() {
   function togglePreferredTag(tag: string) {
     setTastePreferences((preferences) => ({
       ...preferences,
-      preferredTags: toggleStringPreference(preferences.preferredTags, tag)
+      preferredTags: toggleStringPreference(
+        Array.isArray(preferences.preferredTags) ? preferences.preferredTags : [],
+        tag
+      )
     }));
   }
 
@@ -2600,7 +2705,14 @@ export function GalleryApp() {
   }
 
   async function shareCurrentRoute() {
-    const payload = createGalleryWalkShareSummary(walkPlan, activeWalkRecap);
+    const fallbackPayload = createGalleryWalkShareSummary(walkPlan, activeWalkRecap);
+    const payload = activeWalkShareCard
+      ? {
+          title: activeWalkShareCard.title,
+          text: activeWalkShareCard.shareText,
+          url: activeWalkShareCard.routeMapUrl
+        }
+      : fallbackPayload;
     const shared = await shareWalkPayload(payload);
 
     if (!shared) {
@@ -2905,6 +3017,8 @@ export function GalleryApp() {
             onShareRoute={shareCurrentRoute}
             onSaveWalk={saveCurrentWalk}
             walkRecapRewardCopy={walkRecapRewardCopy}
+            routeMapModel={displayRouteMapModel}
+            shareCard={activeWalkShareCard}
             compact={isCompactLayout}
           />
 
@@ -2969,9 +3083,9 @@ export function GalleryApp() {
 
           <View style={styles.trustBrief}>
             <Check size={16} color={colors.ink} />
-            <Text style={styles.trustBriefStatus}>{marketReadinessCopy}</Text>
+            <Text style={styles.trustBriefStatus}>{freshnessAudit.summaryLabel}</Text>
             <Text style={styles.trustBriefText}>
-              {sourceTrust.verifiedExhibitionCount} verified - {sourceTrust.fixtureExhibitionCount} demo - {dataAudit.sourceCount} sources
+              {freshnessAudit.verifiedCount} verified - {freshnessAudit.fixtureDemoCount} demo - {freshnessAudit.needsReviewCount} needs review - {dataAudit.sourceCount} sources
             </Text>
           </View>
 
@@ -3011,6 +3125,7 @@ export function GalleryApp() {
             badges={passportBadges}
             stamps={passportStamps}
             quests={galleryQuests}
+            memory={passportMemory}
             newBadgeCount={newBadgeCount}
             feedback={tasteFeedback}
             preferences={tastePreferences}
@@ -3173,6 +3288,7 @@ export function GalleryApp() {
             <Text style={styles.routePlannerFact}>{walkPlan.totalMinutes} min</Text>
             <Text style={styles.routePlannerFact}>{walkPlan.totalDistanceMiles.toFixed(1)} mi</Text>
             <Text style={styles.routePlannerFact}>{walkPlan.savedStopCount} saved</Text>
+            <Text style={styles.routePlannerFact}>{freshnessAudit.officialLinkCount} official links</Text>
           </View>
           <View style={styles.routeGuidance}>
             <Text style={styles.guidanceTitle}>Why this route works</Text>
@@ -3225,7 +3341,7 @@ export function GalleryApp() {
               ))}
             </View>
           ) : null}
-          <RoutePreview walkPlan={walkPlan} />
+          <RoutePreview routeMapModel={displayRouteMapModel} />
           <View style={styles.walkStops}>
             {walkPlan.stops.length === 0 ? (
               <View style={styles.emptyRouteState}>
@@ -3243,6 +3359,7 @@ export function GalleryApp() {
                   isNext={walkPlan.nextStopId === stop.exhibition.id}
                   isLast={index === walkPlan.stops.length - 1}
                   progress={routeStopProgressById?.[stop.exhibition.id]}
+                  freshnessLabel={getGalleryFreshnessState(stop.exhibition, referenceNow).label}
                 />
               ))
             )}
@@ -4824,6 +4941,12 @@ const styles = StyleSheet.create({
   routePreviewNodeActive: {
     backgroundColor: colors.gold
   },
+  routePreviewNodeVisited: {
+    backgroundColor: colors.teal
+  },
+  routePreviewNodeSkipped: {
+    backgroundColor: colors.mutedInk
+  },
   routePreviewNodeText: {
     color: colors.paper,
     fontSize: 12,
@@ -4852,6 +4975,25 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
     marginTop: spacing.xs
+  },
+  routeMapSummaryRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm
+  },
+  routeMapSummaryPill: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
   },
   walkStops: {
     gap: spacing.sm,
@@ -5549,6 +5691,51 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 17,
     marginTop: spacing.xs
+  },
+  walkShareCard: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    padding: spacing.md
+  },
+  walkShareCardTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "900",
+    lineHeight: 18
+  },
+  walkShareCardMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  walkShareCardHighlight: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  passportMemoryCard: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    padding: spacing.md
+  },
+  passportMemoryTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  passportMemoryCopy: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17
   },
   eventPlanCard: {
     backgroundColor: colors.fog,

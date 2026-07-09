@@ -92,6 +92,7 @@ import {
   deriveTastePassportFromQuiz,
   getGalleryConciergeReasons,
   getGalleryPassportBadges,
+  getGalleryPassportStamps,
   mergeGalleryTastePassports,
   rankGalleryExhibitionsForTaste,
   type GalleryQuizAnswer
@@ -109,6 +110,15 @@ import {
   createGalleryWalkShareSummary,
   createSavedGalleryWalk
 } from "../src/services/galleryWalkSharing";
+import {
+  createGalleryFreshnessAudit,
+  getGalleryFreshnessState
+} from "../src/services/galleryFreshness";
+import { createGalleryRouteMapModel } from "../src/services/galleryRouteMap";
+import {
+  createGalleryPassportMemory,
+  createGalleryWalkShareCard
+} from "../src/services/galleryPassportMemory";
 import { createTicketmasterProviderDiagnostics } from "../src/services/providerDiagnostics";
 import { checkoutBackend } from "../src/services/checkoutBackend";
 import {
@@ -1097,6 +1107,59 @@ async function main() {
   const itineraryText = createGalleryWalkItineraryText(socialEventPlan, completedWalkSession);
   const sharePayload = createGalleryWalkShareSummary(socialEventPlan, completedWalkRecap);
   const savedWalk = createSavedGalleryWalk(socialEventPlan, completedWalkSession, galleryReferenceNow);
+  const freshnessAudit = createGalleryFreshnessAudit({
+    areaId: "nyc",
+    exhibitions: galleryExhibitions,
+    referenceNow: galleryReferenceNow
+  });
+  const verifiedFreshnessState = getGalleryFreshnessState(
+    galleryExhibitions.find((exhibition) => getGalleryInventoryTrust(exhibition).isVerified) ??
+      galleryExhibitions[0],
+    galleryReferenceNow
+  );
+  const fixtureFreshnessState = getGalleryFreshnessState(
+    createSyntheticGalleryExhibition({
+      id: "freshness-fixture-demo",
+      title: "Fixture Demo",
+      coordinates: { latitude: 40.747, longitude: -74.006 },
+      source: "seed-fixture",
+      externalUrl: "https://example.org/demo"
+    }),
+    galleryReferenceNow
+  );
+  const routeMapModel = createGalleryRouteMapModel(socialEventPlan, completedWalkSession);
+  const recapBadges = getGalleryPassportBadges(
+    [completedWalkSession],
+    galleryExhibitions.map((exhibition) => ({
+      exhibitionId: exhibition.id,
+      status: "visited",
+      updatedAt: galleryReferenceNow
+    })),
+    galleryExhibitions,
+    galleryReferenceNow
+  );
+  const recapStamps = getGalleryPassportStamps([completedWalkSession]);
+  const shareCard = createGalleryWalkShareCard({
+    walkPlan: socialEventPlan,
+    session: completedWalkSession,
+    recap: completedWalkRecap,
+    badges: recapBadges,
+    stamps: recapStamps
+  });
+  const passportMemory = createGalleryPassportMemory({
+    completedWalks: [completedWalkSession],
+    logEntries: [
+      {
+        exhibitionId: completedWalkSession.visitedStopIds[0] ?? "",
+        status: "visited",
+        note: "Worth remembering.",
+        updatedAt: galleryReferenceNow
+      }
+    ],
+    badges: recapBadges,
+    stamps: recapStamps,
+    passport: quizTastePassport
+  });
 
   assert(
     eventSignals.some((signal) => signal.kind === "opening" && signal.requiresRsvp) &&
@@ -1111,6 +1174,29 @@ async function main() {
       sharePayload.text.includes(socialEventPlan.guidance) &&
       savedWalk.itineraryText === itineraryText,
     "Gallery walk sharing should export ordered stops with trust labels, map/source links, and saved itinerary text."
+  );
+  assert(
+    freshnessAudit.verifiedCount >= 30 &&
+      freshnessAudit.officialLinkCount >= freshnessAudit.verifiedCount &&
+      verifiedFreshnessState.isVerified &&
+      verifiedFreshnessState.label.includes("Verified") &&
+      fixtureFreshnessState.kind === "fixture-demo",
+    "Gallery freshness lite should distinguish recent verified official links from fixture/demo inventory."
+  );
+  assert(
+    routeMapModel.pins.length === socialEventPlan.stops.length &&
+      routeMapModel.segments.length === Math.max(0, socialEventPlan.stops.length - 1) &&
+      routeMapModel.routeMapUrl === socialEventPlan.routeMapUrl &&
+      routeMapModel.pins.every((pin) => pin.mapUrl.includes("google.com/maps")),
+    "Gallery route map model should expose ordered pins, walking segments, and external map links."
+  );
+  assert(
+    shareCard.shareText.includes(socialEventPlan.title) &&
+      shareCard.stats.some((stat) => stat.includes("visited")) &&
+      passportMemory.completedWalkCount === 1 &&
+      passportMemory.visitedStopCount === completedWalkSession.visitedStopIds.length &&
+      passportMemory.summary.includes("completed walks"),
+    "Gallery passport memory should turn completed walks into shareable recap and local memory summaries."
   );
 
   const activeConciergeSuggestions = createGalleryConciergeSuggestions({
