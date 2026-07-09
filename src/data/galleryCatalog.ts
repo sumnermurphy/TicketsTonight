@@ -4,6 +4,7 @@ import type {
   GalleryHoursInterval,
   GalleryNeighborhood
 } from "../types";
+import { verifiedGalleryExhibitions } from "./verifiedGalleryInventory";
 
 const standardGalleryHours: GalleryHoursInterval[] = [
   { day: 2, opens: "10:00", closes: "18:00" },
@@ -83,6 +84,13 @@ export const galleryNeighborhoods: GalleryNeighborhood[] = [
     anchor: { latitude: 40.718, longitude: -73.989 }
   },
   {
+    id: "nyc-ues",
+    areaId: "nyc",
+    name: "Upper East Side",
+    walkLabel: "Uptown blue-chip loop",
+    anchor: { latitude: 40.774, longitude: -73.963 }
+  },
+  {
     id: "nyc-chinatown",
     areaId: "nyc",
     name: "Chinatown",
@@ -154,7 +162,7 @@ export const galleryNeighborhoods: GalleryNeighborhood[] = [
   }
 ];
 
-export const galleryExhibitions: GalleryExhibition[] = [
+const fixtureGalleryExhibitions: GalleryExhibition[] = [
   {
     id: "nyc-afterimage-index",
     title: "Afterimage Index",
@@ -939,4 +947,9 @@ export const galleryExhibitions: GalleryExhibition[] = [
     description: "A Beacon extension for wider Hudson Valley planning.",
     whyGoSignals: ["nearby-town", "video", "extension"]
   }
+];
+
+export const galleryExhibitions: GalleryExhibition[] = [
+  ...fixtureGalleryExhibitions,
+  ...verifiedGalleryExhibitions
 ];

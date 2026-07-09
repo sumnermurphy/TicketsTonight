@@ -417,6 +417,8 @@ export type GalleryExhibition = {
   id: string;
   sourceCandidateId?: string;
   importRecordId?: string;
+  verifiedAsOf?: string;
+  sourceCheckedAt?: string;
   title: string;
   artists: string[];
   galleryName: string;

@@ -35,6 +35,7 @@ import {
   createGalleryWalkPlan,
   createNeighborhoodIntelligence,
   filterGalleryExhibitions,
+  getGalleryInventoryTrust,
   galleryVisitStatusLabels,
   galleryWalkModeLabels,
   getDaysUntilGalleryCloses,
@@ -151,43 +152,11 @@ function getTonightEvent(exhibition: GalleryExhibition) {
 }
 
 function getFreshnessCopy(exhibition: GalleryExhibition): string {
-  if (exhibition.externalUrl.includes("example.org")) {
-    return "Fixture source";
-  }
-
-  if (exhibition.sourceFreshness === "fresh") {
-    return "Fresh source";
-  }
-
-  if (exhibition.sourceFreshness === "needs-review") {
-    return "Needs review";
-  }
-
-  return "Stale-source risk";
+  return getGalleryInventoryTrust(exhibition).checkedLabel;
 }
 
 function getSourceCopy(exhibition: GalleryExhibition): string {
-  if (exhibition.externalUrl.includes("example.org")) {
-    return "Needs live source";
-  }
-
-  if (exhibition.importRecordId) {
-    return "Imported record";
-  }
-
-  if (exhibition.sourceLegalStatus === "official-public-page") {
-    return "Official page";
-  }
-
-  if (exhibition.sourceLegalStatus === "partner-submission") {
-    return "Gallery submission";
-  }
-
-  if (exhibition.sourceLegalStatus === "permission-required") {
-    return "Review before ingest";
-  }
-
-  return "Do not ingest";
+  return getGalleryInventoryTrust(exhibition).sourceLabel;
 }
 
 function getAreaRoleCopy(areaId: GalleryAreaId): string {
@@ -265,22 +234,46 @@ function OpeningRadarItem({ exhibition }: { exhibition: GalleryExhibition }) {
 
 function WalkStopRow({
   stop,
-  index
+  leg,
+  isStart,
+  isNext
 }: {
   stop: ReturnType<typeof createGalleryWalkPlan>["stops"][number];
-  index: number;
+  leg?: ReturnType<typeof createGalleryWalkPlan>["legs"][number];
+  isStart: boolean;
+  isNext: boolean;
 }) {
+  const trust = getGalleryInventoryTrust(stop.exhibition);
+
   return (
     <View style={styles.walkStop}>
       <View style={styles.stopNumber}>
-        <Text style={styles.stopNumberText}>{index + 1}</Text>
+        <Text style={styles.stopNumberText}>{stop.stopNumber}</Text>
       </View>
       <View style={styles.walkStopCopy}>
-        <Text style={styles.walkStopTitle}>{stop.exhibition.title}</Text>
+        <View style={styles.stopLabelRow}>
+          {isStart ? (
+            <Text style={styles.routePill}>Start here</Text>
+          ) : null}
+          {isNext ? (
+            <Text style={styles.routePill}>Next stop</Text>
+          ) : null}
+        </View>
+        <Text style={styles.walkStopTitle}>{stop.exhibition.galleryName}</Text>
         <Text style={styles.walkStopMeta}>
-          {stop.exhibition.galleryName} - {galleryVisitStatusLabels[stop.status]}
+          {stop.exhibition.address} - {galleryVisitStatusLabels[stop.status]}
         </Text>
-        <Text style={styles.walkStopReason}>{stop.reasons[0] ?? "Good route stop"}</Text>
+        {leg ? (
+          <Text style={styles.walkStopMeta}>
+            {leg.walkingMinutes} min walk - {leg.distanceMiles.toFixed(1)} mi from previous
+          </Text>
+        ) : null}
+        <View style={styles.routeReasonRow}>
+          {stop.reasons.slice(0, 3).map((reason) => (
+            <Text key={reason} style={styles.walkStopReason}>{reason}</Text>
+          ))}
+        </View>
+        <Text style={styles.walkStopTrust}>{trust.label} - {trust.sourceLabel}</Text>
       </View>
       {stop.isSaved ? (
         <View style={styles.savedPill}>
@@ -288,6 +281,15 @@ function WalkStopRow({
           <Text style={styles.savedPillText}>Saved</Text>
         </View>
       ) : null}
+      <Pressable
+        accessibilityRole="link"
+        onPress={() => {
+          void Linking.openURL(stop.mapUrl);
+        }}
+        style={styles.mapIconButton}
+      >
+        <MapPin size={16} color={colors.ink} />
+      </Pressable>
     </View>
   );
 }
@@ -328,6 +330,7 @@ function ExhibitionCard({
   const openingTonight = isGalleryOpeningTonight(exhibition, referenceNow);
   const primaryArtist = exhibition.artists[0];
   const primaryMedium = exhibition.mediums[0];
+  const trust = getGalleryInventoryTrust(exhibition);
 
   return (
     <View style={styles.exhibitionCard}>
@@ -365,6 +368,7 @@ function ExhibitionCard({
         </View>
 
         <View style={styles.sourceRow}>
+          <Text style={styles.sourceText}>{trust.label}</Text>
           <Text style={styles.sourceText}>{getFreshnessCopy(exhibition)}</Text>
           <Text style={styles.sourceText}>{getSourceCopy(exhibition)}</Text>
           <Text style={styles.sourceText}>{exhibition.mediums.map((medium) => mediumLabels[medium]).join(", ")}</Text>
@@ -419,7 +423,7 @@ function ExhibitionCard({
             style={styles.linkButton}
           >
             <ExternalLink size={14} color={colors.ink} />
-            <Text style={styles.linkButtonText}>Listing</Text>
+            <Text style={styles.linkButtonText}>{trust.hasOfficialLink ? "Official link" : "Listing"}</Text>
           </Pressable>
         </View>
 
@@ -636,20 +640,26 @@ export function GalleryApp() {
 
         <View style={styles.marketSnapshot}>
           <Metric label="exhibitions" value={sourceTrust.exhibitionCount} tone="good" />
-          <Metric label="gallery sources" value={dataAudit.sourceCount} tone="good" />
-          <Metric label="openings tonight" value={sourceTrust.openingCount} tone="good" />
-          <Metric label="hours coverage" value={`${sourceTrust.hoursCoveragePercent}%`} />
+          <Metric label="verified" value={sourceTrust.verifiedExhibitionCount} tone="good" />
           <Metric
-            label="stale risk"
-            value={sourceTrust.staleSourceRiskCount}
-            tone={sourceTrust.staleSourceRiskCount > 0 ? "warn" : "good"}
+            label="fixture/demo"
+            value={sourceTrust.fixtureExhibitionCount}
+            tone={sourceTrust.fixtureExhibitionCount > 0 ? "warn" : "good"}
+          />
+          <Metric label="openings tonight" value={sourceTrust.openingCount} tone="good" />
+          <Metric
+            label="needs review"
+            value={sourceTrust.needsReviewExhibitionCount}
+            tone={sourceTrust.needsReviewExhibitionCount > 0 ? "warn" : "good"}
           />
         </View>
 
         <View style={styles.statusLine}>
           <Check size={16} color={colors.teal} />
           <Text style={styles.statusLineText}>
-            Source directory ready: {dataAudit.officialLinkCoveragePercent}% official links, {dataAudit.hoursCoveragePercent}% source hours. Inventory still includes {dataAudit.seedExhibitionCount} seed fixtures needing live replacement.
+            {selectedAreaId === "nyc"
+              ? `NYC now mixes ${sourceTrust.verifiedExhibitionCount} manually verified official-page listings with ${sourceTrust.fixtureExhibitionCount} fixture/demo listings still marked as demo.`
+              : `${selectedArea?.name ?? "Market"} has ${sourceTrust.verifiedExhibitionCount} verified listings and ${sourceTrust.fixtureExhibitionCount} fixture/demo listings; thin walks are labeled honestly.`} Source directory: {dataAudit.sourceCount} candidates, {dataAudit.officialLinkCoveragePercent}% official links.
           </Text>
         </View>
 
@@ -667,7 +677,7 @@ export function GalleryApp() {
             style={[styles.neighborhoodCard, !selectedNeighborhood ? styles.selectedNeighborhoodCard : null]}
           >
             <Text style={styles.neighborhoodName}>All clusters</Text>
-            <Text style={styles.neighborhoodMeta}>{areaInventory.length} seeded listings</Text>
+            <Text style={styles.neighborhoodMeta}>{areaInventory.length} total listings</Text>
             <Text style={styles.neighborhoodReason}>Scan the full market</Text>
           </Pressable>
           {neighborhoodIntelligence.map((item) => (
@@ -722,7 +732,7 @@ export function GalleryApp() {
         <View style={styles.walkBand}>
           <View style={styles.sectionHeader}>
             <View>
-              <Text style={styles.sectionTitle}>Gallery Walk Builder</Text>
+              <Text style={styles.sectionTitle}>Map Walk Planner</Text>
               <Text style={styles.sectionSubtitle}>{walkPlan.summary}</Text>
             </View>
             <Route size={21} color={colors.teal} />
@@ -744,9 +754,38 @@ export function GalleryApp() {
             <Metric label="route miles" value={walkPlan.totalDistanceMiles.toFixed(1)} />
             <Metric label="saved stops" value={walkPlan.savedStopCount} tone={walkPlan.savedStopCount > 0 ? "good" : "neutral"} />
           </View>
+          <View style={styles.routeGuidance}>
+            <Text style={styles.guidanceTitle}>{walkPlan.guidance}</Text>
+            <Text style={styles.guidanceCopy}>{walkPlan.readinessCopy}</Text>
+            <View style={styles.routeReasonRow}>
+              {walkPlan.selectionReasons.slice(0, 5).map((reason) => (
+                <Text key={reason} style={styles.routeReasonPill}>{reason}</Text>
+              ))}
+            </View>
+            {walkPlan.routeMapUrl ? (
+              <Pressable
+                accessibilityRole="link"
+                onPress={() => {
+                  if (walkPlan.routeMapUrl) {
+                    void Linking.openURL(walkPlan.routeMapUrl);
+                  }
+                }}
+                style={styles.routeMapButton}
+              >
+                <ExternalLink size={14} color={colors.paper} />
+                <Text style={styles.routeMapButtonText}>Open full route</Text>
+              </Pressable>
+            ) : null}
+          </View>
           <View style={styles.walkStops}>
             {walkPlan.stops.map((stop, index) => (
-              <WalkStopRow key={stop.exhibition.id} stop={stop} index={index} />
+              <WalkStopRow
+                key={stop.exhibition.id}
+                stop={stop}
+                leg={index > 0 ? walkPlan.legs[index - 1] : undefined}
+                isStart={walkPlan.startStopId === stop.exhibition.id}
+                isNext={walkPlan.nextStopId === stop.exhibition.id}
+              />
             ))}
           </View>
         </View>
@@ -1068,6 +1107,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md
   },
+  routeGuidance: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md
+  },
+  guidanceTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "900",
+    lineHeight: 19
+  },
+  guidanceCopy: {
+    color: colors.mutedInk,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18
+  },
+  routeMapButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: colors.ink,
+    borderRadius: radii.md,
+    flexDirection: "row",
+    gap: spacing.xs,
+    minHeight: 34,
+    paddingHorizontal: spacing.md
+  },
+  routeMapButtonText: {
+    color: colors.paper,
+    fontSize: 12,
+    fontWeight: "900"
+  },
   walkStops: {
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
@@ -1082,6 +1158,23 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     minHeight: 72,
     padding: spacing.md
+  },
+  stopLabelRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginBottom: spacing.xs
+  },
+  routePill: {
+    backgroundColor: colors.tealSoft,
+    borderRadius: radii.pill,
+    color: colors.teal,
+    fontSize: 10,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    textTransform: "uppercase"
   },
   stopNumber: {
     alignItems: "center",
@@ -1112,10 +1205,47 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs
   },
   walkStopReason: {
+    backgroundColor: colors.tealSoft,
+    borderRadius: radii.pill,
     color: colors.teal,
     fontSize: 12,
     fontWeight: "800",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  walkStopTrust: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
     marginTop: spacing.xs
+  },
+  routeReasonRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginTop: spacing.xs
+  },
+  routeReasonPill: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "800",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  mapIconButton: {
+    alignItems: "center",
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    height: 36,
+    justifyContent: "center",
+    width: 36
   },
   savedPill: {
     alignItems: "center",

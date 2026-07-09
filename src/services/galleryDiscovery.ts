@@ -51,7 +51,21 @@ export type GalleryWalkStop = {
   reasons: string[];
   isSaved: boolean;
   minutesAtStop: number;
+  stopNumber: number;
+  mapUrl: string;
 };
+
+export type GalleryWalkLeg = {
+  fromStopNumber: number;
+  toStopNumber: number;
+  fromExhibitionId: string;
+  toExhibitionId: string;
+  distanceMiles: number;
+  walkingMinutes: number;
+  mapUrl: string;
+};
+
+export type GalleryWalkReadinessLevel = "ready" | "thin" | "not-ready";
 
 export type GalleryWalkPlan = {
   areaId: GalleryAreaId;
@@ -60,11 +74,19 @@ export type GalleryWalkPlan = {
   title: string;
   summary: string;
   stops: GalleryWalkStop[];
+  legs: GalleryWalkLeg[];
   savedStopCount: number;
   totalMinutes: number;
   totalDistanceMiles: number;
   startsAt: string;
   canStartNow: boolean;
+  startStopId?: string;
+  nextStopId?: string;
+  routeMapUrl?: string;
+  guidance: string;
+  readinessLevel: GalleryWalkReadinessLevel;
+  readinessCopy: string;
+  selectionReasons: string[];
 };
 
 export type GalleryNeighborhoodIntelligence = {
@@ -82,6 +104,10 @@ export type GalleryNeighborhoodIntelligence = {
 export type GallerySourceTrustSummary = {
   areaId: GalleryAreaId;
   exhibitionCount: number;
+  verifiedExhibitionCount: number;
+  fixtureExhibitionCount: number;
+  submittedExhibitionCount: number;
+  needsReviewExhibitionCount: number;
   openingCount: number;
   hoursCoveragePercent: number;
   addressCoveragePercent: number;
@@ -90,6 +116,23 @@ export type GallerySourceTrustSummary = {
   freshSourceCount: number;
   officialOrSubmissionCount: number;
   recommendedNextAction: string;
+};
+
+export type GalleryInventoryTrustKind =
+  | "fixture-demo"
+  | "manual-verified"
+  | "partner-submitted"
+  | "needs-review"
+  | "stale-needs-review";
+
+export type GalleryInventoryTrust = {
+  kind: GalleryInventoryTrustKind;
+  label: string;
+  sourceLabel: string;
+  checkedLabel: string;
+  isFixture: boolean;
+  isVerified: boolean;
+  hasOfficialLink: boolean;
 };
 
 export type GalleryAlertPreferences = {
@@ -214,6 +257,10 @@ function normalizeText(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function isExampleUrl(url: string): boolean {
+  return url.includes("example.org") || url.includes("example.com");
+}
+
 function toSlug(value: string): string {
   const slug = normalizeText(value)
     .replace(/[^a-z0-9]+/g, "-")
@@ -257,6 +304,158 @@ function getDistanceMiles(from: Coordinates, to: Coordinates): number {
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
   return earthRadiusMiles * c;
+}
+
+function getWalkingMinutes(distanceMiles: number): number {
+  if (distanceMiles <= 0) {
+    return 0;
+  }
+
+  return Math.max(2, Math.round(distanceMiles * 20));
+}
+
+function getMapQuery(value: string): string {
+  return encodeURIComponent(value);
+}
+
+export function getGalleryStopMapUrl(exhibition: GalleryExhibition): string {
+  return `https://www.google.com/maps/search/?api=1&query=${getMapQuery(
+    `${exhibition.galleryName}, ${exhibition.address}`
+  )}`;
+}
+
+function getGalleryDirectionsMapUrl(stops: GalleryWalkStop[]): string | undefined {
+  if (stops.length === 0) {
+    return undefined;
+  }
+
+  const routeStops = stops.map((stop) => `${stop.exhibition.galleryName}, ${stop.exhibition.address}`);
+  const origin = routeStops[0];
+  const destination = routeStops[routeStops.length - 1];
+  const waypoints = routeStops.slice(1, -1);
+  const waypointQuery = waypoints.length > 0 ? `&waypoints=${getMapQuery(waypoints.join("|"))}` : "";
+
+  return `https://www.google.com/maps/dir/?api=1&travelmode=walking&origin=${getMapQuery(
+    origin ?? ""
+  )}&destination=${getMapQuery(destination ?? origin ?? "")}${waypointQuery}`;
+}
+
+function getGalleryLegMapUrl(from: GalleryExhibition, to: GalleryExhibition): string {
+  return `https://www.google.com/maps/dir/?api=1&travelmode=walking&origin=${getMapQuery(
+    `${from.galleryName}, ${from.address}`
+  )}&destination=${getMapQuery(`${to.galleryName}, ${to.address}`)}`;
+}
+
+export function isGalleryFixtureInventory(exhibition: GalleryExhibition): boolean {
+  return exhibition.source === "seed-fixture" || isExampleUrl(exhibition.externalUrl);
+}
+
+export function isGalleryVerifiedInventory(exhibition: GalleryExhibition): boolean {
+  return (
+    !isGalleryFixtureInventory(exhibition) &&
+    exhibition.sourceLegalStatus === "official-public-page" &&
+    exhibition.sourceFreshness === "fresh" &&
+    exhibition.externalUrl.trim().length > 0
+  );
+}
+
+export function getGalleryInventoryTrust(exhibition: GalleryExhibition): GalleryInventoryTrust {
+  const isFixture = isGalleryFixtureInventory(exhibition);
+  const isVerified = isGalleryVerifiedInventory(exhibition);
+  const checkedAt =
+    exhibition.verifiedAsOf ?? exhibition.sourceCheckedAt ?? exhibition.sourceUpdatedAt;
+  const checkedLabel = isFixture
+    ? "Fixture/demo"
+    : isVerified
+      ? `Verified as of ${formatTrustDate(checkedAt)}`
+      : exhibition.sourceFreshness === "stale-risk"
+        ? "Needs review"
+        : exhibition.sourceFreshness === "needs-review"
+          ? "Needs review"
+          : `Source checked ${formatTrustDate(checkedAt)}`;
+
+  if (isFixture) {
+    return {
+      kind: "fixture-demo",
+      label: "Fixture/demo",
+      sourceLabel: "Demo listing",
+      checkedLabel,
+      isFixture,
+      isVerified: false,
+      hasOfficialLink: false
+    };
+  }
+
+  if (exhibition.sourceLegalStatus === "partner-submission") {
+    return {
+      kind: "partner-submitted",
+      label: "Partner/submitted",
+      sourceLabel: "Submitted listing",
+      checkedLabel,
+      isFixture,
+      isVerified: false,
+      hasOfficialLink: exhibition.externalUrl.trim().length > 0
+    };
+  }
+
+  if (exhibition.sourceFreshness === "stale-risk") {
+    return {
+      kind: "stale-needs-review",
+      label: "Needs review",
+      sourceLabel: "Stale source",
+      checkedLabel,
+      isFixture,
+      isVerified: false,
+      hasOfficialLink: exhibition.externalUrl.trim().length > 0
+    };
+  }
+
+  if (!isVerified || exhibition.sourceFreshness === "needs-review") {
+    return {
+      kind: "needs-review",
+      label: "Needs review",
+      sourceLabel: "Review source",
+      checkedLabel,
+      isFixture,
+      isVerified: false,
+      hasOfficialLink: exhibition.externalUrl.trim().length > 0
+    };
+  }
+
+  return {
+    kind: "manual-verified",
+    label: "Manually verified",
+    sourceLabel: "Official gallery link",
+    checkedLabel,
+    isFixture,
+    isVerified,
+    hasOfficialLink: true
+  };
+}
+
+function formatTrustDate(iso: string): string {
+  const month = Number(getDatePart(iso, 2));
+  const day = Number(getDatePart(iso, 3));
+  const monthNames = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec"
+  ];
+
+  return `${monthNames[month - 1] ?? "Date"} ${day || ""}`.trim();
+}
+
+function getDatePart(iso: string, index: number): string {
+  return iso.match(/^(\d{4})-(\d{2})-(\d{2})T?(\d{2})?:?(\d{2})?/)?.[index] ?? "";
 }
 
 function getNeighborhoodsForArea(areaId: GalleryAreaId): GalleryNeighborhood[] {
@@ -439,6 +638,168 @@ export function getGalleryWhyGoReasons(
   return Array.from(new Set(reasons)).slice(0, 5);
 }
 
+function isRouteUsableStatus(status: GalleryVisitStatus): boolean {
+  return status === "open-now" || status === "opens-later";
+}
+
+function getRouteReasonSet(
+  exhibition: GalleryExhibition,
+  previous: GalleryExhibition | undefined,
+  referenceNow: string
+): string[] {
+  const reasons: string[] = [];
+  const status = getGalleryVisitStatus(exhibition, referenceNow);
+  const trust = getGalleryInventoryTrust(exhibition);
+  const daysUntilClose = getDaysUntilGalleryCloses(exhibition, referenceNow);
+
+  if (status === "open-now") {
+    reasons.push("Open now");
+  } else if (status === "opens-later") {
+    reasons.push("Opens later");
+  }
+
+  if (previous) {
+    const distance = getDistanceMiles(previous.coordinates, exhibition.coordinates);
+
+    if (distance <= 0.25) {
+      reasons.push("Very nearby");
+    } else if (distance <= 0.5) {
+      reasons.push("Nearby");
+    }
+  } else {
+    reasons.push("Start here");
+  }
+
+  if (daysUntilClose >= 0 && daysUntilClose <= 7) {
+    reasons.push("Closing soon");
+  }
+
+  if (isGalleryOpeningTonight(exhibition, referenceNow)) {
+    reasons.push("Opening tonight");
+  }
+
+  if (trust.isVerified) {
+    reasons.push("Verified source");
+  } else if (trust.isFixture) {
+    reasons.push("Fixture/demo");
+  } else if (trust.kind === "partner-submitted") {
+    reasons.push("Partner/submitted");
+  }
+
+  return Array.from(new Set(reasons)).slice(0, 5);
+}
+
+function getFirstRouteCandidate(
+  candidates: GalleryExhibition[],
+  referenceNow: string,
+  savedIdSet: Set<string> = new Set()
+): GalleryExhibition | undefined {
+  return [...candidates].sort((left, right) => {
+    const savedDelta = Number(savedIdSet.has(right.id)) - Number(savedIdSet.has(left.id));
+
+    if (savedDelta !== 0) {
+      return savedDelta;
+    }
+
+    const statusDelta =
+      visitStatusPriority[getGalleryVisitStatus(left, referenceNow)] -
+      visitStatusPriority[getGalleryVisitStatus(right, referenceNow)];
+
+    if (statusDelta !== 0) {
+      return statusDelta;
+    }
+
+    return left.distanceMiles - right.distanceMiles;
+  })[0];
+}
+
+function orderGalleryWalkCandidates(
+  candidates: GalleryExhibition[],
+  referenceNow: string,
+  savedIdSet: Set<string> = new Set()
+): GalleryExhibition[] {
+  const firstCandidate = getFirstRouteCandidate(candidates, referenceNow, savedIdSet);
+
+  if (!firstCandidate) {
+    return [];
+  }
+
+  const ordered = [firstCandidate];
+  const remaining = candidates.filter((candidate) => candidate.id !== firstCandidate.id);
+
+  while (remaining.length > 0) {
+    const previous = ordered[ordered.length - 1];
+    const nextIndex = remaining
+      .map((candidate, index) => ({
+        candidate,
+        index,
+        distance: previous ? getDistanceMiles(previous.coordinates, candidate.coordinates) : 0
+      }))
+      .sort((left, right) => {
+        const savedDelta =
+          Number(savedIdSet.has(right.candidate.id)) - Number(savedIdSet.has(left.candidate.id));
+
+        if (savedDelta !== 0) {
+          return savedDelta;
+        }
+
+        const statusDelta =
+          visitStatusPriority[getGalleryVisitStatus(left.candidate, referenceNow)] -
+          visitStatusPriority[getGalleryVisitStatus(right.candidate, referenceNow)];
+
+        if (statusDelta !== 0) {
+          return statusDelta;
+        }
+
+        return left.distance - right.distance;
+      })[0]?.index;
+
+    if (typeof nextIndex !== "number") {
+      break;
+    }
+
+    const [nextCandidate] = remaining.splice(nextIndex, 1);
+
+    if (nextCandidate) {
+      ordered.push(nextCandidate);
+    }
+  }
+
+  return ordered;
+}
+
+function getWalkReadiness(
+  stops: GalleryWalkStop[],
+  neighborhood: string,
+  modeLabel: string
+): {
+  readinessLevel: GalleryWalkReadinessLevel;
+  readinessCopy: string;
+} {
+  const usableStops = stops.filter((stop) => isRouteUsableStatus(stop.status)).length;
+  const verifiedStops = stops.filter((stop) => getGalleryInventoryTrust(stop.exhibition).isVerified)
+    .length;
+
+  if (stops.length >= 3 && usableStops >= 2 && verifiedStops >= 2) {
+    return {
+      readinessLevel: "ready",
+      readinessCopy: `${neighborhood} has enough verified, open listings for this ${modeLabel}.`
+    };
+  }
+
+  if (stops.length >= 2 && usableStops >= 1) {
+    return {
+      readinessLevel: "thin",
+      readinessCopy: `${neighborhood} can support a light walk, but verified inventory is still thin.`
+    };
+  }
+
+  return {
+    readinessLevel: "not-ready",
+    readinessCopy: `${neighborhood} does not have enough verified, open listings for a strong ${modeLabel} yet.`
+  };
+}
+
 export function filterGalleryExhibitions(
   exhibitions: GalleryExhibition[],
   filters: GalleryDiscoveryFilters
@@ -535,7 +896,7 @@ export function createGalleryWalkPlan(input: GalleryWalkPlanInput): GalleryWalkP
 
             return status === "open-now" || status === "opens-later";
           });
-  const candidates = (modeCandidates.length > 0 ? modeCandidates : onViewCandidates).sort(
+  const preSortedCandidates = (modeCandidates.length > 0 ? modeCandidates : onViewCandidates).sort(
     (left, right) => {
       const savedDelta = Number(savedIdSet.has(right.id)) - Number(savedIdSet.has(left.id));
 
@@ -569,26 +930,72 @@ export function createGalleryWalkPlan(input: GalleryWalkPlanInput): GalleryWalkP
       return left.distanceMiles - right.distanceMiles;
     }
   );
-  const stops = candidates.slice(0, maxStops).map((exhibition) => ({
-    exhibition,
-    status: getGalleryVisitStatus(exhibition, referenceNow),
-    reasons: getGalleryWhyGoReasons(exhibition, sourceExhibitions, referenceNow, input.savedIds ?? []),
-    isSaved: savedIdSet.has(exhibition.id),
-    minutesAtStop
-  }));
-  const routeDistance = stops.reduce((total, stop, index) => {
-    const previous = stops[index - 1];
+  const usableCandidates = preSortedCandidates.filter((exhibition) =>
+    isRouteUsableStatus(getGalleryVisitStatus(exhibition, referenceNow))
+  );
+  const routeCandidates =
+    usableCandidates.length >= Math.min(2, maxStops) ? usableCandidates : preSortedCandidates;
+  const selectedExhibitions = orderGalleryWalkCandidates(
+    routeCandidates,
+    referenceNow,
+    savedIdSet
+  ).slice(0, maxStops);
+  const stops = selectedExhibitions.map((exhibition, index) => {
+    const previous = selectedExhibitions[index - 1];
+    const routeReasons = getRouteReasonSet(exhibition, previous, referenceNow);
+    const whyGoReasons = getGalleryWhyGoReasons(
+      exhibition,
+      sourceExhibitions,
+      referenceNow,
+      input.savedIds ?? []
+    );
 
-    if (!previous) {
-      return total;
-    }
+    return {
+      exhibition,
+      status: getGalleryVisitStatus(exhibition, referenceNow),
+      reasons: Array.from(new Set([...routeReasons, ...whyGoReasons])).slice(0, 5),
+      isSaved: savedIdSet.has(exhibition.id),
+      minutesAtStop,
+      stopNumber: index + 1,
+      mapUrl: getGalleryStopMapUrl(exhibition)
+    };
+  });
+  const legs = stops.slice(1).map((stop, index): GalleryWalkLeg => {
+    const previous = stops[index];
 
-    return total + getDistanceMiles(previous.exhibition.coordinates, stop.exhibition.coordinates);
-  }, 0);
-  const totalMinutes =
-    stops.length * minutesAtStop + Math.max(0, stops.length - 1) * transferMinutes;
+    const distance = previous
+      ? getDistanceMiles(previous.exhibition.coordinates, stop.exhibition.coordinates)
+      : 0;
+
+    return {
+      fromStopNumber: previous?.stopNumber ?? stop.stopNumber,
+      toStopNumber: stop.stopNumber,
+      fromExhibitionId: previous?.exhibition.id ?? stop.exhibition.id,
+      toExhibitionId: stop.exhibition.id,
+      distanceMiles: Number(distance.toFixed(2)),
+      walkingMinutes: getWalkingMinutes(distance),
+      mapUrl: previous ? getGalleryLegMapUrl(previous.exhibition, stop.exhibition) : stop.mapUrl
+    };
+  });
+  const routeDistance = legs.reduce((total, leg) => total + leg.distanceMiles, 0);
+  const walkingMinutes = legs.reduce((total, leg) => total + leg.walkingMinutes, 0);
+  const totalMinutes = stops.length * minutesAtStop + walkingMinutes;
   const savedStopCount = stops.filter((stop) => stop.isSaved).length;
   const modeLabel = config.label;
+  const startStop = stops[0];
+  const nextStop = stops[1];
+  const { readinessLevel, readinessCopy } = getWalkReadiness(stops, neighborhood, modeLabel);
+  const guidance = startStop
+    ? `${startStop.status === "open-now" ? "Start here" : "Start when open"}: ${
+        startStop.exhibition.galleryName
+      }. ${
+        nextStop
+          ? `Next stop: ${nextStop.exhibition.galleryName}, ${legs[0]?.walkingMinutes ?? 0} min walk.`
+          : "No second stop is strong enough yet."
+      }`
+    : `No ${modeLabel} is ready in ${neighborhood} yet.`;
+  const selectionReasons = Array.from(new Set(stops.flatMap((stop) => stop.reasons))).slice(0, 8);
+  const routeMapUrl = getGalleryDirectionsMapUrl(stops);
 
   return {
     areaId: input.areaId,
@@ -600,11 +1007,19 @@ export function createGalleryWalkPlan(input: GalleryWalkPlanInput): GalleryWalkP
         ? `${stops.length} stops, ${totalMinutes} minutes, ${routeDistance.toFixed(1)} miles.`
         : `No ${modeLabel} is ready in ${neighborhood} yet.`,
     stops,
+    legs,
     savedStopCount,
     totalMinutes,
     totalDistanceMiles: Number(routeDistance.toFixed(2)),
     startsAt: referenceNow,
-    canStartNow: stops.some((stop) => stop.status === "open-now")
+    canStartNow: startStop?.status === "open-now",
+    startStopId: startStop?.exhibition.id,
+    nextStopId: nextStop?.exhibition.id,
+    routeMapUrl,
+    guidance,
+    readinessLevel,
+    readinessCopy,
+    selectionReasons
   };
 }
 
@@ -671,6 +1086,20 @@ export function createGallerySourceTrustSummary(
   const openingCount = marketExhibitions.filter((exhibition) =>
     isGalleryOpeningTonight(exhibition, referenceNow)
   ).length;
+  const verifiedExhibitionCount = marketExhibitions.filter((exhibition) =>
+    getGalleryInventoryTrust(exhibition).isVerified
+  ).length;
+  const fixtureExhibitionCount = marketExhibitions.filter((exhibition) =>
+    getGalleryInventoryTrust(exhibition).isFixture
+  ).length;
+  const submittedExhibitionCount = marketExhibitions.filter(
+    (exhibition) => getGalleryInventoryTrust(exhibition).kind === "partner-submitted"
+  ).length;
+  const needsReviewExhibitionCount = marketExhibitions.filter((exhibition) => {
+    const trust = getGalleryInventoryTrust(exhibition);
+
+    return trust.kind === "needs-review" || trust.kind === "stale-needs-review";
+  }).length;
   const hoursCoveragePercent = coveragePercent(
     marketExhibitions.filter((exhibition) => exhibition.hours.length > 0).length
   );
@@ -692,15 +1121,23 @@ export function createGallerySourceTrustSummary(
       exhibition.sourceLegalStatus === "partner-submission"
   ).length;
   const recommendedNextAction =
-    staleSourceRiskCount > 0
-      ? "Review stale sources before featuring them heavily."
-      : openingCount === 0
-        ? "Add opening-night sources for this market."
-        : "Market is ready for gallery-walk discovery.";
+    areaId === "nyc" && verifiedExhibitionCount < 30
+      ? "Convert more official NYC pages into verified inventory before featuring full-market claims."
+      : fixtureExhibitionCount > verifiedExhibitionCount
+        ? "Replace fixture/demo listings with official-page verified records."
+        : staleSourceRiskCount > 0
+          ? "Review stale sources before featuring them heavily."
+          : openingCount === 0
+            ? "Add opening-night sources for this market."
+            : "Market is ready for gallery-walk discovery.";
 
   return {
     areaId,
     exhibitionCount,
+    verifiedExhibitionCount,
+    fixtureExhibitionCount,
+    submittedExhibitionCount,
+    needsReviewExhibitionCount,
     openingCount,
     hoursCoveragePercent,
     addressCoveragePercent,

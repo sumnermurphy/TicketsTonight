@@ -48,10 +48,13 @@ import {
   createNeighborhoodIntelligence,
   filterGalleryExhibitions,
   getDaysUntilGalleryCloses,
+  getGalleryInventoryTrust,
   getGalleryVisitStatus,
   getGalleryWhyGoReasons,
   getLastChanceGalleryAlerts,
   getSavedGalleryIdsFromLog,
+  isGalleryFixtureInventory,
+  isGalleryVerifiedInventory,
   upsertGalleryLogEntry
 } from "../src/services/galleryDiscovery";
 import {
@@ -176,7 +179,7 @@ import {
   type TicketmasterDiscoveryClient,
   type TicketmasterDiscoveryEvent
 } from "../src/services/ticketmasterProvider";
-import type { EventProvider, Show, ShowSearchFilters } from "../src/types";
+import type { EventProvider, GalleryExhibition, Show, ShowSearchFilters } from "../src/types";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -227,6 +230,46 @@ function createSyntheticShow(
     source: overrides.source ?? "primary-marketplace",
     imageTone: overrides.imageTone ?? "#314E66",
     recommendationSignals: overrides.recommendationSignals ?? ["spotify:house"]
+  };
+}
+
+function createSyntheticGalleryExhibition(
+  overrides: Partial<GalleryExhibition> & Pick<GalleryExhibition, "id" | "title" | "coordinates">
+): GalleryExhibition {
+  return {
+    id: overrides.id,
+    title: overrides.title,
+    artists: overrides.artists ?? ["Synthetic Artist"],
+    galleryName: overrides.galleryName ?? overrides.title,
+    galleryKind: overrides.galleryKind ?? "emerging",
+    areaId: overrides.areaId ?? "nyc",
+    neighborhood: overrides.neighborhood ?? "Chelsea",
+    address: overrides.address ?? "500 W 22nd St, New York, NY",
+    coordinates: overrides.coordinates,
+    distanceMiles: overrides.distanceMiles ?? 0.2,
+    mediums: overrides.mediums ?? ["painting"],
+    opensAt: overrides.opensAt ?? "2026-07-01T10:00:00-04:00",
+    closesAt: overrides.closesAt ?? "2026-08-01T18:00:00-04:00",
+    specialEvents: overrides.specialEvents ?? [],
+    hours:
+      overrides.hours ??
+      [
+        { day: 2, opens: "10:00", closes: "18:00" },
+        { day: 3, opens: "10:00", closes: "18:00" },
+        { day: 4, opens: "10:00", closes: "18:00" },
+        { day: 5, opens: "10:00", closes: "18:00" },
+        { day: 6, opens: "10:00", closes: "18:00" }
+      ],
+    externalUrl: overrides.externalUrl ?? `https://example.org/${overrides.id}`,
+    imageTone: overrides.imageTone ?? "#47606F",
+    source: overrides.source ?? "manual-review",
+    sourceLegalStatus: overrides.sourceLegalStatus ?? "official-public-page",
+    sourceFreshness: overrides.sourceFreshness ?? "fresh",
+    sourceUpdatedAt: overrides.sourceUpdatedAt ?? "2026-07-09T12:00:00-04:00",
+    verifiedAsOf: overrides.verifiedAsOf,
+    sourceCheckedAt: overrides.sourceCheckedAt,
+    description: overrides.description ?? "Synthetic gallery exhibition for service checks.",
+    whyGoSignals: overrides.whyGoSignals ?? ["synthetic"]
   };
 }
 
@@ -287,10 +330,49 @@ async function main() {
     galleryExhibitions,
     galleryReferenceNow
   );
+  const verifiedInventory = galleryExhibitions.filter(isGalleryVerifiedInventory);
+  const fixtureInventory = galleryExhibitions.filter(isGalleryFixtureInventory);
+  const nycVerifiedInventory = verifiedInventory.filter((exhibition) => exhibition.areaId === "nyc");
+  const hudsonVerifiedInventory = verifiedInventory.filter(
+    (exhibition) => exhibition.areaId === "hudson"
+  );
+  const sampleFixtureTrust = getGalleryInventoryTrust(
+    galleryExhibitions.find((exhibition) => exhibition.id === "nyc-afterimage-index") ??
+      galleryExhibitions[0]
+  );
+  const sampleVerifiedTrust = getGalleryInventoryTrust(
+    galleryExhibitions.find((exhibition) => exhibition.id === "verified-pace-julian-schnabel") ??
+      galleryExhibitions[0]
+  );
 
   assert(
-    nycTrust.exhibitionCount >= 10 && laTrust.exhibitionCount >= 8 && hudsonTrust.exhibitionCount >= 6,
-    "Gallery source trust should report enough market inventory for NYC, LA, and Hudson."
+    nycTrust.exhibitionCount >= 30 &&
+      nycTrust.verifiedExhibitionCount >= 30 &&
+      laTrust.exhibitionCount >= 8 &&
+      hudsonTrust.exhibitionCount >= 6,
+    "Gallery source trust should report expanded verified NYC inventory while preserving LA and Hudson coverage."
+  );
+  assert(
+    nycVerifiedInventory.length >= 30 &&
+      hudsonVerifiedInventory.length >= 1 &&
+      fixtureInventory.length > 0,
+    "Verified inventory should materially increase NYC while leaving fixture/demo records explicitly identifiable."
+  );
+  assert(
+    sampleFixtureTrust.kind === "fixture-demo" &&
+      sampleFixtureTrust.label === "Fixture/demo" &&
+      sampleVerifiedTrust.kind === "manual-verified" &&
+      sampleVerifiedTrust.checkedLabel === "Verified as of Jul 9",
+    "Gallery trust labels should distinguish fixture/demo inventory from manually verified official-page records."
+  );
+  assert(
+    verifiedInventory.every(
+      (exhibition) =>
+        exhibition.externalUrl.startsWith("https://") &&
+        !exhibition.externalUrl.includes("example.") &&
+        getGalleryInventoryTrust(exhibition).sourceLabel === "Official gallery link"
+    ),
+    "Verified gallery inventory should carry real official links instead of example URLs."
   );
   assert(
     nycTrust.openingCount >= 3 && laTrust.openingCount >= 1 && hudsonTrust.openingCount >= 1,
@@ -396,6 +478,82 @@ async function main() {
     hudsonWalk.stops.length >= 3 && hudsonWalk.neighborhood === "Warren Street",
     "Hudson should support a Warren Street gallery walk while remaining an arts-town test."
   );
+  assert(
+    chelseaWalk.legs.length === Math.max(0, chelseaWalk.stops.length - 1) &&
+      chelseaWalk.routeMapUrl?.includes("google.com/maps/dir") &&
+      chelseaWalk.stops.every((stop) => stop.mapUrl.includes("google.com/maps/search")) &&
+      chelseaWalk.guidance.includes("Start"),
+    "Map Walk UX should expose route legs, full-route map links, stop map links, and start guidance."
+  );
+  const routeOrderingWalk = createGalleryWalkPlan({
+    areaId: "nyc",
+    mode: "quick-loop",
+    neighborhood: "Chelsea",
+    referenceNow: galleryReferenceNow,
+    exhibitions: [
+      createSyntheticGalleryExhibition({
+        id: "route-open-near-start",
+        title: "Open Near Start",
+        galleryName: "Open Near Start",
+        coordinates: { latitude: 40.747, longitude: -74.006 },
+        distanceMiles: 0.1
+      }),
+      createSyntheticGalleryExhibition({
+        id: "route-open-near-next",
+        title: "Open Near Next",
+        galleryName: "Open Near Next",
+        coordinates: { latitude: 40.7472, longitude: -74.0061 },
+        distanceMiles: 0.2
+      }),
+      createSyntheticGalleryExhibition({
+        id: "route-open-far",
+        title: "Open Far",
+        galleryName: "Open Far",
+        coordinates: { latitude: 40.755, longitude: -73.996 },
+        distanceMiles: 1.3
+      })
+    ]
+  });
+
+  assert(
+    (routeOrderingWalk.legs[0]?.distanceMiles ?? 1) < 0.1,
+    "Gallery routes should order open stops by walkable distance once a start stop is chosen."
+  );
+  const closedAvoidanceWalk = createGalleryWalkPlan({
+    areaId: "nyc",
+    mode: "two-hour",
+    neighborhood: "Chelsea",
+    referenceNow: galleryReferenceNow,
+    exhibitions: [
+      createSyntheticGalleryExhibition({
+        id: "route-open-alpha",
+        title: "Open Alpha",
+        coordinates: { latitude: 40.747, longitude: -74.006 },
+        distanceMiles: 0.1
+      }),
+      createSyntheticGalleryExhibition({
+        id: "route-open-beta",
+        title: "Open Beta",
+        coordinates: { latitude: 40.7472, longitude: -74.0061 },
+        distanceMiles: 0.2
+      }),
+      createSyntheticGalleryExhibition({
+        id: "route-closed-today",
+        title: "Closed Today",
+        coordinates: { latitude: 40.7473, longitude: -74.0062 },
+        distanceMiles: 0.15,
+        hours: [{ day: 6, opens: "10:00", closes: "18:00" }]
+      })
+    ]
+  });
+
+  assert(
+    closedAvoidanceWalk.stops.length === 2 &&
+      closedAvoidanceWalk.stops.every((stop) =>
+        ["open-now", "opens-later"].includes(stop.status)
+      ),
+    "Gallery routes should exclude closed galleries when enough open alternatives exist."
+  );
 
   const neighborhoodReadiness = createNeighborhoodIntelligence(
     "nyc",
@@ -408,12 +566,29 @@ async function main() {
     galleryExhibitions,
     galleryReferenceNow
   );
+  const fixtureOnlyReadiness = createNeighborhoodIntelligence(
+    "nyc",
+    galleryExhibitions.filter((exhibition) => !isGalleryVerifiedInventory(exhibition)),
+    galleryReferenceNow
+  );
+  const chelseaBeforeVerified = fixtureOnlyReadiness.find(
+    (neighborhood) => neighborhood.neighborhood === "Chelsea"
+  );
+  const chelseaAfterVerified = neighborhoodReadiness.find(
+    (neighborhood) => neighborhood.neighborhood === "Chelsea"
+  );
 
   assert(
     neighborhoodReadiness.some(
       (neighborhood) => neighborhood.neighborhood === "Chelsea" && neighborhood.canSupportWalk
     ),
     "Neighborhood intelligence should prove Chelsea can support a walk."
+  );
+  assert(
+    (chelseaAfterVerified?.exhibitionCount ?? 0) >
+      (chelseaBeforeVerified?.exhibitionCount ?? 0) + 20 &&
+      chelseaAfterVerified?.canSupportWalk,
+    "Walk readiness should improve materially as verified Chelsea inventory is added."
   );
   assert(
     laReadiness.some((neighborhood) => neighborhood.canSupportWalk),
@@ -729,7 +904,7 @@ async function main() {
       nycDataAudit.seedExhibitionCount > 0 &&
       nycDataAudit.manualSeedImportCount === 1 &&
       hudsonDataAudit.partnerSubmissionImportCount === 2 &&
-      hudsonDataAudit.importedExhibitionCount === 2,
+      hudsonDataAudit.importedExhibitionCount >= 3,
     "Gallery market data audits should distinguish seed, manual-import, submitted, and imported data."
   );
   assert(
