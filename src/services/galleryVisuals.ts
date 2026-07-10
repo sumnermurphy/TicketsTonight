@@ -149,6 +149,14 @@ export type WalkerImageReadinessReport = {
   unsafeOfficialAssetIds: string[];
 };
 
+export type WalkerImageSystemSummary = {
+  headline: string;
+  detail: string;
+  coverageChips: string[];
+  provenanceLabel: WalkerVisualCreditLabel;
+  needsOfficialImageReview: boolean;
+};
+
 const walkerGeneratedLicenseLabel = "Walker generated editorial placeholder";
 const walkerGeneratedAttribution = "Walker editorial image system";
 const walkerVisualCheckedAt = "2026-07-10T20:00:00+02:00";
@@ -684,5 +692,36 @@ export function createWalkerImageReadinessReport(
     editorialFallbackCount,
     needsReviewCount,
     unsafeOfficialAssetIds
+  };
+}
+
+export function createWalkerImageSystemSummary(
+  report: WalkerImageReadinessReport
+): WalkerImageSystemSummary {
+  const roleCount =
+    report.cityBannerCount +
+    report.neighborhoodBannerCount +
+    report.galleryBannerCount +
+    report.exhibitionBannerCount;
+  const hasRoleCoverage =
+    report.cityBannerCount > 0 &&
+    report.neighborhoodBannerCount > 0 &&
+    report.galleryBannerCount > 0;
+
+  return {
+    headline: hasRoleCoverage ? "Layered Walker imagery is ready" : "Image roles need coverage",
+    detail: hasRoleCoverage
+      ? `${roleCount} city, neighborhood, gallery, and exhibition banner records are separated from official gallery links.`
+      : "Add role-specific city, neighborhood, gallery, and exhibition image records before beta.",
+    coverageChips: [
+      `${report.cityBannerCount} city`,
+      `${report.neighborhoodBannerCount} neighborhood`,
+      `${report.galleryBannerCount} gallery`,
+      `${report.exhibitionBannerCount} exhibit`,
+      `${report.editorialFallbackCount} editorial fallback`
+    ],
+    provenanceLabel: "Editorial image",
+    needsOfficialImageReview:
+      report.needsReviewCount > 0 || report.unsafeOfficialAssetIds.length > 0
   };
 }

@@ -12,7 +12,7 @@
 - Switch route modes across quick loop, 2-hour walk, opening-night, last-chance, and For you.
 - Use a route "Swap" action from the route preview or stop list and confirm a nearby verified/source-backed replacement updates the draft or active route.
 - Start a NYC walk, mark a stop visited, and confirm the route map updates current/next/visited state.
-- Open an exhibition detail sheet and confirm the source receipt shows the official evidence label, checked date, and official gallery link when available.
+- Open an exhibition detail sheet and confirm the place-confidence card, source receipt, checked date, and official gallery link are visible when available.
 - Save a beta feedback note, copy or email the generated report, and confirm the feedback count and beta task progress persist after refresh.
 - Use the beta preview actions: Try a NYC walk, Try For You, Check Hudson, Send feedback, and Copy beta report.
 - Switch to Hudson and confirm the app stays honest about thinner verified supply.
@@ -31,16 +31,18 @@
 - Draft route swaps do not overwrite an active walk. Active-walk swaps update ordered stops while preserving visited/skipped progress when possible.
 - The explicit map buttons remain the external navigation handoff.
 - Full-route Google Maps links can now include the selected start point: first route stop, market center, neighborhood anchor, custom address, or browser coordinates when available.
+- The route preview surfaces the selected start point, route confidence chips, and a map badge so testers can see what will be handed to external maps before opening them.
 - Browser location is optional and falls back to the first route stop if coordinates are unavailable or permission is not granted.
 - This branch does not add a map SDK, live geolocation, backend routing, auth, checkout, Spotify, concerts/ticketing, native packaging, or the ops console.
 
 ## Beta Preview + Mobile Web
 - The first-run and beta preview surfaces now behave like a guided beta path instead of a feature wall: users can find a walk, take the taste quiz, resume an active walk, try NYC/Hudson/For You paths, or step through seven focused beta tasks.
 - Beta tasks are local-only and persist with the rest of gallery app state: find a walk, take quiz, start route, swap stop, mark visited, check Hudson, and send feedback.
-- The beta feedback panel stores notes locally and can generate a Walker review report with route mode, market, selected start point, current/next stop, active-walk state, verified/demo counts, route warnings, quick field tags, and tester notes, without introducing analytics, auth, or backend sync.
+- The beta feedback panel stores notes locally, shows field-test context chips, and can generate a Walker review report with route mode, market, selected start point, current/next stop, active-walk state, verified/demo counts, route warnings, quick field tags, and tester notes, without introducing analytics, auth, or backend sync.
 - Mobile web now has a fixed bottom command surface for the highest-frequency actions. It is a PWA-readiness step, not native packaging.
 - `app.json` and `public/manifest.json` now use Walker web name, short name, display mode, theme/background colors, and square icon metadata so the project is closer to an installable mobile-web shell later.
 - Checked-in gallery images and inventory continue to support an offline-friendly preview stance. Static web export now registers a lightweight Walker service worker for the app shell/local assets after first load.
+- Walker image roles now separate city, neighborhood, gallery, and exhibit banners while labeling generated visuals as editorial placeholders rather than official gallery photography.
 
 ## Known Limitations
 - Route confidence does not use live location, transit disruptions, weather, or real-time gallery capacity.

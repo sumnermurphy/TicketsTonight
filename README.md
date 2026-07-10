@@ -16,7 +16,7 @@ This branch intentionally replaces the legacy iOS-era TicketsTonight product sur
 ## What Is Built
 
 - Walker route builder with quick loop, 2-hour walk, opening crawl, last-chance, and For you route modes.
-- Map-like route planner with ordered stops, walking distance/time, route reasons, grouped same-gallery stops, stop swapping, and external Google Maps links.
+- Map-like route planner with ordered stops, walking distance/time, route reasons, selected start-point handoff, grouped same-gallery stops, stop swapping, and external Google Maps links.
 - Active-walk companion state with start/resume, current/next stop progress, visited/skipped actions, completed recap, and local persistence.
 - First-run choice surface for finding a walk, taking the taste quiz, or resuming an active walk.
 - Walker mobile web shell with a wordmark, location/date context, visual featured recommendation, Open Now feed, compact trust strip, and bottom tabs for Tonight, Walk, For You, and Journal.
@@ -26,6 +26,8 @@ This branch intentionally replaces the legacy iOS-era TicketsTonight product sur
 - Neighborhood Intelligence for walkable clusters.
 - Why Go cards, personal art-log controls, saved/visited/skipped states, and private notes.
 - Trust labels for `Verified as of`, `Official gallery link`, `Fixture/demo`, `Needs review`, and submitted/partner inventory.
+- Place-confidence detail cards that show whether a stop is verified, demo, or a thin-market cultural anchor before a user walks there.
+- Walker image-role system for city, neighborhood, gallery, and exhibit banners; current images remain labeled editorial placeholders and are separated from official gallery links.
 - PWA-readiness metadata, static icon assets, and an exported-web service worker that caches the app shell/local assets after first load while keeping official links/maps live-check only.
 - Compact beta preview path with "Try a NYC walk", "Try For You", "Check Hudson", feedback capture, and copyable Walker beta review report.
 - Route usability signals for open-now confidence, timing risk, best-start reasoning, closed/closing-soon warnings, and thin verified-route fallback copy.
@@ -109,7 +111,7 @@ npm run audit:source-directory
 - Grouped same-gallery stops still render compactly with show titles preserved.
 - Trust labels and official links are visible on cards and stops.
 - Hudson Warren Street renders as a smaller, honest market.
-- The beta preview surface can copy a Walker report with market, route mode, active-walk status, selected start point, current/next stop, verified/demo counts, route warnings, field tags, and tester notes.
+- The beta preview surface shows field-test context and can copy a Walker report with market, route mode, active-walk status, selected start point, current/next stop, verified/demo counts, route warnings, field tags, and tester notes.
 - Desktop and mobile layouts have no obvious overlap or cramped controls.
 - Browser console has no errors.
 
@@ -131,6 +133,7 @@ Known limitations: the exported web preview has a lightweight app-shell/local-as
 - `src/data/gallerySources.ts`: official gallery source directory and review/freshness status.
 - `src/services/galleryDiscovery.ts`: filtering, trust labels, walk planning, route grouping, opening timing, last-chance alerts, and base route map URLs.
 - `src/services/walkerFieldReadiness.ts`: start-point-aware map handoff, real-world readiness warnings, Camogli field-test shortcuts, and offline/PWA summary copy.
+- `src/services/galleryVisuals.ts`: Walker editorial image registry and role-aware city/neighborhood/gallery/exhibit visual resolution with provenance labels.
 - `src/services/galleryWalkSession.ts`: active walk sessions, progress, replacement-safe stop swaps, and recaps.
 - `src/services/galleryAppPersistence.ts`: local persistence for walk state, art log, filters, alerts, personalization, saved walks, and first-run state.
 - `src/services/galleryTastePassport.ts`: quiz/behavior taste signals, personalized ranking, For you routes, Walker quests, badges, and stamps.

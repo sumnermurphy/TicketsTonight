@@ -88,10 +88,12 @@ import {
 import { createGalleryMarketDataAudit } from "./services/galleryDataFoundation";
 import {
   createWalkerImageReadinessReport,
+  createWalkerImageSystemSummary,
   getGalleryVisual,
   getWalkerExhibitionBanner,
   getWalkerVisualForRole,
-  type GalleryVisualKey
+  type GalleryVisualKey,
+  type WalkerImageSystemSummary
 } from "./services/galleryVisuals";
 import {
   completeGalleryWalk,
@@ -186,6 +188,7 @@ import {
   getWalkerStartPointOptions,
   type WalkerFieldTestGuide,
   type WalkerOfflineReadinessSummary,
+  type WalkerRouteMapHandoff,
   type WalkerStartPointMode,
   type WalkerStartPointOption,
   type WalkerStartPointPreference,
@@ -1295,9 +1298,11 @@ function WalkerFieldTestShortcutCard({
 }
 
 function WalkerOfflineReadinessCard({
-  summary
+  summary,
+  imageSummary
 }: {
   summary: WalkerOfflineReadinessSummary;
+  imageSummary: WalkerImageSystemSummary;
 }) {
   return (
     <View style={styles.walkerOfflineCard}>
@@ -1311,6 +1316,18 @@ function WalkerOfflineReadinessCard({
         </Text>
       </View>
       <Text style={styles.walkerOfflineDetail}>{summary.detail}</Text>
+      <View style={styles.walkerImageSummaryBlock}>
+        <View style={styles.walkerImageSummaryHeader}>
+          <Text style={styles.walkerOfflineColumnTitle}>{imageSummary.headline}</Text>
+          <Text style={styles.walkerImageSummaryProvenance}>{imageSummary.provenanceLabel}</Text>
+        </View>
+        <Text style={styles.walkerOfflineBullet}>{imageSummary.detail}</Text>
+        <View style={styles.feedbackRow}>
+          {imageSummary.coverageChips.map((chip) => (
+            <Text key={chip} style={styles.betaFeedbackContextChip}>{chip}</Text>
+          ))}
+        </View>
+      </View>
       <View style={styles.walkerOfflineGrid}>
         <View style={styles.walkerOfflineColumn}>
           <Text style={styles.walkerOfflineColumnTitle}>Works locally</Text>
@@ -1674,6 +1691,8 @@ function BetaFeedbackPanel({
   selectedKind,
   note,
   feedbackCount,
+  contextChips,
+  routeWarningCount,
   onKind,
   onNote,
   onSubmit,
@@ -1684,6 +1703,8 @@ function BetaFeedbackPanel({
   selectedKind: GalleryBetaFeedbackKind;
   note: string;
   feedbackCount: number;
+  contextChips: string[];
+  routeWarningCount: number;
   onKind: (kind: GalleryBetaFeedbackKind) => void;
   onNote: (note: string) => void;
   onSubmit: () => void;
@@ -1699,6 +1720,20 @@ function BetaFeedbackPanel({
           <Text style={styles.betaFeedbackTitle}>Tell us what felt useful or rough.</Text>
         </View>
         <Text style={styles.firstRunTrustPill}>{feedbackCount} notes</Text>
+      </View>
+      <View style={styles.betaFeedbackContextPanel}>
+        <View style={styles.betaFeedbackContextHeader}>
+          <MapPin size={14} color={colors.teal} />
+          <Text style={styles.betaFeedbackContextTitle}>Field-test context</Text>
+          <Text style={styles.betaFeedbackContextMeta}>
+            {routeWarningCount === 0 ? "ready" : `${routeWarningCount} checks`}
+          </Text>
+        </View>
+        <View style={styles.feedbackRow}>
+          {contextChips.map((chip) => (
+            <Text key={chip} style={styles.betaFeedbackContextChip}>{chip}</Text>
+          ))}
+        </View>
       </View>
       <View style={styles.feedbackRow}>
         {betaFeedbackKinds.map((kind) => (
@@ -2455,7 +2490,7 @@ function RouteCommandPanel({
 function ActiveWalkJourneyScreen({
   walkPlan,
   routeMapModel,
-  routeMapUrl,
+  routeMapHandoff,
   currentStop,
   nextStop,
   nextLeg,
@@ -2479,7 +2514,7 @@ function ActiveWalkJourneyScreen({
 }: {
   walkPlan: GalleryWalkPlan;
   routeMapModel: GalleryRouteMapModel;
-  routeMapUrl?: string;
+  routeMapHandoff: WalkerRouteMapHandoff;
   currentStop?: GalleryWalkStop;
   nextStop?: GalleryWalkStop;
   nextLeg?: GalleryWalkPlan["legs"][number];
@@ -2671,7 +2706,7 @@ function ActiveWalkJourneyScreen({
 
       <RoutePreview
         routeMapModel={routeMapModel}
-        routeMapUrl={routeMapUrl}
+        routeMapHandoff={routeMapHandoff}
         highlightedStopId={highlightedStopId}
         focusedSwapCandidates={focusedSwapCandidates}
         onHighlightStop={onHighlightStop}
@@ -2911,14 +2946,14 @@ function WalkStopRow({
 
 function RoutePreview({
   routeMapModel,
-  routeMapUrl,
+  routeMapHandoff,
   highlightedStopId,
   focusedSwapCandidates = [],
   onHighlightStop,
   onSwapFocusedStop
 }: {
   routeMapModel: GalleryRouteMapModel;
-  routeMapUrl?: string;
+  routeMapHandoff: WalkerRouteMapHandoff;
   highlightedStopId?: string;
   focusedSwapCandidates?: GalleryRouteSwapCandidate[];
   onHighlightStop: (stopId: string) => void;
@@ -2938,6 +2973,7 @@ function RoutePreview({
   const focusedAdvisory = routeMapModel.stopAdvisories.find(
     (advisory) => advisory.stopId === focusedPin?.id
   );
+  const routeAdviceChips = routeMapModel.confidence.routeAdvice.slice(0, 3);
 
   return (
     <View style={styles.routePreview}>
@@ -2958,9 +2994,28 @@ function RoutePreview({
             </Text>
           </View>
         </View>
-        <Text style={styles.routeConfidenceAdvice}>
-          {routeMapModel.confidence.routeAdvice.slice(0, 2).join(" ")}
-        </Text>
+        <View style={styles.routeConfidenceChipRow}>
+          {routeAdviceChips.map((advice) => (
+            <Text key={advice} style={styles.routeConfidenceChip} numberOfLines={1}>
+              {advice}
+            </Text>
+          ))}
+        </View>
+      </View>
+      <View style={styles.routeStartHandoffPanel}>
+        <View style={styles.routeStartHandoffHeader}>
+          <View style={styles.routeStartIcon}>
+            <MapPin size={13} color={colors.paper} />
+          </View>
+          <View style={styles.routeStartCopy}>
+            <Text style={styles.routeStartLabel}>Start point</Text>
+            <Text style={styles.routeStartTitle}>{routeMapHandoff.startPointLabel}</Text>
+          </View>
+          <Text style={styles.routeStartHandoffPill}>
+            {routeMapHandoff.usedCustomStart ? "Adjusted" : "Default"}
+          </Text>
+        </View>
+        <Text style={styles.routeStartDetail}>{routeMapHandoff.startPointDetail}</Text>
       </View>
       <View style={styles.routeMapSummaryRow}>
         <Text style={styles.routeMapSummaryPill}>
@@ -2989,13 +3044,13 @@ function RoutePreview({
             <Text style={styles.routeMapPrimaryActionText}>Open selected stop</Text>
           </Pressable>
         ) : null}
-        {routeMapUrl ? (
+        {routeMapHandoff.routeMapUrl ? (
           <Pressable
             accessibilityRole="link"
             accessibilityLabel="Open full route map"
             onPress={() => {
-              if (routeMapUrl) {
-                void Linking.openURL(routeMapUrl);
+              if (routeMapHandoff.routeMapUrl) {
+                void Linking.openURL(routeMapHandoff.routeMapUrl);
               }
             }}
             style={styles.routeMapSecondaryAction}
@@ -3101,6 +3156,10 @@ function RoutePreview({
           <Text style={styles.routeMapCanvasMeta}>
             {focusedAdvisory?.label ?? `${routeMapModel.pins.length} stops`} - tap a pin to focus
           </Text>
+        </View>
+        <View style={styles.routeMapStartBadge}>
+          <MapPin size={10} color={colors.paper} />
+          <Text style={styles.routeMapStartBadgeText}>{routeMapHandoff.startPointLabel}</Text>
         </View>
       </View>
       <ScrollView
@@ -3813,6 +3872,27 @@ function ExhibitionDetailSheet({
         candidate.galleryName !== exhibition.galleryName
     )
     .slice(0, 3);
+  const placeConfidenceTitle =
+    exhibition.areaId === "camogli"
+      ? "Cultural walk place"
+      : trust.kind === "manual-verified"
+        ? "Verified gallery stop"
+        : trust.kind === "fixture-demo"
+          ? "Demo gallery stop"
+          : "Needs a source check";
+  const placeConfidenceDetail =
+    exhibition.areaId === "camogli"
+      ? "Camogli coverage is intentionally thin; use the official link before walking."
+      : trust.hasOfficialLink
+        ? "Official source and route context are attached for a field check."
+        : "Treat this as discovery inventory until an official source is verified.";
+  const routeStatusCopy = routeProgress
+    ? getRouteProgressLabel(routeProgress)
+    : isInDisplayedRoute
+      ? "Planned stop"
+      : hasActiveWalk
+        ? "Outside active walk"
+        : "Route option";
 
   return (
     <View style={styles.detailSheet}>
@@ -3902,6 +3982,25 @@ function ExhibitionDetailSheet({
             <Share2 size={15} color={colors.teal} />
             <Text style={styles.detailQuickActionText}>Share</Text>
           </Pressable>
+        </View>
+
+        <View style={styles.placeConfidencePanel}>
+          <View style={styles.placeConfidenceHeader}>
+            <View style={styles.placeConfidenceIcon}>
+              <Check size={14} color={colors.paper} />
+            </View>
+            <View style={styles.placeConfidenceCopy}>
+              <Text style={styles.placeConfidenceKicker}>Place confidence</Text>
+              <Text style={styles.placeConfidenceTitle}>{placeConfidenceTitle}</Text>
+            </View>
+            <Text style={styles.placeConfidencePill}>{routeStatusCopy}</Text>
+          </View>
+          <Text style={styles.placeConfidenceDetail}>{placeConfidenceDetail}</Text>
+          <View style={styles.placeConfidenceGrid}>
+            <Text style={styles.placeConfidenceMetric}>{sourceReceipt.evidenceLabel}</Text>
+            <Text style={styles.placeConfidenceMetric}>{getFreshnessCopy(exhibition)}</Text>
+            <Text style={styles.placeConfidenceMetric}>{galleryVisitStatusLabels[status]}</Text>
+          </View>
         </View>
 
         <View style={styles.detailVisitPanel}>
@@ -4640,6 +4739,10 @@ export function GalleryApp() {
     () => createWalkerImageReadinessReport(galleryExhibitions),
     []
   );
+  const walkerImageSystemSummary = useMemo(
+    () => createWalkerImageSystemSummary(walkerImageReadinessReport),
+    [walkerImageReadinessReport]
+  );
   const walkerOfflineReadinessSummary = useMemo(
     () =>
       createWalkerOfflineReadinessSummary({
@@ -4768,6 +4871,36 @@ export function GalleryApp() {
   const tonightPickVisual = tonightPick ? getWalkerExhibitionBanner(tonightPick) : heroVisual;
   const startStop = walkPlan.stops.find((stop) => stop.exhibition.id === walkPlan.startStopId);
   const nextStop = walkPlan.stops.find((stop) => stop.exhibition.id === walkPlan.nextStopId);
+  const betaFeedbackContextChips = useMemo(
+    () =>
+      [
+        selectedArea?.name ?? selectedAreaId.toUpperCase(),
+        galleryWalkModeLabels[walkMode],
+        displayWalkPlan.neighborhood,
+        `Start: ${walkerRouteMapHandoff.startPointLabel}`,
+        activeWalkCurrentStop
+          ? `Current: ${activeWalkCurrentStop.exhibition.galleryName}`
+          : startStop
+            ? `First: ${startStop.exhibition.galleryName}`
+            : undefined,
+        activeWalkNextStop
+          ? `Next: ${activeWalkNextStop.exhibition.galleryName}`
+          : nextStop
+            ? `Next: ${nextStop.exhibition.galleryName}`
+            : undefined
+      ].filter((chip): chip is string => Boolean(chip)),
+    [
+      activeWalkCurrentStop,
+      activeWalkNextStop,
+      displayWalkPlan.neighborhood,
+      nextStop,
+      selectedArea?.name,
+      selectedAreaId,
+      startStop,
+      walkerRouteMapHandoff.startPointLabel,
+      walkMode
+    ]
+  );
   const routeStopProgressById =
     showRouteProgress
       ? activeWalkProgress?.stopProgressById
@@ -5971,7 +6104,7 @@ export function GalleryApp() {
         <ActiveWalkJourneyScreen
           walkPlan={activeWalkPlan ?? displayWalkPlan}
           routeMapModel={displayRouteMapModel}
-          routeMapUrl={walkerRouteMapHandoff.routeMapUrl}
+          routeMapHandoff={walkerRouteMapHandoff}
           currentStop={activeWalkCurrentStop}
           nextStop={activeWalkNextStop}
           nextLeg={activeWalkNextLeg}
@@ -6057,7 +6190,7 @@ export function GalleryApp() {
 
       <RoutePreview
         routeMapModel={displayRouteMapModel}
-        routeMapUrl={walkerRouteMapHandoff.routeMapUrl}
+        routeMapHandoff={walkerRouteMapHandoff}
         highlightedStopId={highlightedRouteStopId}
         focusedSwapCandidates={focusedRouteSwapCandidates}
         onHighlightStop={setHighlightedRouteStopId}
@@ -6323,7 +6456,10 @@ export function GalleryApp() {
           ) : null}
 
           {!isCompactLayout ? (
-            <WalkerOfflineReadinessCard summary={walkerOfflineReadinessSummary} />
+            <WalkerOfflineReadinessCard
+              summary={walkerOfflineReadinessSummary}
+              imageSummary={walkerImageSystemSummary}
+            />
           ) : null}
 
           {!isCompactLayout ? (
@@ -6546,6 +6682,8 @@ export function GalleryApp() {
             selectedKind={betaFeedbackKind}
             note={betaFeedbackNote}
             feedbackCount={betaFeedback.length}
+            contextChips={betaFeedbackContextChips}
+            routeWarningCount={walkReadinessReport.warnings.length}
             onKind={setBetaFeedbackKind}
             onNote={setBetaFeedbackNote}
             onSubmit={saveBetaFeedback}
@@ -6757,7 +6895,7 @@ export function GalleryApp() {
           ) : null}
           <RoutePreview
             routeMapModel={displayRouteMapModel}
-            routeMapUrl={walkerRouteMapHandoff.routeMapUrl}
+            routeMapHandoff={walkerRouteMapHandoff}
             highlightedStopId={highlightedRouteStopId}
             focusedSwapCandidates={focusedRouteSwapCandidates}
             onHighlightStop={setHighlightedRouteStopId}
@@ -8128,6 +8266,33 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 20
   },
+  walkerImageSummaryBlock: {
+    backgroundColor: colors.fog,
+    borderColor: "rgba(200, 161, 90, 0.28)",
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md
+  },
+  walkerImageSummaryHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    justifyContent: "space-between"
+  },
+  walkerImageSummaryProvenance: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 10,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
   walkerOfflineGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -9485,6 +9650,43 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     marginTop: spacing.xs
   },
+  betaFeedbackContextPanel: {
+    backgroundColor: colors.fog,
+    borderColor: "rgba(13, 59, 46, 0.08)",
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.sm
+  },
+  betaFeedbackContextHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.xs
+  },
+  betaFeedbackContextTitle: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  betaFeedbackContextMeta: {
+    color: colors.gold,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase"
+  },
+  betaFeedbackContextChip: {
+    backgroundColor: colors.paper,
+    borderColor: "rgba(13, 59, 46, 0.08)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "800",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
   betaFeedbackInputRow: {
     alignItems: "center",
     backgroundColor: colors.fog,
@@ -10127,7 +10329,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     marginTop: spacing.sm
   },
-  routeStartPill: {
+  routeStartHandoffPill: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
     borderRadius: radii.pill,
@@ -10466,6 +10668,83 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 17
   },
+  routeConfidenceChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  routeConfidenceChip: {
+    backgroundColor: "rgba(255, 253, 248, 0.12)",
+    borderColor: "rgba(255, 253, 248, 0.18)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: "#F0ECE4",
+    fontSize: 11,
+    fontWeight: "800",
+    maxWidth: "100%",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  routeStartHandoffPanel: {
+    backgroundColor: colors.fog,
+    borderColor: "rgba(13, 59, 46, 0.08)",
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: spacing.sm,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    padding: spacing.md
+  },
+  routeStartHandoffHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm
+  },
+  routeStartIcon: {
+    alignItems: "center",
+    backgroundColor: colors.teal,
+    borderRadius: radii.pill,
+    height: 28,
+    justifyContent: "center",
+    width: 28
+  },
+  routeStartCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  routeStartLabel: {
+    color: colors.gold,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase"
+  },
+  routeStartTitle: {
+    color: colors.ink,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 16,
+    fontWeight: "700",
+    marginTop: 2
+  },
+  routeStartPill: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 10,
+    fontWeight: "800",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    textTransform: "uppercase"
+  },
+  routeStartDetail: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17
+  },
   routeMapCanvas: {
     backgroundColor: "#EEF2EA",
     borderColor: "rgba(13, 59, 46, 0.08)",
@@ -10644,6 +10923,27 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     marginTop: 2
+  },
+  routeMapStartBadge: {
+    alignItems: "center",
+    backgroundColor: colors.ink,
+    borderColor: "rgba(255, 253, 248, 0.7)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 4,
+    maxWidth: "76%",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    position: "absolute",
+    right: spacing.sm,
+    top: spacing.sm
+  },
+  routeMapStartBadgeText: {
+    color: colors.paper,
+    flexShrink: 1,
+    fontSize: 10,
+    fontWeight: "800"
   },
   walkStops: {
     gap: 0,
@@ -11104,6 +11404,79 @@ const styles = StyleSheet.create({
     fontFamily: walkerType.uiFamily,
     fontSize: 11,
     fontWeight: "800"
+  },
+  placeConfidencePanel: {
+    backgroundColor: colors.paper,
+    borderColor: "rgba(200, 161, 90, 0.34)",
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md,
+    ...shadows.card
+  },
+  placeConfidenceHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm
+  },
+  placeConfidenceIcon: {
+    alignItems: "center",
+    backgroundColor: colors.teal,
+    borderRadius: radii.pill,
+    height: 30,
+    justifyContent: "center",
+    width: 30
+  },
+  placeConfidenceCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  placeConfidenceKicker: {
+    color: colors.gold,
+    fontFamily: walkerType.uiFamily,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase"
+  },
+  placeConfidenceTitle: {
+    color: colors.ink,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 17,
+    fontWeight: "700",
+    marginTop: 2
+  },
+  placeConfidencePill: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 10,
+    fontWeight: "800",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  placeConfidenceDetail: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17
+  },
+  placeConfidenceGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  placeConfidenceMetric: {
+    backgroundColor: colors.fog,
+    borderRadius: radii.pill,
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "800",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
   },
   detailVisitPanel: {
     backgroundColor: colors.fog,

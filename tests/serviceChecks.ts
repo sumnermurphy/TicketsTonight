@@ -89,6 +89,7 @@ import {
 } from "../src/services/galleryBetaReadiness";
 import {
   createWalkerImageReadinessReport,
+  createWalkerImageSystemSummary,
   galleryVisualKeys,
   getGalleryHeroVisual,
   getGalleryVisual,
@@ -713,6 +714,16 @@ async function main() {
     imageReadiness: imageReadinessReport,
     hasServiceWorker: true
   });
+  const imageSystemSummary = createWalkerImageSystemSummary(imageReadinessReport);
+  assert(
+    imageSystemSummary.headline === "Layered Walker imagery is ready" &&
+      imageSystemSummary.provenanceLabel === "Editorial image" &&
+      imageSystemSummary.coverageChips.some((chip) => chip.includes("city")) &&
+      imageSystemSummary.coverageChips.some((chip) => chip.includes("gallery")) &&
+      imageSystemSummary.coverageChips.some((chip) => chip.includes("exhibit")) &&
+      imageSystemSummary.needsOfficialImageReview === false,
+    "Walker image summary should expose city/gallery/exhibit banner readiness without overclaiming official imagery."
+  );
   assert(
     offlineReadinessSummary.label === "Offline shell ready" &&
       offlineReadinessSummary.cachedAssumptions.some((item) => item.includes("LocalStorage")) &&
