@@ -26,9 +26,11 @@ This branch intentionally replaces the legacy iOS-era TicketsTonight app tree wi
 - Neighborhood Intelligence for walkable clusters.
 - Why Go cards, personal art-log controls, saved/visited/skipped states, and private notes.
 - Trust labels for `Verified as of`, `Official gallery link`, `Fixture/demo`, `Needs review`, and submitted/partner inventory.
-- PWA-readiness metadata with square web icon assets while keeping the app local-first and offline-friendly through checked-in images/data.
-- Verified NYC gallery inventory depth above the initial fixture count, currently audited at 62 NYC exhibitions with 50 imported/manual official-page records.
-- Hudson Warren Street coverage kept honest as a smaller market, currently audited at 10 exhibitions with 2 imported/manual records.
+- PWA-readiness metadata with manifest/static icon assets while keeping the app local-first and offline-friendly through checked-in images/data.
+- Compact beta preview path with "Try a NYC walk", "Try For You", "Check Hudson", feedback capture, and copyable beta review report.
+- Route usability signals for open-now confidence, timing risk, best-start reasoning, closed/closing-soon warnings, and thin verified-route fallback copy.
+- Verified NYC gallery inventory depth above the initial fixture count, currently targeted at 72+ NYC exhibitions with 60+ imported/manual official-page records.
+- Hudson coverage kept honest as a smaller market: Warren Street remains the walk test, while nearby Hudson Valley official-page records add context without being presented as Warren Street stops.
 
 ## What Is Deliberately Out Of Scope
 
@@ -72,6 +74,12 @@ PATH=/Users/s/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:
 PATH=/Users/s/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH npm run audit:galleries
 ```
 
+To validate a static web preview build locally:
+
+```bash
+PATH=/Users/s/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH npm run export:web
+```
+
 ## Validation
 
 Run the required gates:
@@ -101,8 +109,19 @@ npm run audit:source-directory
 - Grouped same-gallery stops still render compactly with show titles preserved.
 - Trust labels and official links are visible on cards and stops.
 - Hudson Warren Street renders as a smaller, honest market.
+- The beta preview surface can copy a report with market, route mode, active-walk status, verified/demo counts, route warnings, and tester notes.
 - Desktop and mobile layouts have no obvious overlap or cramped controls.
 - Browser console has no errors.
+
+## Beta Test Path
+
+1. Open the preview.
+2. Tap "Try a NYC walk" and confirm the route has verified/open stops and map links.
+3. Tap "Try For You", save or skip a recommendation, and confirm the visible learning copy changes.
+4. Tap "Check Hudson" and confirm Warren Street remains labeled as a smaller/thinner walk.
+5. Add a tester note, copy the beta review report, and attach it to PR feedback.
+
+Known limitations: no service worker/offline cache yet, no auth/backend sync, no push notifications, no native packaging, no map SDK, and no automated scraping. The preview relies on checked-in inventory, quiz metadata, and generated image assets.
 
 ## Architecture Guide
 
@@ -127,4 +146,4 @@ This PR is intentionally large because it moves the repo from an old native Tick
 - Whether fixture/demo and verified inventory distinctions remain honest.
 - Whether route planning, active-walk state, and swap-stop editing are practical without pretending to be a full native map product.
 
-The next product iteration should probably be preview deployment, deeper official-page inventory, and beta onboarding polish, not ops tooling.
+The next product iteration should probably be beta tester feedback triage, deeper official-page inventory, and eventual map/PWA hardening, not ops tooling.

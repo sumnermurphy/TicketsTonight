@@ -98,6 +98,13 @@ export const galleryNeighborhoods: GalleryNeighborhood[] = [
     anchor: { latitude: 40.715, longitude: -73.997 }
   },
   {
+    id: "nyc-soho",
+    areaId: "nyc",
+    name: "SoHo",
+    walkLabel: "Nonprofit and drawing-room extension",
+    anchor: { latitude: 40.722, longitude: -74.003 }
+  },
+  {
     id: "nyc-bushwick",
     areaId: "nyc",
     name: "Brooklyn/Bushwick",
@@ -145,6 +152,20 @@ export const galleryNeighborhoods: GalleryNeighborhood[] = [
     name: "Warren Street",
     walkLabel: "Main street gallery walk",
     anchor: { latitude: 42.251, longitude: -73.79 }
+  },
+  {
+    id: "hudson-claverack",
+    areaId: "hudson",
+    name: "Claverack",
+    walkLabel: "Regional project-space extension",
+    anchor: { latitude: 42.227, longitude: -73.728 }
+  },
+  {
+    id: "hudson-catskill",
+    areaId: "hudson",
+    name: "Catskill",
+    walkLabel: "Museum and historic-site extension",
+    anchor: { latitude: 42.217, longitude: -73.864 }
   },
   {
     id: "hudson-kingston",

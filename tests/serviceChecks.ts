@@ -80,7 +80,11 @@ import {
   completeGalleryBetaTask,
   createGalleryBetaFeedback,
   createGalleryBetaFeedbackReport,
+  createGalleryBetaReviewReport,
   createGalleryPreviewReadinessSummary,
+  createGalleryRouteUsabilityReport,
+  getGalleryRouteTimingWarnings,
+  getPersonalizationLearningSummary,
   getGalleryBetaTasks
 } from "../src/services/galleryBetaReadiness";
 import { getGalleryHeroVisual, getGalleryVisual } from "../src/services/galleryVisuals";
@@ -372,9 +376,9 @@ async function main() {
   );
 
   for (const [areaId, expectedNeighborhoods] of [
-    ["nyc", ["Chelsea", "Tribeca", "Lower East Side", "Chinatown", "Brooklyn/Bushwick"]],
+    ["nyc", ["Chelsea", "Tribeca", "Lower East Side", "Chinatown", "SoHo", "Brooklyn/Bushwick"]],
     ["la", ["Culver City", "Hollywood/Sycamore", "DTLA", "Chinatown", "West Hollywood"]],
-    ["hudson", ["Warren Street", "Kingston", "Beacon"]]
+    ["hudson", ["Warren Street", "Claverack", "Catskill", "Kingston", "Beacon"]]
   ] as const) {
     const marketNeighborhoods = galleryNeighborhoods
       .filter((neighborhood) => neighborhood.areaId === areaId)
@@ -442,24 +446,54 @@ async function main() {
     "verified-andrew-kreps-see-you-tomorrow",
     "verified-artists-space-richard-hunt",
     "verified-nicelle-beauchene-invincible-summer",
-    "verified-canada-plants-animals-sky"
+    "verified-canada-plants-animals-sky",
+    "verified-bureau-kyung-me-moonlit-rooms",
+    "verified-ortuzar-donna-huddleston-subject"
   ];
   const betaInventoryVerifiedIds = [
     "verified-canada-plants-animals-sky",
     "verified-56-henry-journey-to-the-west",
     "verified-carrie-haddad-between-here-and-home"
   ];
+  const betaLaunchVerifiedIds = [
+    "verified-bureau-kyung-me-moonlit-rooms",
+    "verified-ortuzar-donna-huddleston-subject",
+    "verified-drawing-center-nancy-elizabeth-prophet",
+    "verified-drawing-center-black-art-library",
+    "verified-drawing-center-harry-smith",
+    "verified-hauser-wirth-carol-rama-i-see-you",
+    "verified-marian-goodman-matt-saunders-overgrown-path",
+    "verified-marian-goodman-daniel-joseph-martinez-states",
+    "verified-karma-peter-bradley-burning-on",
+    "verified-petzel-calida-rawles",
+    "verified-the-campus-2026",
+    "verified-thomas-cole-life-cycles",
+    "verified-thomas-cole-american-visionary"
+  ];
+  const exhibitionIds = galleryExhibitions.map((exhibition) => exhibition.id);
+  const duplicateExhibitionIds = exhibitionIds.filter(
+    (id, index) => exhibitionIds.indexOf(id) !== index
+  );
+  const sourceCandidateIds = gallerySourceCandidates.map((source) => source.id);
+  const duplicateSourceCandidateIds = sourceCandidateIds.filter(
+    (id, index) => sourceCandidateIds.indexOf(id) !== index
+  );
 
   assert(
+    duplicateExhibitionIds.length === 0 && duplicateSourceCandidateIds.length === 0,
+    "Gallery inventory and source directory IDs should remain unique for stable route/card rendering."
+  );
+  assert(
     nycTrust.exhibitionCount >= 30 &&
-      nycTrust.verifiedExhibitionCount >= 50 &&
+      nycTrust.verifiedExhibitionCount >= 60 &&
       laTrust.exhibitionCount >= 8 &&
-      hudsonTrust.exhibitionCount >= 6,
+      hudsonTrust.exhibitionCount >= 6 &&
+      hudsonTrust.verifiedExhibitionCount >= 5,
     "Gallery source trust should report expanded verified NYC inventory while preserving LA and Hudson coverage."
   );
   assert(
-    nycVerifiedInventory.length >= 50 &&
-      hudsonVerifiedInventory.length >= 2 &&
+    nycVerifiedInventory.length >= 60 &&
+      hudsonVerifiedInventory.length >= 5 &&
       fixtureInventory.length > 0,
     "Verified inventory should materially increase NYC while leaving fixture/demo records explicitly identifiable."
   );
@@ -484,6 +518,18 @@ async function main() {
       )
     ),
     "Beta inventory expansion should add official links plus verifiedAsOf/sourceCheckedAt metadata for NYC and Hudson records."
+  );
+  assert(
+    betaLaunchVerifiedIds.every((id) =>
+      verifiedInventory.some(
+        (exhibition) =>
+          exhibition.id === id &&
+          exhibition.externalUrl.startsWith("https://") &&
+          exhibition.verifiedAsOf === "2026-07-10T14:45:00-04:00" &&
+          exhibition.sourceCheckedAt === "2026-07-10T14:45:00-04:00"
+      )
+    ),
+    "Beta launch verified batch should use official links plus the July 10 verification timestamp."
   );
   assert(
     sampleFixtureTrust.kind === "fixture-demo" &&
@@ -653,6 +699,72 @@ async function main() {
   assert(
     hudsonWalk.stops.length >= 3 && hudsonWalk.neighborhood === "Warren Street",
     "Hudson should support a Warren Street gallery walk while remaining an arts-town test."
+  );
+  const chelseaRouteReport = createGalleryRouteUsabilityReport({
+    walkPlan: chelseaTwoHourWalk,
+    referenceNow: galleryReferenceNow
+  });
+  const hudsonRouteWarnings = getGalleryRouteTimingWarnings(hudsonWalk, galleryReferenceNow);
+  const hudsonRouteReport = createGalleryRouteUsabilityReport({
+    walkPlan: hudsonWalk,
+    referenceNow: galleryReferenceNow
+  });
+
+  assert(
+    ["strong", "usable"].includes(chelseaRouteReport.confidence) &&
+      chelseaRouteReport.verifiedStopCount >= 3 &&
+      chelseaRouteReport.bestStartReason.includes("open"),
+    "Route usability report should identify a practical verified NYC route with a concrete best-start reason."
+  );
+  assert(
+    hudsonRouteWarnings.some((warning) => warning.kind === "low-verified-supply") &&
+      ["thin", "needs-review"].includes(hudsonRouteReport.confidence),
+    "Hudson Warren Street route usability should honestly flag thin verified walk supply."
+  );
+  const personalizationLearningSummary = getPersonalizationLearningSummary({
+    logEntries: [
+      { exhibitionId: "verified-pace-julian-schnabel", status: "saved", updatedAt: galleryReferenceNow },
+      { exhibitionId: "verified-drawing-center-black-art-library", status: "skipped", updatedAt: galleryReferenceNow }
+    ],
+    tasteFeedback: [{ kind: "more-like-this" }, { kind: "less-like-this" }],
+    completedWalks: [],
+    topSignalLabel: "Photography",
+    nextRouteMode: "for-you"
+  });
+  const betaReviewReport = createGalleryBetaReviewReport({
+    feedback: [
+      createGalleryBetaFeedback(
+        {
+          kind: "useful",
+          note: "Route was easy to follow.",
+          areaId: "nyc",
+          routeMode: "quick-loop",
+          verifiedCount: nycTrust.verifiedExhibitionCount,
+          demoReviewCount: nycTrust.fixtureExhibitionCount + nycTrust.needsReviewExhibitionCount
+        },
+        galleryReferenceNow
+      )
+    ],
+    routeReport: chelseaRouteReport,
+    areaId: "nyc",
+    routeMode: "quick-loop",
+    verifiedCount: nycTrust.verifiedExhibitionCount,
+    demoReviewCount: nycTrust.fixtureExhibitionCount + nycTrust.needsReviewExhibitionCount,
+    previewUrl: "http://localhost:19006",
+    generatedAt: galleryReferenceNow
+  });
+
+  assert(
+    personalizationLearningSummary.savedLikeVisitedCount === 2 &&
+      personalizationLearningSummary.skippedOrLessCount === 2 &&
+      personalizationLearningSummary.detail.includes("Photography"),
+    "Personalization learning summary should reflect save/skip and more/less signals immediately."
+  );
+  assert(
+    betaReviewReport.includes("Gallery walk beta review") &&
+      betaReviewReport.includes("Route usability") &&
+      betaReviewReport.includes("Route was easy to follow."),
+    "Beta review report should serialize route, trust, active walk, and tester note context."
   );
   assert(
     chelseaWalk.legs.length === Math.max(0, chelseaWalk.stops.length - 1) &&

@@ -72,13 +72,17 @@ import {
 } from "./services/galleryAppPersistence";
 import {
   completeGalleryBetaTask,
+  createGalleryBetaReviewReport,
   createGalleryBetaFeedback,
-  createGalleryBetaFeedbackReport,
+  createGalleryRouteUsabilityReport,
+  getPersonalizationLearningSummary,
   getGalleryBetaTasks,
   type GalleryBetaFeedback,
   type GalleryBetaFeedbackKind,
   type GalleryBetaTaskId,
-  type GalleryBetaTaskProgress
+  type GalleryBetaTaskProgress,
+  type GalleryPersonalizationLearningSummary,
+  type GalleryRouteUsabilityReport
 } from "./services/galleryBetaReadiness";
 import { createGalleryMarketDataAudit } from "./services/galleryDataFoundation";
 import {
@@ -1077,6 +1081,122 @@ function FirstRunChoicePanel({
   );
 }
 
+function BetaPreviewPanel({
+  routeReport,
+  learningSummary,
+  verifiedCount,
+  demoReviewCount,
+  routeModeLabel,
+  activeWalkStatus,
+  onTryNyc,
+  onTryForYou,
+  onCheckHudson,
+  onSendFeedback,
+  onCopyReport
+}: {
+  routeReport: GalleryRouteUsabilityReport;
+  learningSummary: GalleryPersonalizationLearningSummary;
+  verifiedCount: number;
+  demoReviewCount: number;
+  routeModeLabel: string;
+  activeWalkStatus?: GalleryWalkSession["status"];
+  onTryNyc: () => void;
+  onTryForYou: () => void;
+  onCheckHudson: () => void;
+  onSendFeedback: () => void;
+  onCopyReport: () => void;
+}) {
+  return (
+    <View style={styles.betaPreviewPanel}>
+      <View style={styles.betaPreviewHeader}>
+        <View style={styles.routeFirstTitleBlock}>
+          <Text style={styles.routeFirstKicker}>Beta preview</Text>
+          <Text style={styles.betaPreviewTitle}>{routeReport.label}</Text>
+          <Text style={styles.betaPreviewCopy}>{routeReport.summary}</Text>
+        </View>
+        <Text style={styles.betaPreviewBadge}>{routeModeLabel}</Text>
+      </View>
+      <View style={styles.betaPreviewStats}>
+        <Text style={styles.betaPreviewStat}>{verifiedCount} verified</Text>
+        <Text style={styles.betaPreviewStat}>{demoReviewCount} demo/review</Text>
+        <Text style={styles.betaPreviewStat}>{activeWalkStatus ?? "no active walk"}</Text>
+      </View>
+      <Text style={styles.betaPreviewLearning}>{learningSummary.detail}</Text>
+      <View style={styles.firstRunActionRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Try a New York City walk"
+          onPress={onTryNyc}
+          style={styles.firstRunPrimaryAction}
+        >
+          <Route size={15} color={colors.paper} />
+          <Text style={styles.firstRunPrimaryActionText}>Try a NYC walk</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Try For You route mode"
+          onPress={onTryForYou}
+          style={styles.firstRunSecondaryAction}
+        >
+          <Sparkles size={15} color={colors.ink} />
+          <Text style={styles.firstRunSecondaryActionText}>Try For You</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Check Hudson market"
+          onPress={onCheckHudson}
+          style={styles.firstRunSecondaryAction}
+        >
+          <MapPin size={15} color={colors.ink} />
+          <Text style={styles.firstRunSecondaryActionText}>Check Hudson</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open beta feedback composer"
+          onPress={onSendFeedback}
+          style={styles.firstRunSecondaryAction}
+        >
+          <MessageSquare size={15} color={colors.ink} />
+          <Text style={styles.firstRunSecondaryActionText}>Send feedback</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Copy beta review report"
+          onPress={onCopyReport}
+          style={styles.firstRunSecondaryAction}
+        >
+          <Copy size={14} color={colors.ink} />
+          <Text style={styles.firstRunSecondaryActionText}>Copy beta report</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function PersonalizationLearningPanel({
+  summary
+}: {
+  summary: GalleryPersonalizationLearningSummary;
+}) {
+  return (
+    <View style={styles.learningPanel}>
+      <View style={styles.learningPanelHeader}>
+        <View>
+          <Text style={styles.learningKicker}>For You + Passport</Text>
+          <Text style={styles.learningTitle}>{summary.label}</Text>
+        </View>
+        <Sparkles size={18} color={colors.paper} />
+      </View>
+      <Text style={styles.learningCopy}>{summary.detail}</Text>
+      <View style={styles.routeReasonRow}>
+        {summary.reasonChips.map((chip) => (
+          <Text key={chip} style={styles.learningChip}>{chip}</Text>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function BetaFeedbackPanel({
   selectedKind,
   note,
@@ -1221,6 +1341,7 @@ function MobileCommandBar({
 function RouteCommandPanel({
   walkPlan,
   walkMode,
+  routeUsabilityReport,
   routeVerifiedStopCount,
   routeFixtureStopCount,
   startStop,
@@ -1250,6 +1371,7 @@ function RouteCommandPanel({
 }: {
   walkPlan: GalleryWalkPlan;
   walkMode: GalleryWalkMode;
+  routeUsabilityReport: GalleryRouteUsabilityReport;
   routeVerifiedStopCount: number;
   routeFixtureStopCount: number;
   startStop?: GalleryWalkStop;
@@ -1292,6 +1414,10 @@ function RouteCommandPanel({
     showingActiveWalk && activeWalkProgress
       ? `${activeWalkProgress.completedStopCount}/${activeWalkProgress.totalStopCount} stops complete - ${activeWalkProgress.remainingStopIds.length} remaining`
       : `${routeMapModel.confidence.label} - ${routeMapModel.confidence.bestStartLabel}`;
+  const routeWarningChips =
+    routeUsabilityReport.warnings.length > 0
+      ? routeUsabilityReport.warnings.slice(0, 3).map((warning) => warning.label)
+      : ["Low timing risk"];
   const activeNextCopy =
     displayNextStop && activeWalkNextLeg
       ? `${activeWalkNextLeg.walkingMinutes} min, ${activeWalkNextLeg.distanceMiles.toFixed(1)} mi`
@@ -1351,6 +1477,7 @@ function RouteCommandPanel({
             <Text style={styles.activeWalkProgressPill}>{activeWalkProgress.skippedStopIds.length} skipped</Text>
             <Text style={styles.activeWalkProgressPill}>{activeWalkProgress.remainingStopIds.length} remaining</Text>
             <Text style={styles.activeWalkProgressPill}>{routeMapModel.mapReadinessLabel}</Text>
+            <Text style={styles.activeWalkProgressPill}>{routeUsabilityReport.timingRiskLabel}</Text>
           </View>
 
           <View style={styles.activeWalkStickyActions}>
@@ -1420,6 +1547,7 @@ function RouteCommandPanel({
           <Text style={styles.walkRecapCopy}>
             {activeWalkRecap.visitedStopCount} visited, {activeWalkRecap.skippedStopCount} skipped, {activeWalkRecap.notedStopCount} notes saved.
           </Text>
+          <Text style={styles.walkRecapRewardCopy}>{routeUsabilityReport.summary}</Text>
           {walkRecapRewardCopy ? (
             <Text style={styles.walkRecapRewardCopy}>{walkRecapRewardCopy}</Text>
           ) : null}
@@ -1557,13 +1685,18 @@ function RouteCommandPanel({
             <Text style={styles.routeStartPill}>Start {startStop?.exhibition.galleryName ?? "where open"}</Text>
             <Text style={styles.routeStartPill}>Next {displayNextStop?.exhibition.galleryName ?? "best nearby stop"}</Text>
             <Text style={styles.routeStartPill}>{displayPlan.canStartNow ? "Can start now" : "Timing check needed"}</Text>
+            <Text style={styles.routeStartPill}>{routeUsabilityReport.label}</Text>
           </View>
 
           <View style={styles.routeReasonRow}>
             {displayPlan.selectionReasons.slice(0, 4).map((reason) => (
               <Text key={reason} style={styles.routeReasonPill}>{reason}</Text>
             ))}
+            {routeWarningChips.map((warning) => (
+              <Text key={warning} style={styles.routeWarningPill}>{warning}</Text>
+            ))}
           </View>
+          <Text style={styles.routeTimingCopy}>{routeUsabilityReport.bestStartReason}</Text>
         </>
       )}
     </View>
@@ -3306,6 +3439,14 @@ export function GalleryApp() {
       ),
     [activeWalkSession, displayWalkPlan]
   );
+  const routeUsabilityReport = useMemo(
+    () =>
+      createGalleryRouteUsabilityReport({
+        walkPlan: displayWalkPlan,
+        referenceNow
+      }),
+    [displayWalkPlan]
+  );
   const displayRouteAdvisoryById = useMemo(
     () =>
       new Map(
@@ -3651,9 +3792,40 @@ export function GalleryApp() {
     () => getGalleryBetaTasks(betaCompletedTaskIds),
     [betaCompletedTaskIds]
   );
-  const betaFeedbackReport = useMemo(
-    () => createGalleryBetaFeedbackReport(betaFeedback),
-    [betaFeedback]
+  const personalizationLearningSummary = useMemo(
+    () =>
+      getPersonalizationLearningSummary({
+        logEntries,
+        tasteFeedback,
+        completedWalks: completedWalkSessions,
+        topSignalLabel: tastePassport.signals[0]?.label,
+        nextRouteMode: "for-you"
+      }),
+    [completedWalkSessions, logEntries, tasteFeedback, tastePassport]
+  );
+  const betaReviewReport = useMemo(
+    () =>
+      createGalleryBetaReviewReport({
+        feedback: betaFeedback,
+        routeReport: routeUsabilityReport,
+        areaId: selectedAreaId,
+        routeMode: walkMode,
+        neighborhood: selectedNeighborhood,
+        activeWalkStatus: activeWalkSession?.status,
+        verifiedCount: sourceTrust.verifiedExhibitionCount,
+        demoReviewCount: sourceTrust.fixtureExhibitionCount + sourceTrust.needsReviewExhibitionCount,
+        previewUrl: "http://localhost:19006",
+        generatedAt: referenceNow
+      }),
+    [
+      activeWalkSession,
+      betaFeedback,
+      routeUsabilityReport,
+      selectedAreaId,
+      selectedNeighborhood,
+      sourceTrust,
+      walkMode
+    ]
   );
   const showFirstRunPanel =
     firstRunChoice !== "dismissed" &&
@@ -3739,6 +3911,37 @@ export function GalleryApp() {
     setShareStatus("Beta task marked locally.");
   }
 
+  function tryBetaNycWalk() {
+    setSelectedAreaId("nyc");
+    setSelectedNeighborhood(undefined);
+    setSelectedMedium(undefined);
+    setActiveLens("open-now");
+    setVerifiedOnly(false);
+    setWalkMode("quick-loop");
+    setSelectedExhibitionId(undefined);
+    setDraftWalkStopIds(undefined);
+    completeBetaTask("find-walk");
+    setShareStatus("NYC beta walk path loaded.");
+  }
+
+  function tryBetaForYou() {
+    setWalkMode("for-you");
+    setActiveLens("all");
+    completeBetaTask("taste-quiz");
+    setShareStatus("For You route mode is active and learning from saved, skipped, and visited shows.");
+  }
+
+  function checkBetaHudson() {
+    resetMarket("hudson");
+    setSelectedNeighborhood("Warren Street");
+    setShareStatus("Hudson Warren Street loaded. Nearby verified Hudson Valley depth is labeled separately.");
+  }
+
+  function openBetaFeedbackComposer() {
+    completeBetaTask("send-feedback");
+    setShareStatus("Feedback composer is ready below. Copy beta report includes route and trust context.");
+  }
+
   function resetGalleryDemoState() {
     clearGalleryAppPersistedState();
     setSelectedAreaId("nyc");
@@ -3797,15 +4000,15 @@ export function GalleryApp() {
   }
 
   async function copyBetaFeedbackReport() {
-    const copied = await writeTextToClipboard(betaFeedbackReport);
+    const copied = await writeTextToClipboard(betaReviewReport);
 
     completeBetaTask("send-feedback");
-    setShareStatus(copied ? "Feedback report copied." : "Feedback report is ready to copy.");
+    setShareStatus(copied ? "Beta review report copied." : "Beta review report is ready to copy.");
   }
 
   function emailBetaFeedbackReport() {
     const subject = encodeURIComponent("TicketsTonight gallery beta feedback");
-    const body = encodeURIComponent(betaFeedbackReport);
+    const body = encodeURIComponent(betaReviewReport);
 
     completeBetaTask("send-feedback");
     void Linking.openURL(`mailto:?subject=${subject}&body=${body}`);
@@ -4285,6 +4488,20 @@ export function GalleryApp() {
             />
           ) : null}
 
+          <BetaPreviewPanel
+            routeReport={routeUsabilityReport}
+            learningSummary={personalizationLearningSummary}
+            verifiedCount={sourceTrust.verifiedExhibitionCount}
+            demoReviewCount={sourceTrust.fixtureExhibitionCount + sourceTrust.needsReviewExhibitionCount}
+            routeModeLabel={galleryWalkModeLabels[walkMode]}
+            activeWalkStatus={activeWalkSession?.status}
+            onTryNyc={tryBetaNycWalk}
+            onTryForYou={tryBetaForYou}
+            onCheckHudson={checkBetaHudson}
+            onSendFeedback={openBetaFeedbackComposer}
+            onCopyReport={copyBetaFeedbackReport}
+          />
+
           {!isCompactLayout ? (
             <GalleryConciergePanel
               suggestions={conciergeSuggestions}
@@ -4295,6 +4512,7 @@ export function GalleryApp() {
           <RouteCommandPanel
             walkPlan={walkPlan}
             walkMode={walkMode}
+            routeUsabilityReport={routeUsabilityReport}
             routeVerifiedStopCount={routeVerifiedStopCount}
             routeFixtureStopCount={routeFixtureStopCount}
             startStop={startStop}
@@ -4455,6 +4673,10 @@ export function GalleryApp() {
           ) : null}
 
           {!isCompactLayout ? (
+          <PersonalizationLearningPanel summary={personalizationLearningSummary} />
+          ) : null}
+
+          {!isCompactLayout ? (
           <GalleryPassportPanel
             quizAnswers={quizAnswers}
             passport={tastePassport}
@@ -4480,6 +4702,9 @@ export function GalleryApp() {
             onTogglePreferredTag={togglePreferredTag}
             onUseForYouRoute={() => setWalkMode("for-you")}
           />
+          ) : null}
+          {isCompactLayout ? (
+            <PersonalizationLearningPanel summary={personalizationLearningSummary} />
           ) : null}
           {isCompactLayout ? (
             <GalleryConciergePanel
@@ -6107,6 +6332,70 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 11,
     fontWeight: "900"
+  },
+  betaPreviewPanel: {
+    backgroundColor: colors.paper,
+    borderColor: "rgba(17, 17, 17, 0.08)",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.md,
+    marginHorizontal: spacing.lg,
+    padding: spacing.md,
+    ...shadows.card
+  },
+  betaPreviewHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+    justifyContent: "space-between"
+  },
+  betaPreviewTitle: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "900",
+    lineHeight: 23,
+    marginTop: spacing.xs
+  },
+  betaPreviewCopy: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17,
+    marginTop: spacing.xs
+  },
+  betaPreviewBadge: {
+    backgroundColor: colors.ink,
+    borderRadius: radii.pill,
+    color: colors.paper,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  betaPreviewStats: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  betaPreviewStat: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  betaPreviewLearning: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17
   },
   betaFeedbackPanel: {
     backgroundColor: colors.paper,
@@ -7896,6 +8185,24 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 17
   },
+  routeWarningPill: {
+    backgroundColor: "#EFE7D7",
+    borderColor: "rgba(17, 17, 17, 0.1)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  routeTimingCopy: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17
+  },
   reasonPill: {
     alignItems: "center",
     backgroundColor: colors.fog,
@@ -7992,6 +8299,50 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     gap: spacing.sm,
     paddingTop: spacing.md
+  },
+  learningPanel: {
+    backgroundColor: colors.ink,
+    borderRadius: radii.md,
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    padding: spacing.md
+  },
+  learningPanelHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.md,
+    justifyContent: "space-between"
+  },
+  learningKicker: {
+    color: "#DAD8D0",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  learningTitle: {
+    color: colors.paper,
+    fontSize: 18,
+    fontWeight: "900",
+    lineHeight: 23,
+    marginTop: spacing.xs
+  },
+  learningCopy: {
+    color: "#E8E1D7",
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17
+  },
+  learningChip: {
+    backgroundColor: "rgba(255, 253, 248, 0.1)",
+    borderColor: "rgba(255, 253, 248, 0.18)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.paper,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
   },
   preferenceLabel: {
     color: "#DAD8D0",

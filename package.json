@@ -8,6 +8,7 @@
     "ios": "expo start --ios",
     "android": "expo start --android",
     "web": "expo start --web",
+    "export:web": "expo export --platform web --output-dir dist && node scripts/copyWebPublicAssets.mjs",
     "typecheck": "tsc --noEmit",
     "audit:coverage": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/coverageAudit.ts && node .audit-build/scripts/coverageAudit.js",
     "audit:calendar-imports": "tsc --ignoreConfig --outDir .audit-build --module Node16 --target ES2022 --moduleResolution node16 --skipLibCheck --strict scripts/calendarImportHealthAudit.ts && node .audit-build/scripts/calendarImportHealthAudit.js",
@@ -25,6 +26,7 @@
     "node": ">=20.19.4"
   },
   "dependencies": {
+    "@expo/metro-runtime": "^57.0.3",
     "expo": "57.0.4",
     "expo-auth-session": "57.0.2",
     "expo-crypto": "57.0.0",

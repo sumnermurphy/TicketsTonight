@@ -28,6 +28,7 @@
       "bundler": "metro",
       "name": "TicketsTonight Gallery Walk",
       "shortName": "Gallery Walk",
+      "display": "standalone",
       "themeColor": "#111111",
       "backgroundColor": "#F4F2ED",
       "favicon": "./assets/icons/gallery-icon-192.png"
