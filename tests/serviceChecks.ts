@@ -104,6 +104,12 @@ import {
   getCamogliRouteMode
 } from "../src/services/galleryCamogliFieldMode";
 import {
+  createWalkerFieldTestGuide,
+  createWalkerOfflineReadinessSummary,
+  createWalkerWalkReadinessReport,
+  getWalkerStartPointOptions
+} from "../src/services/walkerFieldReadiness";
+import {
   advanceGalleryWalk,
   completeGalleryWalk,
   createGalleryWalkSession,
@@ -702,6 +708,17 @@ async function main() {
       imageReadinessReport.editorialFallbackCount >= galleryExhibitions.length - walkerVisualAssets.length,
     "Walker role-aware visual resolver should keep deterministic editorial fallback coverage for sparse photo supply."
   );
+  const offlineReadinessSummary = createWalkerOfflineReadinessSummary({
+    imageReadiness: imageReadinessReport,
+    hasServiceWorker: true
+  });
+  assert(
+    offlineReadinessSummary.label === "Offline shell ready" &&
+      offlineReadinessSummary.cachedAssumptions.some((item) => item.includes("LocalStorage")) &&
+      offlineReadinessSummary.needsNetwork.some((item) => item.includes("External map links")) &&
+      offlineReadinessSummary.serviceWorkerRecommended === false,
+    "Walker offline readiness summary should distinguish cached local app assumptions from live map/link needs."
+  );
   assert(
     verifiedInventory.every(
       (exhibition) =>
@@ -917,6 +934,33 @@ async function main() {
       getCamogliRouteMode("Porto / Waterfront") === "waterfront" &&
       getCamogliRouteMode("San Rocco / Ruta") === "hill-walk",
     "Camogli field mode should expose travel-test copy, local time, official-link guidance, and route mode mapping."
+  );
+  const camogliStartOptions = getWalkerStartPointOptions({
+    area: camogliArea,
+    neighborhoods: galleryNeighborhoods,
+    walkPlan: camogliWalk,
+    preference: { mode: "custom-address", address: "Piazza Colombo, Camogli" }
+  });
+  const camogliWalkerReadiness = createWalkerWalkReadinessReport({
+    area: camogliArea,
+    walkPlan: camogliWalk,
+    routeUsabilityReport: camogliRouteReport,
+    startPointPreference: { mode: "custom-address", address: "Piazza Colombo, Camogli" },
+    referenceNow: "2026-07-10T17:30:00+02:00"
+  });
+  const camogliShortcutGuide = createWalkerFieldTestGuide({ areaId: "camogli" });
+  assert(
+    camogliStartOptions.some(
+      (option) =>
+        option.mode === "custom-address" &&
+        option.recommended &&
+        option.detail.includes("Piazza Colombo")
+    ) &&
+      camogliWalkerReadiness.localTimeLabel.length > 0 &&
+      camogliWalkerReadiness.startPointLabel === "Piazza Colombo, Camogli" &&
+      camogliWalkerReadiness.warnings.includes("Camogli is a cultural-walk test market") &&
+      camogliShortcutGuide?.shortcuts.some((shortcut) => shortcut.id === "camogli-hill" && shortcut.warning),
+    "Walker field readiness should support manual start points, local market time, Camogli thin-market warnings, and field-test shortcuts."
   );
   const personalizationLearningSummary = getPersonalizationLearningSummary({
     logEntries: [
@@ -1273,7 +1317,13 @@ async function main() {
     betaCompletedTaskIds: betaTaskProgress.completedTaskIds,
     betaFeedback: [betaFeedbackEntry],
     betaChecklistDismissed: true,
-    stopReactions: [walkerReaction]
+    stopReactions: [walkerReaction],
+    walkerStartPointPreference: {
+      mode: "custom-address" as const,
+      label: "Custom address",
+      address: "Piazza Colombo, Camogli"
+    },
+    dismissedReadinessWarningIds: ["Verify live hours before walking"]
   };
   const serializedGalleryState = serializeGalleryAppPersistedState(persistedState);
 
@@ -1298,8 +1348,10 @@ async function main() {
       persistedRoundTrip.betaCompletedTaskIds.includes("swap-stop") &&
       persistedRoundTrip.betaFeedback[0]?.kind === "useful" &&
       persistedRoundTrip.betaChecklistDismissed === true &&
-      persistedRoundTrip.stopReactions[0]?.reaction === "moved",
-    "Gallery app persistence should round-trip completed walk, filters, alerts, art log, taste passport, feedback, preferences, saved walks, first-run state, beta state, and stop reactions."
+      persistedRoundTrip.stopReactions[0]?.reaction === "moved" &&
+      persistedRoundTrip.walkerStartPointPreference?.address === "Piazza Colombo, Camogli" &&
+      persistedRoundTrip.dismissedReadinessWarningIds.includes("Verify live hours before walking"),
+    "Gallery app persistence should round-trip completed walk, filters, alerts, art log, taste passport, feedback, preferences, saved walks, first-run state, beta state, stop reactions, and Walker readiness state."
   );
   assert(
     betaTaskProgress.completedCount === 2 &&

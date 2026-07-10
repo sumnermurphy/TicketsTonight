@@ -1,2 +1,4 @@
-Walker beta uses checked-in gallery inventory, quiz metadata, and generated image assets.
-No runtime scraping is required for the preview. A full offline service worker/cache is intentionally out of scope for this sprint.
+Walker beta uses checked-in gallery inventory, quiz metadata, generated editorial images, fonts, and icons.
+The exported web preview registers a lightweight service worker that caches the app shell and local assets after first load.
+Official gallery links, external map routes, live hours verification, and future rights-reviewed photo ingestion still require network access.
+No runtime scraping is required for the preview.

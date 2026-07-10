@@ -87,6 +87,7 @@ import {
 } from "./services/galleryBetaReadiness";
 import { createGalleryMarketDataAudit } from "./services/galleryDataFoundation";
 import {
+  createWalkerImageReadinessReport,
   getGalleryVisual,
   getWalkerExhibitionBanner,
   getWalkerVisualForRole,
@@ -177,6 +178,18 @@ import {
   type WalkerReactionKind,
   type WalkerStopReaction
 } from "./services/walkerJourneyMoments";
+import {
+  createWalkerFieldTestGuide,
+  createWalkerOfflineReadinessSummary,
+  createWalkerWalkReadinessReport,
+  getWalkerStartPointOptions,
+  type WalkerFieldTestGuide,
+  type WalkerOfflineReadinessSummary,
+  type WalkerStartPointMode,
+  type WalkerStartPointOption,
+  type WalkerStartPointPreference,
+  type WalkerWalkReadinessReport
+} from "./services/walkerFieldReadiness";
 import { colors, radii, shadows, spacing, walkerType } from "./theme";
 import type {
   GalleryAreaId,
@@ -1111,6 +1124,196 @@ function CamogliFieldModeCard({
   );
 }
 
+function WalkerReadinessCard({
+  report,
+  startPointOptions,
+  compact = false,
+  onStartPointMode,
+  onDismissWarning
+}: {
+  report: WalkerWalkReadinessReport;
+  startPointOptions: WalkerStartPointOption[];
+  compact?: boolean;
+  onStartPointMode: (mode: WalkerStartPointMode) => void;
+  onDismissWarning?: (warning: string) => void;
+}) {
+  const toneStyle =
+    report.tone === "ready"
+      ? styles.walkerReadinessReady
+      : report.tone === "watch"
+        ? styles.walkerReadinessWatch
+        : styles.walkerReadinessThin;
+
+  return (
+    <View style={[styles.walkerReadinessCard, compact ? styles.compactWalkerReadinessCard : null]}>
+      <View style={styles.walkerReadinessHeader}>
+        <View style={styles.walkerReadinessTitleBlock}>
+          <Text style={[styles.walkerReadinessBadge, toneStyle]}>{report.label}</Text>
+          <Text style={styles.walkerReadinessTitle}>Use tonight</Text>
+          <Text style={styles.walkerReadinessSummary}>{report.summary}</Text>
+        </View>
+        <View style={styles.walkerReadinessClock}>
+          <Clock size={15} color={colors.teal} />
+          <Text style={styles.walkerReadinessClockText}>{report.localTimeLabel}</Text>
+        </View>
+      </View>
+
+      <View style={styles.walkerStartPointCard}>
+        <Text style={styles.walkerStartPointLabel}>Start point</Text>
+        <Text style={styles.walkerStartPointTitle}>{report.startPointLabel}</Text>
+        <Text style={styles.walkerStartPointDetail}>{report.startPointDetail}</Text>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.walkerStartPointRail}
+      >
+        {startPointOptions.map((option) => (
+          <Pressable
+            key={option.mode}
+            accessibilityRole="button"
+            accessibilityLabel={`Use ${option.label} start point`}
+            disabled={!option.available}
+            onPress={() => onStartPointMode(option.mode)}
+            style={[
+              styles.walkerStartPointChip,
+              option.recommended ? styles.selectedWalkerStartPointChip : null,
+              !option.available ? styles.disabledWalkerStartPointChip : null
+            ]}
+          >
+            <Text
+              style={[
+                styles.walkerStartPointChipText,
+                option.recommended ? styles.selectedWalkerStartPointChipText : null
+              ]}
+            >
+              {option.label}
+            </Text>
+            <Text style={styles.walkerStartPointChipDetail} numberOfLines={2}>
+              {option.detail}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      <View style={styles.walkerReadinessChecklist}>
+        {report.checklist.map((item) => (
+          <View key={item.id} style={styles.walkerReadinessItem}>
+            <View
+              style={[
+                styles.walkerReadinessDot,
+                item.status === "ready"
+                  ? styles.walkerReadinessDotReady
+                  : item.status === "watch"
+                    ? styles.walkerReadinessDotWatch
+                    : styles.walkerReadinessDotBlocked
+              ]}
+            />
+            <View style={styles.walkerReadinessItemCopy}>
+              <Text style={styles.walkerReadinessItemLabel}>{item.label}</Text>
+              <Text style={styles.walkerReadinessItemDetail}>{item.detail}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+
+      {report.warnings.length > 0 ? (
+        <View style={styles.walkerReadinessWarningRow}>
+          {report.warnings.slice(0, compact ? 2 : 4).map((warning) => (
+            <Pressable
+              key={warning}
+              accessibilityRole="button"
+              accessibilityLabel={`Dismiss ${warning}`}
+              onPress={() => onDismissWarning?.(warning)}
+              style={styles.walkerReadinessWarning}
+            >
+              <Text style={styles.walkerReadinessWarningText}>{warning}</Text>
+              {onDismissWarning ? <X size={11} color={colors.gold} /> : null}
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function WalkerFieldTestShortcutCard({
+  guide,
+  onShortcut
+}: {
+  guide: WalkerFieldTestGuide;
+  onShortcut: (neighborhood: string) => void;
+}) {
+  return (
+    <View style={styles.walkerFieldShortcutCard}>
+      <View style={styles.walkerFieldShortcutHeader}>
+        <View>
+          <Text style={styles.walkerReadinessBadge}>Field test</Text>
+          <Text style={styles.walkerFieldShortcutTitle}>{guide.title}</Text>
+        </View>
+        <WalkerMark size={22} />
+      </View>
+      <Text style={styles.walkerFieldShortcutSubtitle}>{guide.subtitle}</Text>
+      <View style={styles.walkerFieldShortcutList}>
+        {guide.shortcuts.map((shortcut) => (
+          <Pressable
+            key={shortcut.id}
+            accessibilityRole="button"
+            accessibilityLabel={`Use ${shortcut.label} Camogli test route`}
+            onPress={() => onShortcut(shortcut.neighborhood)}
+            style={styles.walkerFieldShortcutRow}
+          >
+            <View style={styles.walkerFieldShortcutCopy}>
+              <Text style={styles.walkerFieldShortcutLabel}>{shortcut.label}</Text>
+              <Text style={styles.walkerFieldShortcutDetail}>{shortcut.detail}</Text>
+              {shortcut.warning ? (
+                <Text style={styles.walkerFieldShortcutWarning}>{shortcut.warning}</Text>
+              ) : null}
+            </View>
+            <Text style={styles.walkerFieldShortcutArea}>{shortcut.neighborhood}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function WalkerOfflineReadinessCard({
+  summary
+}: {
+  summary: WalkerOfflineReadinessSummary;
+}) {
+  return (
+    <View style={styles.walkerOfflineCard}>
+      <View style={styles.walkerFieldShortcutHeader}>
+        <View>
+          <Text style={styles.walkerReadinessBadge}>PWA beta</Text>
+          <Text style={styles.walkerOfflineTitle}>{summary.label}</Text>
+        </View>
+        <Text style={styles.walkerOfflineState}>
+          {summary.serviceWorkerRecommended ? "Pending" : "Ready"}
+        </Text>
+      </View>
+      <Text style={styles.walkerOfflineDetail}>{summary.detail}</Text>
+      <View style={styles.walkerOfflineGrid}>
+        <View style={styles.walkerOfflineColumn}>
+          <Text style={styles.walkerOfflineColumnTitle}>Works locally</Text>
+          {summary.cachedAssumptions.slice(0, 3).map((item) => (
+            <Text key={item} style={styles.walkerOfflineBullet}>{item}</Text>
+          ))}
+        </View>
+        <View style={styles.walkerOfflineColumn}>
+          <Text style={styles.walkerOfflineColumnTitle}>Still live-check</Text>
+          {summary.needsNetwork.slice(0, 3).map((item) => (
+            <Text key={item} style={styles.walkerOfflineBullet}>{item}</Text>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
 function GalleryConciergePanel({
   suggestions,
   onSuggestion
@@ -1823,6 +2026,8 @@ function RouteCommandPanel({
   walkPlan,
   walkMode,
   routeUsabilityReport,
+  walkReadinessReport,
+  startPointOptions,
   routeVerifiedStopCount,
   routeFixtureStopCount,
   startStop,
@@ -1845,6 +2050,8 @@ function RouteCommandPanel({
   onCopyItinerary,
   onShareRoute,
   onSaveWalk,
+  onStartPointMode,
+  onDismissReadinessWarning,
   walkRecapRewardCopy,
   routeMapModel,
   shareCard,
@@ -1854,6 +2061,8 @@ function RouteCommandPanel({
   walkPlan: GalleryWalkPlan;
   walkMode: GalleryWalkMode;
   routeUsabilityReport: GalleryRouteUsabilityReport;
+  walkReadinessReport: WalkerWalkReadinessReport;
+  startPointOptions: WalkerStartPointOption[];
   routeVerifiedStopCount: number;
   routeFixtureStopCount: number;
   startStop?: GalleryWalkStop;
@@ -1876,6 +2085,8 @@ function RouteCommandPanel({
   onCopyItinerary: () => void;
   onShareRoute: () => void;
   onSaveWalk: () => void;
+  onStartPointMode: (mode: WalkerStartPointMode) => void;
+  onDismissReadinessWarning: (warning: string) => void;
   walkRecapRewardCopy?: string;
   routeMapModel: GalleryRouteMapModel;
   shareCard?: GalleryWalkShareCard;
@@ -2097,6 +2308,13 @@ function RouteCommandPanel({
               <Text style={styles.secondaryRouteButtonText}>Share</Text>
             </Pressable>
           </View>
+          <WalkerReadinessCard
+            report={walkReadinessReport}
+            startPointOptions={startPointOptions}
+            compact={compact}
+            onStartPointMode={onStartPointMode}
+            onDismissWarning={onDismissReadinessWarning}
+          />
         </View>
       ) : (
         <>
@@ -2145,7 +2363,9 @@ function RouteCommandPanel({
               style={styles.primaryLightButton}
             >
               <Text style={styles.primaryLightButtonText}>
-                {activeWalkSession?.status === "active" ? "Start this route" : "Start walk"}
+                {activeWalkSession?.status === "active"
+                  ? "Start this route"
+                  : walkReadinessReport.primaryActionCopy}
               </Text>
             </Pressable>
             <Pressable
@@ -2175,6 +2395,14 @@ function RouteCommandPanel({
               <Text style={styles.secondaryRouteButtonText}>Share</Text>
             </Pressable>
           </View>
+
+          <WalkerReadinessCard
+            report={walkReadinessReport}
+            startPointOptions={startPointOptions}
+            compact={compact}
+            onStartPointMode={onStartPointMode}
+            onDismissWarning={onDismissReadinessWarning}
+          />
 
           <View style={styles.routeFirstStats}>
             <Metric label="stops" value={displayPlan.stops.length} tone="good" />
@@ -4080,6 +4308,12 @@ export function GalleryApp() {
   const [stopReactions, setStopReactions] = useState<WalkerStopReaction[]>(
     persistedState?.stopReactions ?? []
   );
+  const [walkerStartPointPreference, setWalkerStartPointPreference] = useState<
+    WalkerStartPointPreference | undefined
+  >(persistedState?.walkerStartPointPreference);
+  const [dismissedReadinessWarningIds, setDismissedReadinessWarningIds] = useState<string[]>(
+    persistedState?.dismissedReadinessWarningIds ?? []
+  );
   const selectedArea = galleryAreas.find((area) => area.id === selectedAreaId) ?? galleryAreas[0];
   const isCompactLayout = viewportWidth < 720;
   const areaInventory = useMemo(
@@ -4319,6 +4553,36 @@ export function GalleryApp() {
       }),
     [displayWalkPlan]
   );
+  const rawWalkReadinessReport = useMemo(
+    () =>
+      createWalkerWalkReadinessReport({
+        area: selectedArea,
+        walkPlan: displayWalkPlan,
+        routeUsabilityReport,
+        startPointPreference: walkerStartPointPreference,
+        referenceNow
+      }),
+    [displayWalkPlan, routeUsabilityReport, selectedArea, walkerStartPointPreference]
+  );
+  const walkReadinessReport = useMemo(
+    () => ({
+      ...rawWalkReadinessReport,
+      warnings: rawWalkReadinessReport.warnings.filter(
+        (warning) => !dismissedReadinessWarningIds.includes(warning)
+      )
+    }),
+    [dismissedReadinessWarningIds, rawWalkReadinessReport]
+  );
+  const walkerStartPointOptions = useMemo(
+    () =>
+      getWalkerStartPointOptions({
+        area: selectedArea,
+        neighborhoods: galleryNeighborhoods,
+        walkPlan: displayWalkPlan,
+        preference: walkerStartPointPreference
+      }),
+    [displayWalkPlan, selectedArea, walkerStartPointPreference]
+  );
   const displayRouteAdvisoryById = useMemo(
     () =>
       new Map(
@@ -4335,6 +4599,22 @@ export function GalleryApp() {
         referenceNow
       }),
     [areaInventory, displayWalkPlan, selectedAreaId]
+  );
+  const walkerFieldTestGuide = useMemo(
+    () => createWalkerFieldTestGuide({ areaId: selectedAreaId }),
+    [selectedAreaId]
+  );
+  const walkerImageReadinessReport = useMemo(
+    () => createWalkerImageReadinessReport(galleryExhibitions),
+    []
+  );
+  const walkerOfflineReadinessSummary = useMemo(
+    () =>
+      createWalkerOfflineReadinessSummary({
+        imageReadiness: walkerImageReadinessReport,
+        hasServiceWorker: true
+      }),
+    [walkerImageReadinessReport]
   );
   useEffect(() => {
     if (
@@ -4787,6 +5067,41 @@ export function GalleryApp() {
     setShareStatus("Camogli field mode uses sparse cultural anchors. Check official links before walking.");
   }
 
+  function chooseWalkerStartPointMode(mode: WalkerStartPointMode) {
+    const selectedOption = walkerStartPointOptions.find((option) => option.mode === mode);
+
+    setWalkerStartPointPreference((preference) => ({
+      ...preference,
+      mode,
+      label: selectedOption?.label,
+      address: mode === "custom-address" ? preference?.address ?? "Manual start point" : undefined
+    }));
+    setShareStatus(
+      mode === "browser-location"
+        ? "Walker will use browser location only if permission is available; external maps still handle live navigation."
+        : `${selectedOption?.label ?? "Start point"} selected for this route.`
+    );
+  }
+
+  function dismissReadinessWarning(warning: string) {
+    setDismissedReadinessWarningIds((warningIds) =>
+      warningIds.includes(warning) ? warningIds : [...warningIds, warning].slice(-12)
+    );
+  }
+
+  function chooseWalkerFieldShortcut(neighborhood: string) {
+    setSelectedAreaId("camogli");
+    setSelectedNeighborhood(neighborhood);
+    setSelectedMedium(undefined);
+    setActiveLens("all");
+    setVerifiedOnly(false);
+    setWalkMode("quick-loop");
+    setHighlightedRouteStopId(undefined);
+    setSelectedExhibitionId(undefined);
+    setMobileTab("walks");
+    setShareStatus(`${neighborhood} loaded for Camogli field testing. Use official links before walking.`);
+  }
+
   function chooseCamogliTestFirstRun() {
     completeFirstRun("camogli-test");
     resetMarket("camogli");
@@ -4925,6 +5240,8 @@ export function GalleryApp() {
     setReactionNote("");
     setReactionSaved(true);
     setStopReactions([]);
+    setWalkerStartPointPreference(undefined);
+    setDismissedReadinessWarningIds([]);
     setShareStatus("Demo state reset.");
   }
 
@@ -5393,7 +5710,9 @@ export function GalleryApp() {
       betaCompletedTaskIds,
       betaFeedback,
       betaChecklistDismissed,
-      stopReactions
+      stopReactions,
+      walkerStartPointPreference,
+      dismissedReadinessWarningIds
     });
   }, [
     activeLens,
@@ -5404,6 +5723,7 @@ export function GalleryApp() {
     betaFeedback,
     completedQuestIds,
     completedWalkSessions,
+    dismissedReadinessWarningIds,
     earnedBadges,
     firstRunChoice,
     firstRunCompleted,
@@ -5421,6 +5741,7 @@ export function GalleryApp() {
     tastePassport,
     tastePreferences,
     stopReactions,
+    walkerStartPointPreference,
     verifiedOnly,
     walkMode
   ]);
@@ -5636,10 +5957,19 @@ export function GalleryApp() {
         <CamogliFieldModeCard guide={camogliFieldGuide} onMode={chooseCamogliFieldMode} />
       ) : null}
 
+      {walkerFieldTestGuide ? (
+        <WalkerFieldTestShortcutCard
+          guide={walkerFieldTestGuide}
+          onShortcut={chooseWalkerFieldShortcut}
+        />
+      ) : null}
+
       <RouteCommandPanel
         walkPlan={walkPlan}
         walkMode={walkMode}
         routeUsabilityReport={routeUsabilityReport}
+        walkReadinessReport={walkReadinessReport}
+        startPointOptions={walkerStartPointOptions}
         routeVerifiedStopCount={routeVerifiedStopCount}
         routeFixtureStopCount={routeFixtureStopCount}
         startStop={startStop}
@@ -5669,6 +5999,8 @@ export function GalleryApp() {
         onCopyItinerary={copyCurrentItinerary}
         onShareRoute={shareCurrentRoute}
         onSaveWalk={saveCurrentWalk}
+        onStartPointMode={chooseWalkerStartPointMode}
+        onDismissReadinessWarning={dismissReadinessWarning}
         walkRecapRewardCopy={walkRecapRewardCopy}
         routeMapModel={displayRouteMapModel}
         shareCard={activeWalkShareCard}
@@ -5943,6 +6275,10 @@ export function GalleryApp() {
           ) : null}
 
           {!isCompactLayout ? (
+            <WalkerOfflineReadinessCard summary={walkerOfflineReadinessSummary} />
+          ) : null}
+
+          {!isCompactLayout ? (
             <GalleryConciergePanel
               suggestions={conciergeSuggestions}
               onSuggestion={handleConciergeSuggestion}
@@ -5953,6 +6289,8 @@ export function GalleryApp() {
             walkPlan={walkPlan}
             walkMode={walkMode}
             routeUsabilityReport={routeUsabilityReport}
+            walkReadinessReport={walkReadinessReport}
+            startPointOptions={walkerStartPointOptions}
             routeVerifiedStopCount={routeVerifiedStopCount}
             routeFixtureStopCount={routeFixtureStopCount}
             startStop={startStop}
@@ -5982,6 +6320,8 @@ export function GalleryApp() {
             onCopyItinerary={copyCurrentItinerary}
             onShareRoute={shareCurrentRoute}
             onSaveWalk={saveCurrentWalk}
+            onStartPointMode={chooseWalkerStartPointMode}
+            onDismissReadinessWarning={dismissReadinessWarning}
             walkRecapRewardCopy={walkRecapRewardCopy}
             routeMapModel={displayRouteMapModel}
             shareCard={activeWalkShareCard}
@@ -7417,6 +7757,353 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
     lineHeight: 16
+  },
+  walkerReadinessCard: {
+    backgroundColor: colors.fog,
+    borderColor: "rgba(13, 59, 46, 0.1)",
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.md
+  },
+  compactWalkerReadinessCard: {
+    padding: spacing.sm
+  },
+  walkerReadinessHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+    justifyContent: "space-between"
+  },
+  walkerReadinessTitleBlock: {
+    flex: 1,
+    minWidth: 190
+  },
+  walkerReadinessBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.paper,
+    borderColor: "rgba(13, 59, 46, 0.1)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.teal,
+    fontFamily: walkerType.uiFamily,
+    fontSize: 10,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    textTransform: "uppercase"
+  },
+  walkerReadinessReady: {
+    backgroundColor: "rgba(39, 125, 87, 0.12)",
+    borderColor: "rgba(39, 125, 87, 0.25)",
+    color: colors.success
+  },
+  walkerReadinessWatch: {
+    backgroundColor: "rgba(200, 161, 90, 0.15)",
+    borderColor: "rgba(200, 161, 90, 0.32)",
+    color: colors.gold
+  },
+  walkerReadinessThin: {
+    backgroundColor: "rgba(214, 69, 69, 0.1)",
+    borderColor: "rgba(214, 69, 69, 0.22)",
+    color: colors.coral
+  },
+  walkerReadinessTitle: {
+    color: colors.teal,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 24,
+    fontWeight: "700",
+    lineHeight: 29,
+    marginTop: spacing.xs
+  },
+  walkerReadinessSummary: {
+    color: colors.mutedInk,
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 18,
+    marginTop: spacing.xs
+  },
+  walkerReadinessClock: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.xs,
+    minHeight: 34,
+    paddingHorizontal: spacing.sm
+  },
+  walkerReadinessClockText: {
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  walkerStartPointCard: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: 2,
+    padding: spacing.md
+  },
+  walkerStartPointLabel: {
+    color: colors.gold,
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  walkerStartPointTitle: {
+    color: colors.ink,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 19,
+    fontWeight: "700",
+    lineHeight: 24
+  },
+  walkerStartPointDetail: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17
+  },
+  walkerStartPointRail: {
+    gap: spacing.sm,
+    paddingRight: spacing.md
+  },
+  walkerStartPointChip: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: 3,
+    minHeight: 76,
+    padding: spacing.sm,
+    width: 156
+  },
+  selectedWalkerStartPointChip: {
+    backgroundColor: colors.teal,
+    borderColor: colors.teal
+  },
+  disabledWalkerStartPointChip: {
+    opacity: 0.45
+  },
+  walkerStartPointChipText: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  selectedWalkerStartPointChipText: {
+    color: colors.paper
+  },
+  walkerStartPointChipDetail: {
+    color: colors.mutedInk,
+    fontSize: 10,
+    fontWeight: "700",
+    lineHeight: 14
+  },
+  walkerReadinessChecklist: {
+    gap: spacing.sm
+  },
+  walkerReadinessItem: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: spacing.sm
+  },
+  walkerReadinessDot: {
+    borderRadius: radii.pill,
+    height: 10,
+    marginTop: 4,
+    width: 10
+  },
+  walkerReadinessDotReady: {
+    backgroundColor: colors.success
+  },
+  walkerReadinessDotWatch: {
+    backgroundColor: colors.gold
+  },
+  walkerReadinessDotBlocked: {
+    backgroundColor: colors.coral
+  },
+  walkerReadinessItemCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  walkerReadinessItemLabel: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  walkerReadinessItemDetail: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 16,
+    marginTop: 1
+  },
+  walkerReadinessWarningRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  walkerReadinessWarning: {
+    alignItems: "center",
+    backgroundColor: "rgba(200, 161, 90, 0.1)",
+    borderColor: "rgba(200, 161, 90, 0.26)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  walkerReadinessWarningText: {
+    color: colors.gold,
+    fontSize: 10,
+    fontWeight: "900"
+  },
+  walkerFieldShortcutCard: {
+    backgroundColor: colors.paper,
+    borderColor: "rgba(200, 161, 90, 0.32)",
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: spacing.md,
+    marginHorizontal: spacing.md,
+    padding: spacing.md,
+    ...shadows.card
+  },
+  walkerFieldShortcutHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: spacing.md,
+    justifyContent: "space-between"
+  },
+  walkerFieldShortcutTitle: {
+    color: colors.teal,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 22,
+    fontWeight: "700",
+    lineHeight: 27,
+    marginTop: spacing.xs
+  },
+  walkerFieldShortcutSubtitle: {
+    color: colors.mutedInk,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 19
+  },
+  walkerFieldShortcutList: {
+    gap: spacing.sm
+  },
+  walkerFieldShortcutRow: {
+    alignItems: "center",
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.md,
+    justifyContent: "space-between",
+    padding: spacing.md
+  },
+  walkerFieldShortcutCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0
+  },
+  walkerFieldShortcutLabel: {
+    color: colors.ink,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 22
+  },
+  walkerFieldShortcutDetail: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 16
+  },
+  walkerFieldShortcutWarning: {
+    color: colors.coral,
+    fontSize: 10,
+    fontWeight: "900",
+    marginTop: 2
+  },
+  walkerFieldShortcutArea: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.teal,
+    fontSize: 10,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    textAlign: "center"
+  },
+  walkerOfflineCard: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: spacing.md,
+    marginHorizontal: spacing.lg,
+    padding: spacing.lg,
+    ...shadows.card
+  },
+  walkerOfflineTitle: {
+    color: colors.teal,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 22,
+    fontWeight: "700",
+    lineHeight: 27,
+    marginTop: spacing.xs
+  },
+  walkerOfflineState: {
+    backgroundColor: colors.teal,
+    borderRadius: radii.pill,
+    color: colors.paper,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  walkerOfflineDetail: {
+    color: colors.mutedInk,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 20
+  },
+  walkerOfflineGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md
+  },
+  walkerOfflineColumn: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    flex: 1,
+    gap: spacing.xs,
+    minWidth: 240,
+    padding: spacing.md
+  },
+  walkerOfflineColumnTitle: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  walkerOfflineBullet: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 18
   },
   mobileFeaturedShow: {
     alignItems: "center",

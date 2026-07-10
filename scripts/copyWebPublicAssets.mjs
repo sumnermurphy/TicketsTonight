@@ -33,6 +33,11 @@ if (existsSync(indexPath)) {
     '<meta name="mobile-web-app-capable" content="yes">',
     '<meta name="apple-mobile-web-app-capable" content="yes">'
   ].join("");
+  const serviceWorkerScript = [
+    "<script>",
+    "if('serviceWorker'in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/walker-service-worker.js').catch(function(){})})}",
+    "</script>"
+  ].join("");
 
   let nextHtml = indexHtml;
 
@@ -42,6 +47,10 @@ if (existsSync(indexPath)) {
 
   if (!nextHtml.includes('rel="manifest"')) {
     nextHtml = nextHtml.replace("<head>", `<head>${pwaHeadTags}`);
+  }
+
+  if (!nextHtml.includes("walker-service-worker.js")) {
+    nextHtml = nextHtml.replace("</body>", `${serviceWorkerScript}</body>`);
   }
 
   if (nextHtml !== indexHtml) {

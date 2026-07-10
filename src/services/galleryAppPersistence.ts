@@ -15,6 +15,7 @@ import type {
 import type { GalleryWalkSession } from "./galleryWalkSession";
 import type { GallerySavedWalk } from "./galleryWalkSharing";
 import type { WalkerStopReaction } from "./walkerJourneyMoments";
+import type { WalkerStartPointPreference } from "./walkerFieldReadiness";
 
 export type GalleryPersistedLens = "all" | "open-now" | "opening-tonight" | "last-chance";
 export type GalleryFirstRunChoice =
@@ -53,6 +54,8 @@ export type GalleryAppPersistedState = {
   betaFeedback: GalleryBetaFeedback[];
   betaChecklistDismissed: boolean;
   stopReactions: WalkerStopReaction[];
+  walkerStartPointPreference?: WalkerStartPointPreference;
+  dismissedReadinessWarningIds: string[];
 };
 
 export type GalleryStorageAdapter = {
@@ -177,6 +180,12 @@ function sanitizeState(value: unknown): GalleryAppPersistedState | undefined {
     betaChecklistDismissed: value.betaChecklistDismissed === true,
     stopReactions: Array.isArray(value.stopReactions)
       ? (value.stopReactions as WalkerStopReaction[])
+      : [],
+    walkerStartPointPreference: isObject(value.walkerStartPointPreference)
+      ? (value.walkerStartPointPreference as WalkerStartPointPreference)
+      : undefined,
+    dismissedReadinessWarningIds: isStringArray(value.dismissedReadinessWarningIds)
+      ? value.dismissedReadinessWarningIds
       : []
   };
 }
