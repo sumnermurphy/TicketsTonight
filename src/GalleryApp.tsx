@@ -40,6 +40,7 @@ import {
 import { galleryQuizArtworks } from "./data/galleryQuizArtworks";
 import { gallerySourceCandidates } from "./data/gallerySources";
 import {
+  createGalleryWalkPlanFromStopIds,
   createGallerySourceTrustSummary,
   createGalleryWalkPlan,
   createNeighborhoodIntelligence,
@@ -48,17 +49,20 @@ import {
   galleryVisitStatusLabels,
   galleryWalkModeLabels,
   getDaysUntilGalleryCloses,
+  getGalleryRouteSwapCandidates,
   getGalleryVisitStatus,
   getGalleryWhyGoReasons,
   getLastChanceGalleryAlerts,
   getSavedGalleryIdsFromLog,
   isGalleryOpeningTonight,
   upsertGalleryLogEntry,
+  type GalleryRouteSwapCandidate,
   type GalleryWalkMode
 } from "./services/galleryDiscovery";
 import {
   readGalleryAppPersistedState,
   writeGalleryAppPersistedState,
+  type GalleryFirstRunChoice,
   type GalleryPersistedLens
 } from "./services/galleryAppPersistence";
 import { createGalleryMarketDataAudit } from "./services/galleryDataFoundation";
@@ -73,6 +77,7 @@ import {
   getActiveWalkProgress,
   getGalleryWalkRecap,
   markGalleryWalkStopVisited,
+  replaceGalleryWalkSessionStop,
   skipGalleryWalkStop,
   type GalleryWalkRecap,
   type GalleryWalkProgress,
@@ -693,6 +698,81 @@ function RouteModeButton({
   );
 }
 
+function FirstRunChoicePanel({
+  hasActiveWalk,
+  verifiedCount,
+  reviewCount,
+  freshnessLabel,
+  onFindWalk,
+  onTasteQuiz,
+  onResumeWalk,
+  onDismiss
+}: {
+  hasActiveWalk: boolean;
+  verifiedCount: number;
+  reviewCount: number;
+  freshnessLabel: string;
+  onFindWalk: () => void;
+  onTasteQuiz: () => void;
+  onResumeWalk: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <View style={styles.firstRunPanel}>
+      <View style={styles.firstRunHeader}>
+        <View>
+          <Text style={styles.routeFirstKicker}>Start tonight</Text>
+          <Text style={styles.firstRunTitle}>What do you want to do first?</Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss first run choices"
+          onPress={onDismiss}
+          style={styles.firstRunDismissButton}
+        >
+          <X size={14} color={colors.ink} />
+        </Pressable>
+      </View>
+      <View style={styles.firstRunActionRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Find a walk tonight"
+          onPress={onFindWalk}
+          style={styles.firstRunPrimaryAction}
+        >
+          <Route size={15} color={colors.paper} />
+          <Text style={styles.firstRunPrimaryActionText}>Find a walk tonight</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Take taste quiz"
+          onPress={onTasteQuiz}
+          style={styles.firstRunSecondaryAction}
+        >
+          <Sparkles size={15} color={colors.ink} />
+          <Text style={styles.firstRunSecondaryActionText}>Take taste quiz</Text>
+        </Pressable>
+        {hasActiveWalk ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Resume active walk"
+            onPress={onResumeWalk}
+            style={styles.firstRunSecondaryAction}
+          >
+            <MapPin size={15} color={colors.ink} />
+            <Text style={styles.firstRunSecondaryActionText}>Resume walk</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      <View style={styles.firstRunTrustRow}>
+        <Text style={styles.firstRunTrustPill}>{verifiedCount} verified</Text>
+        <Text style={styles.firstRunTrustPill}>{reviewCount} demo/review</Text>
+        <Text style={styles.firstRunTrustPill}>{freshnessLabel}</Text>
+      </View>
+    </View>
+  );
+}
+
 function RouteCommandPanel({
   walkPlan,
   walkMode,
@@ -1022,7 +1102,7 @@ function RouteCommandPanel({
           <View style={styles.routeFirstStats}>
             <Metric label="stops" value={displayPlan.stops.length} tone="good" />
             <Metric label="minutes" value={displayPlan.totalMinutes} />
-            <Metric label="verified" value={`${routeVerifiedStopCount}/${walkPlan.stops.length}`} tone="good" />
+            <Metric label="verified" value={`${routeVerifiedStopCount}/${displayPlan.stops.length}`} tone="good" />
             {routeFixtureStopCount > 0 ? (
               <Metric label="demo" value={routeFixtureStopCount} tone="warn" />
             ) : null}
@@ -1078,7 +1158,9 @@ function WalkStopRow({
   freshnessLabel,
   advisory,
   highlighted,
-  onHighlight
+  swapCandidates = [],
+  onHighlight,
+  onSwapStop
 }: {
   stop: GalleryWalkPlan["stops"][number];
   leg?: GalleryWalkPlan["legs"][number];
@@ -1089,7 +1171,9 @@ function WalkStopRow({
   freshnessLabel?: string;
   advisory?: GalleryRouteMapModel["stopAdvisories"][number];
   highlighted?: boolean;
+  swapCandidates?: GalleryRouteSwapCandidate[];
   onHighlight?: () => void;
+  onSwapStop?: (replacementId: string) => void;
 }) {
   const trust = getGalleryInventoryTrust(stop.exhibition);
   const receipt = createGallerySourceReceipt(stop.exhibition, referenceNow);
@@ -1174,6 +1258,31 @@ function WalkStopRow({
             </View>
           </View>
         ) : null}
+        {swapCandidates.length > 0 ? (
+          <View style={styles.swapOptionsBlock}>
+            <Text style={styles.swapOptionsTitle}>Swap stop</Text>
+            {swapCandidates.map((candidate) => (
+              <View key={candidate.exhibition.id} style={styles.swapCandidateRow}>
+                <View style={styles.swapCandidateCopy}>
+                  <Text style={styles.swapCandidateTitle}>
+                    {candidate.exhibition.galleryName}
+                  </Text>
+                  <Text style={styles.swapCandidateMeta} numberOfLines={1}>
+                    {candidate.walkingMinutes} min - {candidate.reasons.slice(0, 3).join(", ")}
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Swap ${candidate.exhibition.galleryName} into this route stop`}
+                  onPress={() => onSwapStop?.(candidate.exhibition.id)}
+                  style={styles.swapCandidateButton}
+                >
+                  <Text style={styles.swapCandidateButtonText}>Swap</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        ) : null}
       </View>
       {stop.isSaved ? (
         <View style={styles.savedPill}>
@@ -1210,11 +1319,15 @@ function WalkStopRow({
 function RoutePreview({
   routeMapModel,
   highlightedStopId,
-  onHighlightStop
+  focusedSwapCandidates = [],
+  onHighlightStop,
+  onSwapFocusedStop
 }: {
   routeMapModel: GalleryRouteMapModel;
   highlightedStopId?: string;
+  focusedSwapCandidates?: GalleryRouteSwapCandidate[];
   onHighlightStop: (stopId: string) => void;
+  onSwapFocusedStop?: (replacementId: string) => void;
 }) {
   if (routeMapModel.pins.length === 0) {
     return null;
@@ -1297,6 +1410,29 @@ function RoutePreview({
           </Pressable>
         ) : null}
       </View>
+      {focusedPin && focusedSwapCandidates.length > 0 ? (
+        <View style={styles.routePreviewSwapPanel}>
+          <Text style={styles.swapOptionsTitle}>Swap focused stop</Text>
+          {focusedSwapCandidates.map((candidate) => (
+            <View key={candidate.exhibition.id} style={styles.swapCandidateRow}>
+              <View style={styles.swapCandidateCopy}>
+                <Text style={styles.swapCandidateTitle}>{candidate.exhibition.galleryName}</Text>
+                <Text style={styles.swapCandidateMeta} numberOfLines={1}>
+                  {candidate.reasons.slice(0, 3).join(", ")}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Swap focused stop for ${candidate.exhibition.galleryName}`}
+                onPress={() => onSwapFocusedStop?.(candidate.exhibition.id)}
+                style={styles.swapCandidateButton}
+              >
+                <Text style={styles.swapCandidateButtonText}>Swap</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      ) : null}
       <View style={styles.routeMapCanvas}>
         <View style={[styles.routeMapRoadBand, styles.routeMapRoadBandNorth]} />
         <View style={[styles.routeMapRoadBand, styles.routeMapRoadBandSouth]} />
@@ -1987,12 +2123,17 @@ function ExhibitionDetailSheet({
   routeConfidenceLabel,
   isInDisplayedRoute,
   hasActiveWalk,
+  displayRouteStop,
+  swapTargetStop,
+  swapCandidates = [],
   conciergeReasons,
   feedback,
   onStatus,
   onNote,
   onMarkRouteVisited,
   onSkipRouteStop,
+  onSwapRouteStop,
+  onSwapSelectedIntoRoute,
   onFeedback,
   onStartRouteFromHere,
   onAddToActiveWalk,
@@ -2008,12 +2149,17 @@ function ExhibitionDetailSheet({
   routeConfidenceLabel: string;
   isInDisplayedRoute: boolean;
   hasActiveWalk: boolean;
+  displayRouteStop?: GalleryWalkStop;
+  swapTargetStop?: GalleryWalkStop;
+  swapCandidates?: GalleryRouteSwapCandidate[];
   conciergeReasons: string[];
   feedback?: GalleryTasteFeedback;
   onStatus: (status: GalleryLogStatus) => void;
   onNote: (note: string) => void;
   onMarkRouteVisited?: () => void;
   onSkipRouteStop?: () => void;
+  onSwapRouteStop?: (stopId: string, replacementId: string) => void;
+  onSwapSelectedIntoRoute?: (targetStopId: string) => void;
   onFeedback: (kind: GalleryTasteFeedbackKind) => void;
   onStartRouteFromHere: () => void;
   onAddToActiveWalk: () => void;
@@ -2035,11 +2181,15 @@ function ExhibitionDetailSheet({
     ? routeAdvisory.detail
     : isInDisplayedRoute
       ? "This exhibition is already part of the displayed route."
+      : swapTargetStop
+        ? `Swap this into the route for ${swapTargetStop.exhibition.galleryName}.`
       : hasActiveWalk
         ? "Not in the active walk yet; use it as a route swap cue before replacing the current route."
         : "Not in this route yet; start from here to build a more personal path.";
   const routeActionLabel = isInDisplayedRoute
     ? "Keep in route"
+    : swapTargetStop
+      ? "Swap into route"
     : hasActiveWalk
       ? "Use as swap cue"
       : "Add to walk";
@@ -2150,6 +2300,44 @@ function ExhibitionDetailSheet({
                 <Text key={reason} style={styles.routeReasonPill}>{reason}</Text>
               ))}
             </View>
+          ) : null}
+          {isInDisplayedRoute && displayRouteStop && swapCandidates.length > 0 ? (
+            <View style={styles.detailSwapPanel}>
+              <Text style={styles.swapOptionsTitle}>Replacement candidates</Text>
+              {swapCandidates.map((candidate) => (
+                <View key={candidate.exhibition.id} style={styles.swapCandidateRow}>
+                  <View style={styles.swapCandidateCopy}>
+                    <Text style={styles.swapCandidateTitle}>{candidate.exhibition.galleryName}</Text>
+                    <Text style={styles.swapCandidateMeta} numberOfLines={1}>
+                      {candidate.reasons.slice(0, 3).join(", ")}
+                    </Text>
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Swap ${candidate.exhibition.galleryName} into this route stop`}
+                    onPress={() =>
+                      onSwapRouteStop?.(displayRouteStop.exhibition.id, candidate.exhibition.id)
+                    }
+                    style={styles.swapCandidateButton}
+                  >
+                    <Text style={styles.swapCandidateButtonText}>Swap</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          ) : null}
+          {!isInDisplayedRoute && swapTargetStop ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Swap ${exhibition.galleryName} into the displayed route`}
+              onPress={() => onSwapSelectedIntoRoute?.(swapTargetStop.exhibition.id)}
+              style={styles.detailSwapIntoRouteButton}
+            >
+              <Route size={14} color={colors.ink} />
+              <Text style={styles.detailSwapIntoRouteButtonText}>
+                Replace {swapTargetStop.exhibition.galleryName}
+              </Text>
+            </Pressable>
           ) : null}
         </View>
 
@@ -2422,6 +2610,13 @@ export function GalleryApp() {
   const [savedWalks, setSavedWalks] = useState<GallerySavedWalk[]>(
     persistedState?.savedWalks ?? []
   );
+  const [firstRunChoice, setFirstRunChoice] = useState<GalleryFirstRunChoice | undefined>(
+    persistedState?.firstRunChoice
+  );
+  const [firstRunCompleted, setFirstRunCompleted] = useState(
+    persistedState?.firstRunCompleted ?? false
+  );
+  const [draftWalkStopIds, setDraftWalkStopIds] = useState<string[] | undefined>();
   const [eventRouteIntent, setEventRouteIntent] = useState<GalleryEventRouteIntent>("social-opening");
   const [shareStatus, setShareStatus] = useState<string | undefined>();
   const selectedArea = galleryAreas.find((area) => area.id === selectedAreaId) ?? galleryAreas[0];
@@ -2558,7 +2753,7 @@ export function GalleryApp() {
       selectedNeighborhood
     ]
   );
-  const walkPlan = useMemo(
+  const generatedWalkPlan = useMemo(
     () =>
       walkMode === "for-you"
         ? createPersonalizedGalleryWalkPlan({
@@ -2579,7 +2774,20 @@ export function GalleryApp() {
           }),
     [savedIds, selectedAreaId, selectedNeighborhood, tastePassport, walkMode]
   );
-  const activeWalkPlan = useMemo(
+  const walkPlan = useMemo(
+    () =>
+      draftWalkStopIds
+        ? createGalleryWalkPlanFromStopIds({
+            basePlan: generatedWalkPlan,
+            stopIds: draftWalkStopIds,
+            exhibitions: galleryExhibitions,
+            savedIds,
+            referenceNow
+          })
+        : generatedWalkPlan,
+    [draftWalkStopIds, generatedWalkPlan, savedIds]
+  );
+  const generatedActiveWalkPlan = useMemo(
     () =>
       activeWalkSession
         ? activeWalkSession.mode === "for-you"
@@ -2602,6 +2810,19 @@ export function GalleryApp() {
         : undefined,
     [activeWalkSession, savedIds, tasteFeedback, tastePassport, tastePreferences]
   );
+  const activeWalkPlan = useMemo(
+    () =>
+      activeWalkSession && generatedActiveWalkPlan
+        ? createGalleryWalkPlanFromStopIds({
+            basePlan: generatedActiveWalkPlan,
+            stopIds: activeWalkSession.orderedStopIds,
+            exhibitions: galleryExhibitions,
+            savedIds,
+            referenceNow
+          })
+        : generatedActiveWalkPlan,
+    [activeWalkSession, generatedActiveWalkPlan, savedIds]
+  );
   const activeWalkProgress = useMemo(
     () =>
       activeWalkSession
@@ -2616,8 +2837,11 @@ export function GalleryApp() {
         : undefined,
     [activeWalkPlan, activeWalkSession, logEntries]
   );
+  const hasDraftWalk = Boolean(draftWalkStopIds?.length);
   const displayWalkPlan =
-    activeWalkSession?.status === "active" && activeWalkPlan ? activeWalkPlan : walkPlan;
+    activeWalkSession?.status === "active" && activeWalkPlan && !hasDraftWalk
+      ? activeWalkPlan
+      : walkPlan;
   const displayRouteMapModel = useMemo(
     () =>
       createGalleryRouteMapModel(
@@ -2641,14 +2865,18 @@ export function GalleryApp() {
       setHighlightedRouteStopId(undefined);
     }
   }, [displayRouteMapModel, highlightedRouteStopId]);
+  useEffect(() => {
+    setDraftWalkStopIds(undefined);
+  }, [selectedAreaId, selectedNeighborhood, walkMode]);
   const activeWalkRouteMatchesCurrent = Boolean(
     activeWalkSession &&
+      !hasDraftWalk &&
       activeWalkSession.areaId === selectedAreaId &&
       activeWalkSession.mode === walkMode &&
       (activeWalkSession.neighborhood ?? undefined) === walkPlan.neighborhood
   );
   const activeWalkIsDraft =
-    activeWalkSession?.status === "active" && !activeWalkRouteMatchesCurrent;
+    activeWalkSession?.status === "active" && (!activeWalkRouteMatchesCurrent || hasDraftWalk);
   const showRouteProgress =
     Boolean(activeWalkSession) &&
     activeWalkRouteMatchesCurrent &&
@@ -2701,10 +2929,10 @@ export function GalleryApp() {
   const selectedNeighborhoodInsight = selectedNeighborhood
     ? neighborhoodIntelligence.find((item) => item.neighborhood === selectedNeighborhood)
     : undefined;
-  const routeVerifiedStopCount = walkPlan.stops.filter((stop) =>
+  const routeVerifiedStopCount = displayWalkPlan.stops.filter((stop) =>
     getGalleryInventoryTrust(stop.exhibition).isVerified
   ).length;
-  const routeFixtureStopCount = walkPlan.stops.filter((stop) =>
+  const routeFixtureStopCount = displayWalkPlan.stops.filter((stop) =>
     getGalleryInventoryTrust(stop.exhibition).isFixture
   ).length;
   const routeScopeLabel = selectedNeighborhood ?? walkPlan.neighborhood;
@@ -2752,6 +2980,19 @@ export function GalleryApp() {
         stop.exhibitions.some((exhibition) => exhibition.id === selectedExhibition.id)
       )
     : undefined;
+  const highlightedDisplayRouteStop = highlightedRouteStopId
+    ? displayWalkPlan.stops.find((stop) => stop.exhibition.id === highlightedRouteStopId)
+    : undefined;
+  const displayStartStop =
+    displayWalkPlan.stops.find((stop) => stop.exhibition.id === displayWalkPlan.startStopId) ??
+    displayWalkPlan.stops[0];
+  const plannerNextStop = displayWalkPlan.stops.find(
+    (stop) => stop.exhibition.id === displayWalkPlan.nextStopId
+  );
+  const detailSwapTargetStop =
+    selectedExhibition && !selectedDisplayRouteStop
+      ? highlightedDisplayRouteStop ?? activeWalkCurrentStop ?? displayStartStop
+      : undefined;
   const selectedRouteAdvisory = selectedDisplayRouteStop
     ? displayRouteAdvisoryById.get(selectedDisplayRouteStop.exhibition.id)
     : undefined;
@@ -2770,9 +3011,42 @@ export function GalleryApp() {
 
           return status === "open-now" || status === "opens-later";
         })
-        .slice(0, 6),
+      .slice(0, 6),
     [activeRouteStopIds, areaInventory, logEntries, tasteFeedback, tastePassport, tastePreferences]
   );
+  const personalizedScoreById = useMemo(
+    () =>
+      Object.fromEntries(
+        personalizedPicks.map((pick) => [pick.exhibition.id, pick.score] as const)
+      ),
+    [personalizedPicks]
+  );
+  const swapCandidatesByStopId = useMemo(
+    () =>
+      new Map(
+        displayWalkPlan.stops.map((stop) => [
+          stop.exhibition.id,
+          getGalleryRouteSwapCandidates({
+            walkPlan: displayWalkPlan,
+            stopId: stop.exhibition.id,
+            exhibitions: galleryExhibitions,
+            savedIds,
+            referenceNow,
+            personalizedScores: personalizedScoreById,
+            limit: 2
+          })
+        ] as const)
+      ),
+    [displayWalkPlan, personalizedScoreById, savedIds]
+  );
+  const selectedRouteSwapCandidates = selectedDisplayRouteStop
+    ? swapCandidatesByStopId.get(selectedDisplayRouteStop.exhibition.id) ?? []
+    : [];
+  const focusedRouteStopId =
+    highlightedRouteStopId ?? displayRouteMapModel.currentPin?.id ?? displayWalkPlan.startStopId;
+  const focusedRouteSwapCandidates = focusedRouteStopId
+    ? swapCandidatesByStopId.get(focusedRouteStopId) ?? []
+    : [];
   const feedbackByExhibitionId = useMemo(
     () => new Map(tasteFeedback.map((item) => [item.exhibitionId, item])),
     [tasteFeedback]
@@ -2898,14 +3172,29 @@ export function GalleryApp() {
   const activeWalkShareCard = useMemo(
     () =>
       createGalleryWalkShareCard({
-        walkPlan: activeWalkPlan ?? walkPlan,
+        walkPlan:
+          activeWalkSession?.status === "active" && !hasDraftWalk && activeWalkPlan
+            ? activeWalkPlan
+            : displayWalkPlan,
         session: activeWalkSession,
         recap: activeWalkRecap,
         badges: passportBadges,
         stamps: passportStamps
       }),
-    [activeWalkPlan, activeWalkRecap, activeWalkSession, passportBadges, passportStamps, walkPlan]
+    [
+      activeWalkPlan,
+      activeWalkRecap,
+      activeWalkSession,
+      displayWalkPlan,
+      hasDraftWalk,
+      passportBadges,
+      passportStamps
+    ]
   );
+  const showFirstRunPanel =
+    firstRunChoice !== "dismissed" &&
+    (!firstRunCompleted ||
+      (activeWalkSession?.status === "active" && firstRunChoice !== "resume-walk"));
 
   function resetMarket(areaId: GalleryAreaId) {
     setSelectedAreaId(areaId);
@@ -2915,6 +3204,33 @@ export function GalleryApp() {
     setVerifiedOnly(false);
     setWalkMode("quick-loop");
     setSelectedExhibitionId(undefined);
+  }
+
+  function completeFirstRun(choice: GalleryFirstRunChoice) {
+    setFirstRunChoice(choice);
+    setFirstRunCompleted(true);
+  }
+
+  function chooseFindWalkFirstRun() {
+    completeFirstRun("find-walk");
+    setActiveLens("open-now");
+    setShareStatus("Showing walk-ready open galleries first.");
+  }
+
+  function chooseTasteQuizFirstRun() {
+    completeFirstRun("taste-quiz");
+    setWalkMode("for-you");
+    setShareStatus("Taste quiz and For You route are ready below.");
+  }
+
+  function chooseResumeWalkFirstRun() {
+    completeFirstRun("resume-walk");
+    resumeWalk();
+    setShareStatus("Active walk resumed.");
+  }
+
+  function dismissFirstRun() {
+    completeFirstRun("dismissed");
   }
 
   function setLogStatus(exhibitionId: string, status: GalleryLogStatus) {
@@ -2982,13 +3298,13 @@ export function GalleryApp() {
   }
 
   async function copyCurrentItinerary() {
-    const copied = await writeTextToClipboard(createGalleryWalkItineraryText(walkPlan, activeWalkSession));
+    const copied = await writeTextToClipboard(createGalleryWalkItineraryText(displayWalkPlan, activeWalkSession));
 
     setShareStatus(copied ? "Itinerary copied." : "Itinerary ready to copy from the route card.");
   }
 
   async function shareCurrentRoute() {
-    const fallbackPayload = createGalleryWalkShareSummary(walkPlan, activeWalkRecap);
+    const fallbackPayload = createGalleryWalkShareSummary(displayWalkPlan, activeWalkRecap);
     const payload = activeWalkShareCard
       ? {
           title: activeWalkShareCard.title,
@@ -3006,7 +3322,7 @@ export function GalleryApp() {
   }
 
   function saveCurrentWalk() {
-    const savedWalk = createSavedGalleryWalk(walkPlan, activeWalkSession, referenceNow);
+    const savedWalk = createSavedGalleryWalk(displayWalkPlan, activeWalkSession, referenceNow);
 
     setSavedWalks((walks) => [
       savedWalk,
@@ -3023,6 +3339,47 @@ export function GalleryApp() {
     recordTasteFeedback(exhibition.id, "more-like-this");
   }
 
+  function replaceRouteStop(stopId: string, replacementId: string) {
+    const replacement = galleryExhibitions.find((exhibition) => exhibition.id === replacementId);
+
+    if (!replacement) {
+      return;
+    }
+
+    const alreadyInDisplayedRoute = displayWalkPlan.stops.some(
+      (stop) => stop.exhibition.id === replacementId
+    );
+
+    if (alreadyInDisplayedRoute) {
+      setShareStatus("That exhibition is already in this route.");
+      return;
+    }
+
+    const activeStopIds = new Set(activeWalkPlan?.stops.map((stop) => stop.exhibition.id) ?? []);
+    const replacingActiveWalk =
+      activeWalkSession?.status === "active" && !activeWalkIsDraft && activeStopIds.has(stopId);
+
+    if (replacingActiveWalk) {
+      setActiveWalkSession((session) =>
+        session ? replaceGalleryWalkSessionStop(session, stopId, replacementId, referenceNow) : session
+      );
+      setShareStatus(`Active walk updated with ${replacement.galleryName}.`);
+    } else {
+      setDraftWalkStopIds(
+        walkPlan.stops.map((stop) =>
+          stop.exhibition.id === stopId ? replacementId : stop.exhibition.id
+        )
+      );
+      setShareStatus(
+        activeWalkSession?.status === "active"
+          ? `Draft route swapped in ${replacement.galleryName}. Active walk is unchanged.`
+          : `Route swapped in ${replacement.galleryName}.`
+      );
+    }
+
+    setHighlightedRouteStopId(replacementId);
+  }
+
   function addExhibitionToActiveWalk(exhibition: GalleryExhibition) {
     const alreadyInActiveRoute = activeWalkPlan?.stops.some((stop) =>
       stop.exhibitions.some((candidate) => candidate.id === exhibition.id)
@@ -3030,6 +3387,12 @@ export function GalleryApp() {
 
     setLogStatus(exhibition.id, "want-to-see");
     recordTasteFeedback(exhibition.id, "more-like-this");
+
+    if (!alreadyInActiveRoute && detailSwapTargetStop) {
+      replaceRouteStop(detailSwapTargetStop.exhibition.id, exhibition.id);
+      return;
+    }
+
     setShareStatus(
       alreadyInActiveRoute
         ? "Already in the displayed route."
@@ -3100,6 +3463,8 @@ export function GalleryApp() {
     }
 
     setActiveWalkSession(createGalleryWalkSession(walkPlan, referenceNow));
+    setDraftWalkStopIds(undefined);
+    completeFirstRun("find-walk");
   }
 
   function resumeWalk() {
@@ -3208,7 +3573,9 @@ export function GalleryApp() {
       completedWalkSessions,
       tasteFeedback,
       tastePreferences,
-      savedWalks
+      savedWalks,
+      firstRunChoice,
+      firstRunCompleted
     });
   }, [
     activeLens,
@@ -3217,6 +3584,8 @@ export function GalleryApp() {
     completedQuestIds,
     completedWalkSessions,
     earnedBadges,
+    firstRunChoice,
+    firstRunCompleted,
     logEntries,
     quizAnswers,
     savedAlertArtists,
@@ -3270,6 +3639,19 @@ export function GalleryApp() {
               </View>
             </View>
           </ImageBackground>
+
+          {showFirstRunPanel ? (
+            <FirstRunChoicePanel
+              hasActiveWalk={activeWalkSession?.status === "active"}
+              verifiedCount={sourceTrust.verifiedExhibitionCount}
+              reviewCount={sourceTrust.fixtureExhibitionCount + sourceTrust.needsReviewExhibitionCount}
+              freshnessLabel={freshnessAudit.summaryLabel}
+              onFindWalk={chooseFindWalkFirstRun}
+              onTasteQuiz={chooseTasteQuizFirstRun}
+              onResumeWalk={chooseResumeWalkFirstRun}
+              onDismiss={dismissFirstRun}
+            />
+          ) : null}
 
           <GalleryConciergePanel
             suggestions={conciergeSuggestions}
@@ -3555,7 +3937,7 @@ export function GalleryApp() {
             <View>
               <Text style={styles.sectionTitle}>Map Walk Planner</Text>
               <Text style={styles.sectionSubtitle}>
-                {selectedNeighborhood ?? walkPlan.neighborhood} - {galleryWalkModeLabels[walkMode]}
+                {selectedNeighborhood ?? displayWalkPlan.neighborhood} - {galleryWalkModeLabels[displayWalkPlan.mode]}
               </Text>
             </View>
             <Route size={21} color={colors.teal} />
@@ -3563,12 +3945,12 @@ export function GalleryApp() {
           <View style={styles.routeCommand}>
             <View style={styles.routeCommandCopy}>
               <Text style={styles.routeCommandKicker}>Recommended walk</Text>
-              <Text style={styles.routeCommandTitle}>{walkPlan.summary}</Text>
+              <Text style={styles.routeCommandTitle}>{displayWalkPlan.summary}</Text>
               <View style={styles.routeStartRow}>
-                <Text style={styles.routeStartPill}>Start {startStop?.exhibition.galleryName ?? "where open"}</Text>
-                <Text style={styles.routeStartPill}>Next {nextStop?.exhibition.galleryName ?? "best nearby stop"}</Text>
+                <Text style={styles.routeStartPill}>Start {displayStartStop?.exhibition.galleryName ?? "where open"}</Text>
+                <Text style={styles.routeStartPill}>Next {plannerNextStop?.exhibition.galleryName ?? "best nearby stop"}</Text>
               </View>
-              <Text style={styles.routeCommandMeta}>{walkPlan.guidance}</Text>
+              <Text style={styles.routeCommandMeta}>{displayWalkPlan.guidance}</Text>
             </View>
             <View style={styles.routeQualityStack}>
               <Text style={styles.routeQualityLabel}>{displayRouteMapModel.confidence.score}</Text>
@@ -3600,10 +3982,10 @@ export function GalleryApp() {
             </View>
           ) : null}
           <View style={styles.routePlannerFacts}>
-            <Text style={styles.routePlannerFact}>{walkPlan.stops.length} stops</Text>
-            <Text style={styles.routePlannerFact}>{walkPlan.totalMinutes} min</Text>
-            <Text style={styles.routePlannerFact}>{walkPlan.totalDistanceMiles.toFixed(1)} mi</Text>
-            <Text style={styles.routePlannerFact}>{walkPlan.savedStopCount} saved</Text>
+            <Text style={styles.routePlannerFact}>{displayWalkPlan.stops.length} stops</Text>
+            <Text style={styles.routePlannerFact}>{displayWalkPlan.totalMinutes} min</Text>
+            <Text style={styles.routePlannerFact}>{displayWalkPlan.totalDistanceMiles.toFixed(1)} mi</Text>
+            <Text style={styles.routePlannerFact}>{displayWalkPlan.savedStopCount} saved</Text>
             <Text style={styles.routePlannerFact}>{freshnessAudit.officialLinkCount} official links</Text>
           </View>
           <View style={styles.routeGuidance}>
@@ -3615,17 +3997,17 @@ export function GalleryApp() {
               {displayRouteMapModel.confidence.routeAdvice.join(" ")}
             </Text>
             <View style={styles.routeReasonRow}>
-              {walkPlan.selectionReasons.slice(0, 4).map((reason) => (
+              {displayWalkPlan.selectionReasons.slice(0, 4).map((reason) => (
                 <Text key={reason} style={styles.routeReasonPill}>{reason}</Text>
               ))}
             </View>
-            {walkPlan.routeMapUrl ? (
+            {displayWalkPlan.routeMapUrl ? (
               <Pressable
                 accessibilityRole="link"
-                accessibilityLabel={`Open full ${walkPlan.neighborhood} walking route in maps`}
+                accessibilityLabel={`Open full ${displayWalkPlan.neighborhood} walking route in maps`}
                 onPress={() => {
-                  if (walkPlan.routeMapUrl) {
-                    void Linking.openURL(walkPlan.routeMapUrl);
+                  if (displayWalkPlan.routeMapUrl) {
+                    void Linking.openURL(displayWalkPlan.routeMapUrl);
                   }
                 }}
                 style={styles.routeMapButton}
@@ -3664,29 +4046,37 @@ export function GalleryApp() {
           <RoutePreview
             routeMapModel={displayRouteMapModel}
             highlightedStopId={highlightedRouteStopId}
+            focusedSwapCandidates={focusedRouteSwapCandidates}
             onHighlightStop={setHighlightedRouteStopId}
+            onSwapFocusedStop={(replacementId) => {
+              if (focusedRouteStopId) {
+                replaceRouteStop(focusedRouteStopId, replacementId);
+              }
+            }}
           />
           <View style={styles.walkStops}>
-            {walkPlan.stops.length === 0 ? (
+            {displayWalkPlan.stops.length === 0 ? (
               <View style={styles.emptyRouteState}>
                 <Text style={styles.emptyRouteText}>
                   No walk-ready route yet. Try another nearby cluster or switch route mode.
                 </Text>
               </View>
             ) : (
-              walkPlan.stops.map((stop, index) => (
+              displayWalkPlan.stops.map((stop, index) => (
                 <WalkStopRow
                   key={stop.exhibition.id}
                   stop={stop}
-                  leg={index > 0 ? walkPlan.legs[index - 1] : undefined}
-                  isStart={walkPlan.startStopId === stop.exhibition.id}
-                  isNext={walkPlan.nextStopId === stop.exhibition.id}
-                  isLast={index === walkPlan.stops.length - 1}
+                  leg={index > 0 ? displayWalkPlan.legs[index - 1] : undefined}
+                  isStart={displayWalkPlan.startStopId === stop.exhibition.id}
+                  isNext={displayWalkPlan.nextStopId === stop.exhibition.id}
+                  isLast={index === displayWalkPlan.stops.length - 1}
                   progress={routeStopProgressById?.[stop.exhibition.id]}
                   freshnessLabel={getGalleryFreshnessState(stop.exhibition, referenceNow).label}
                   advisory={displayRouteAdvisoryById.get(stop.exhibition.id)}
                   highlighted={highlightedRouteStopId === stop.exhibition.id}
+                  swapCandidates={swapCandidatesByStopId.get(stop.exhibition.id) ?? []}
                   onHighlight={() => setHighlightedRouteStopId(stop.exhibition.id)}
+                  onSwapStop={(replacementId) => replaceRouteStop(stop.exhibition.id, replacementId)}
                 />
               ))
             )}
@@ -3769,6 +4159,9 @@ export function GalleryApp() {
               routeConfidenceLabel={displayRouteMapModel.confidence.label}
               isInDisplayedRoute={selectedIsInDisplayedRoute}
               hasActiveWalk={activeWalkSession?.status === "active"}
+              displayRouteStop={selectedDisplayRouteStop}
+              swapTargetStop={detailSwapTargetStop}
+              swapCandidates={selectedRouteSwapCandidates}
               conciergeReasons={selectedConciergeReasons}
               feedback={feedbackByExhibitionId.get(selectedExhibition.id)}
               onStatus={(status) => setLogStatus(selectedExhibition.id, status)}
@@ -3778,6 +4171,10 @@ export function GalleryApp() {
               }
               onSkipRouteStop={() =>
                 skipRouteStop(selectedActiveWalkStop?.exhibition.id, selectedExhibition.id)
+              }
+              onSwapRouteStop={replaceRouteStop}
+              onSwapSelectedIntoRoute={(targetStopId) =>
+                replaceRouteStop(targetStopId, selectedExhibition.id)
               }
               onFeedback={(kind) => recordTasteFeedback(selectedExhibition.id, kind)}
               onStartRouteFromHere={() => startRouteFromExhibition(selectedExhibition)}
@@ -4585,6 +4982,93 @@ const styles = StyleSheet.create({
     color: colors.paper,
     fontSize: 11,
     fontWeight: "800",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  firstRunPanel: {
+    backgroundColor: colors.paper,
+    borderColor: "rgba(17, 17, 17, 0.08)",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.md,
+    marginHorizontal: spacing.lg,
+    padding: spacing.md,
+    ...shadows.card
+  },
+  firstRunHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: spacing.md,
+    justifyContent: "space-between"
+  },
+  firstRunTitle: {
+    color: colors.ink,
+    fontSize: 20,
+    fontWeight: "900",
+    lineHeight: 25,
+    marginTop: spacing.xs
+  },
+  firstRunDismissButton: {
+    alignItems: "center",
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    height: 32,
+    justifyContent: "center",
+    width: 32
+  },
+  firstRunActionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm
+  },
+  firstRunPrimaryAction: {
+    alignItems: "center",
+    backgroundColor: colors.ink,
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    gap: spacing.xs,
+    justifyContent: "center",
+    minHeight: 40,
+    paddingHorizontal: spacing.md
+  },
+  firstRunPrimaryActionText: {
+    color: colors.paper,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  firstRunSecondaryAction: {
+    alignItems: "center",
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.xs,
+    justifyContent: "center",
+    minHeight: 40,
+    paddingHorizontal: spacing.md
+  },
+  firstRunSecondaryActionText: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  firstRunTrustRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  firstRunTrustPill: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "900",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -5425,6 +5909,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900"
   },
+  routePreviewSwapPanel: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.sm,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.md,
+    padding: spacing.sm
+  },
   routeConfidencePanel: {
     backgroundColor: colors.ink,
     borderRadius: radii.md,
@@ -5771,6 +6265,57 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     lineHeight: 16
+  },
+  swapOptionsBlock: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    padding: spacing.sm
+  },
+  swapOptionsTitle: {
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  swapCandidateRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm,
+    justifyContent: "space-between"
+  },
+  swapCandidateCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  swapCandidateTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "900",
+    lineHeight: 17
+  },
+  swapCandidateMeta: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "800",
+    lineHeight: 15,
+    marginTop: 2
+  },
+  swapCandidateButton: {
+    alignItems: "center",
+    backgroundColor: colors.ink,
+    borderRadius: radii.pill,
+    justifyContent: "center",
+    minHeight: 30,
+    paddingHorizontal: spacing.sm
+  },
+  swapCandidateButtonText: {
+    color: colors.paper,
+    fontSize: 11,
+    fontWeight: "900"
   },
   routeReasonRow: {
     flexDirection: "row",
@@ -6171,6 +6716,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     lineHeight: 17
+  },
+  detailSwapPanel: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    padding: spacing.sm
+  },
+  detailSwapIntoRouteButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: colors.paper,
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    gap: spacing.xs,
+    justifyContent: "center",
+    marginTop: spacing.sm,
+    minHeight: 36,
+    paddingHorizontal: spacing.md
+  },
+  detailSwapIntoRouteButtonText: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "900"
   },
   currentActiveRouteDetail: {
     backgroundColor: colors.paper,

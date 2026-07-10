@@ -9,7 +9,8 @@ export type GalleryWalkSessionAction =
   | "skip"
   | "advance"
   | "complete"
-  | "resume";
+  | "resume"
+  | "replace-stop";
 
 export type GalleryWalkSession = {
   id: string;
@@ -232,6 +233,34 @@ export function skipGalleryWalkStop(
       currentStopId: nextStopId,
       visitedStopIds,
       skippedStopIds
+    },
+    now
+  );
+}
+
+export function replaceGalleryWalkSessionStop(
+  session: GalleryWalkSession,
+  fromStopId: string,
+  toStopId: string,
+  now: string
+): GalleryWalkSession {
+  if (!fromStopId || !toStopId || fromStopId === toStopId) {
+    return withUpdatedSession(session, now);
+  }
+
+  const orderedStopIds = uniqueIds(
+    session.orderedStopIds.map((stopId) => (stopId === fromStopId ? toStopId : stopId))
+  );
+  const replaceProgressId = (stopId: string) => (stopId === fromStopId ? toStopId : stopId);
+
+  return withUpdatedSession(
+    {
+      ...session,
+      orderedStopIds,
+      currentStopId:
+        session.currentStopId === fromStopId ? toStopId : session.currentStopId,
+      visitedStopIds: uniqueIds(session.visitedStopIds.map(replaceProgressId)),
+      skippedStopIds: uniqueIds(session.skippedStopIds.map(replaceProgressId))
     },
     now
   );

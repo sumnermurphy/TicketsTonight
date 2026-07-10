@@ -47,6 +47,14 @@ const monFri10To6: GalleryHoursInterval[] = [
   { day: 5, opens: "10:00", closes: "18:00" }
 ];
 
+const monFri12To6: GalleryHoursInterval[] = [
+  { day: 1, opens: "12:00", closes: "18:00" },
+  { day: 2, opens: "12:00", closes: "18:00" },
+  { day: 3, opens: "12:00", closes: "18:00" },
+  { day: 4, opens: "12:00", closes: "18:00" },
+  { day: 5, opens: "12:00", closes: "18:00" }
+];
+
 const monFri12To5: GalleryHoursInterval[] = [
   { day: 1, opens: "12:00", closes: "17:00" },
   { day: 2, opens: "12:00", closes: "17:00" },
@@ -275,6 +283,28 @@ export const gallerySourceCandidates: GallerySourceCandidate[] = [
     notes: "Official exhibitions page lists two current Broadway shows through July 2026 plus Broadway addresses and Tuesday-Saturday hours."
   },
   {
+    id: "source-canada-tribeca",
+    galleryName: "CANADA",
+    galleryKind: "artist-run",
+    areaId: "nyc",
+    neighborhood: "Tribeca",
+    city: "New York",
+    address: "60 Lispenard St, New York, NY",
+    coordinates: { latitude: 40.7199, longitude: -74.004 },
+    websiteUrl: "https://www.canadanewyork.com",
+    exhibitionsUrl: "https://www.canadanewyork.com/exhibitions",
+    hoursUrl: "https://www.canadanewyork.com/information",
+    contactUrl: "https://www.canadanewyork.com/information",
+    sourceType: "commercial-gallery",
+    preferredImportLane: "official-page-ready",
+    sourceLegalStatus: "official-public-page",
+    sourceFreshness: "fresh",
+    lastCheckedAt: "2026-07-10T11:25:00-04:00",
+    confidence: 0.91,
+    defaultHours: monFri10To6,
+    notes: "Official exhibitions page lists Plants, Animals and Sky at 60 Lispenard St, June 30-August 7, 2026; information page lists Mon-Fri 10am-6pm hours."
+  },
+  {
     id: "source-magenta-plains-chinatown",
     galleryName: "Magenta Plains",
     galleryKind: "emerging",
@@ -339,6 +369,28 @@ export const gallerySourceCandidates: GallerySourceCandidate[] = [
     confidence: 0.91,
     defaultHours: monFri12To5,
     notes: "Official exhibitions page lists three current Elizabeth Street shows through July 31, 2026 and summer Monday-Friday hours."
+  },
+  {
+    id: "source-56-henry-les",
+    galleryName: "56 Henry",
+    galleryKind: "emerging",
+    areaId: "nyc",
+    neighborhood: "Lower East Side",
+    city: "New York",
+    address: "56 Henry St, New York, NY",
+    coordinates: { latitude: 40.7137, longitude: -73.9945 },
+    websiteUrl: "https://56henry.nyc",
+    exhibitionsUrl: "https://56henry.nyc/exhibitions",
+    hoursUrl: "https://56henry.nyc/gallery",
+    contactUrl: "https://56henry.nyc/gallery",
+    sourceType: "commercial-gallery",
+    preferredImportLane: "official-page-ready",
+    sourceLegalStatus: "official-public-page",
+    sourceFreshness: "fresh",
+    lastCheckedAt: "2026-07-10T11:15:00-04:00",
+    confidence: 0.9,
+    defaultHours: monFri12To6,
+    notes: "Official exhibitions and detail pages list Michele Cesaratto's Journey to the West at 56 Henry Street, May 20-July 15, 2026; gallery page lists Mon-Fri 12-6pm hours."
   },
   {
     id: "source-miguel-abreu-les",
@@ -750,13 +802,13 @@ export const gallerySourceCandidates: GallerySourceCandidate[] = [
     hoursUrl: "https://www.carriehaddadgallery.com/contact",
     contactUrl: "https://www.carriehaddadgallery.com/contact",
     sourceType: "commercial-gallery",
-    preferredImportLane: "manual-seed",
+    preferredImportLane: "official-page-ready",
     sourceLegalStatus: "official-public-page",
-    sourceFreshness: "needs-review",
-    lastCheckedAt: "2026-06-24T09:00:00-04:00",
-    confidence: 0.78,
+    sourceFreshness: "fresh",
+    lastCheckedAt: "2026-07-10T11:20:00-04:00",
+    confidence: 0.88,
     defaultHours: hudsonThuSun,
-    notes: "Warren Street anchor source; source candidate before live parsing."
+    notes: "Official current show page verifies Between Here and Home, May 22-July 12, 2026; keep this as manual official-page verification, not automated live parsing."
   },
   {
     id: "source-september-hudson",

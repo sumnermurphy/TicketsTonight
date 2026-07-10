@@ -56,6 +56,14 @@ const monFri10To6: GalleryHoursInterval[] = [
   { day: 5, opens: "10:00", closes: "18:00" }
 ];
 
+const monFri12To6: GalleryHoursInterval[] = [
+  { day: 1, opens: "12:00", closes: "18:00" },
+  { day: 2, opens: "12:00", closes: "18:00" },
+  { day: 3, opens: "12:00", closes: "18:00" },
+  { day: 4, opens: "12:00", closes: "18:00" },
+  { day: 5, opens: "12:00", closes: "18:00" }
+];
+
 const monFri12To5: GalleryHoursInterval[] = [
   { day: 1, opens: "12:00", closes: "17:00" },
   { day: 2, opens: "12:00", closes: "17:00" },
@@ -67,6 +75,13 @@ const monFri12To5: GalleryHoursInterval[] = [
 const hudsonFriSun: GalleryHoursInterval[] = [
   { day: 5, opens: "12:00", closes: "18:00" },
   { day: 6, opens: "12:00", closes: "18:00" },
+  { day: 0, opens: "12:00", closes: "17:00" }
+];
+
+const hudsonThuSun: GalleryHoursInterval[] = [
+  { day: 4, opens: "11:00", closes: "17:00" },
+  { day: 5, opens: "11:00", closes: "18:00" },
+  { day: 6, opens: "11:00", closes: "18:00" },
   { day: 0, opens: "12:00", closes: "17:00" }
 ];
 
@@ -1115,6 +1130,54 @@ export const verifiedGalleryExhibitions: GalleryExhibition[] = [
     whyGoSignals: ["chinatown", "same-building", "video"]
   }),
   createVerifiedExhibition({
+    id: "verified-canada-plants-animals-sky",
+    sourceCandidateId: "source-canada-tribeca",
+    importRecordId: "verified-record-canada-plants-animals-sky",
+    title: "Plants, Animals and Sky",
+    artists: ["Group exhibition"],
+    galleryName: "CANADA",
+    galleryKind: "artist-run",
+    areaId: "nyc",
+    neighborhood: "Tribeca",
+    address: "60 Lispenard St, New York, NY",
+    coordinates: { latitude: 40.7199, longitude: -74.004 },
+    distanceMiles: 0.5,
+    mediums: ["painting", "sculpture", "photography"],
+    opensAt: "2026-06-30T10:00:00-04:00",
+    closesAt: "2026-08-07T18:00:00-04:00",
+    hours: monFri10To6,
+    externalUrl: "https://www.canadanewyork.com/exhibitions/plants-animals-and-sky",
+    verifiedAsOf: "2026-07-10T11:25:00-04:00",
+    sourceCheckedAt: "2026-07-10T11:25:00-04:00",
+    imageTone: "#556A4B",
+    description: "A verified Tribeca current show at CANADA's 60 Lispenard Street space, checked against the official exhibition and information pages.",
+    whyGoSignals: ["tribeca", "artist-run", "official-page"]
+  }),
+  createVerifiedExhibition({
+    id: "verified-56-henry-journey-to-the-west",
+    sourceCandidateId: "source-56-henry-les",
+    importRecordId: "verified-record-56-henry-journey-to-the-west",
+    title: "Journey to the West",
+    artists: ["Michele Cesaratto"],
+    galleryName: "56 Henry",
+    galleryKind: "emerging",
+    areaId: "nyc",
+    neighborhood: "Lower East Side",
+    address: "56 Henry St, New York, NY",
+    coordinates: { latitude: 40.7137, longitude: -73.9945 },
+    distanceMiles: 0.75,
+    mediums: ["painting", "prints"],
+    opensAt: "2026-05-20T12:00:00-04:00",
+    closesAt: "2026-07-15T18:00:00-04:00",
+    hours: monFri12To6,
+    externalUrl: "https://56henry.nyc/exhibitions/journey-to-the-west",
+    verifiedAsOf: "2026-07-10T11:15:00-04:00",
+    sourceCheckedAt: "2026-07-10T11:15:00-04:00",
+    imageTone: "#5F735C",
+    description: "A verified Lower East Side show from 56 Henry's official current and detail pages, useful for downtown route depth.",
+    whyGoSignals: ["lower-east-side", "emerging-gallery", "official-page"]
+  }),
+  createVerifiedExhibition({
     id: "verified-skarstedt-faces-figures",
     sourceCandidateId: "source-skarstedt-ues",
     importRecordId: "verified-record-skarstedt-faces-figures",
@@ -1179,6 +1242,39 @@ export const verifiedGalleryExhibitions: GalleryExhibition[] = [
     imageTone: "#6F7F75",
     description: "A verified Warren Street current show; Hudson remains a smaller market with thinner live coverage.",
     whyGoSignals: ["warren-street", "prints", "small-market-test"]
+  }),
+  createVerifiedExhibition({
+    id: "verified-carrie-haddad-between-here-and-home",
+    sourceCandidateId: "source-carrie-haddad-hudson",
+    importRecordId: "verified-record-carrie-haddad-between-here-and-home",
+    title: "Between Here and Home",
+    artists: ["Fred Cohen", "Frank DePietro", "Deb Lawrence", "Olan Quattro", "ransome"],
+    galleryName: "Carrie Haddad Gallery",
+    galleryKind: "emerging",
+    areaId: "hudson",
+    neighborhood: "Warren Street",
+    address: "622 Warren St, Hudson, NY",
+    coordinates: { latitude: 42.2499, longitude: -73.7835 },
+    distanceMiles: 0.3,
+    mediums: ["painting", "mixed-media"],
+    opensAt: "2026-05-22T11:00:00-04:00",
+    closesAt: "2026-07-12T17:00:00-04:00",
+    specialEvents: [
+      {
+        id: "verified-carrie-haddad-between-here-and-home-opening",
+        kind: "opening-reception",
+        title: "Opening reception",
+        startsAt: "2026-05-23T17:00:00-04:00",
+        endsAt: "2026-05-23T19:00:00-04:00"
+      }
+    ],
+    hours: hudsonThuSun,
+    externalUrl: "https://carriehaddadgallery.com/show/carrie-haddad-gallery-ransome-fred-cohen-deb-lawrence-olan-quattro-frank-depietro",
+    verifiedAsOf: "2026-07-10T11:20:00-04:00",
+    sourceCheckedAt: "2026-07-10T11:20:00-04:00",
+    imageTone: "#756650",
+    description: "A verified Warren Street current exhibition from Carrie Haddad Gallery's official show page; it adds a second real Hudson walk stop while preserving small-market honesty.",
+    whyGoSignals: ["warren-street", "small-market-test", "official-page"]
   }),
   createVerifiedExhibition({
     id: "verified-david-zwirner-california-light-space",

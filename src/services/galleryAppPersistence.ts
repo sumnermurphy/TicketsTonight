@@ -15,6 +15,7 @@ import type { GalleryWalkSession } from "./galleryWalkSession";
 import type { GallerySavedWalk } from "./galleryWalkSharing";
 
 export type GalleryPersistedLens = "all" | "open-now" | "opening-tonight" | "last-chance";
+export type GalleryFirstRunChoice = "find-walk" | "taste-quiz" | "resume-walk" | "dismissed";
 
 export type GalleryAppPersistedState = {
   version: 1;
@@ -39,6 +40,8 @@ export type GalleryAppPersistedState = {
   tasteFeedback: GalleryTasteFeedback[];
   tastePreferences?: GalleryEditableTastePreference;
   savedWalks: GallerySavedWalk[];
+  firstRunChoice?: GalleryFirstRunChoice;
+  firstRunCompleted: boolean;
 };
 
 export type GalleryStorageAdapter = {
@@ -73,6 +76,15 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function sanitizeFirstRunChoice(value: unknown): GalleryFirstRunChoice | undefined {
+  return value === "find-walk" ||
+    value === "taste-quiz" ||
+    value === "resume-walk" ||
+    value === "dismissed"
+    ? value
+    : undefined;
 }
 
 function sanitizeState(value: unknown): GalleryAppPersistedState | undefined {
@@ -137,7 +149,9 @@ function sanitizeState(value: unknown): GalleryAppPersistedState | undefined {
     tastePreferences: isObject(value.tastePreferences)
       ? (value.tastePreferences as GalleryEditableTastePreference)
       : undefined,
-    savedWalks: Array.isArray(value.savedWalks) ? (value.savedWalks as GallerySavedWalk[]) : []
+    savedWalks: Array.isArray(value.savedWalks) ? (value.savedWalks as GallerySavedWalk[]) : [],
+    firstRunChoice: sanitizeFirstRunChoice(value.firstRunChoice),
+    firstRunCompleted: value.firstRunCompleted === true
   };
 }
 

@@ -95,6 +95,28 @@ export type GalleryWalkPlan = {
   selectionReasons: string[];
 };
 
+export type GalleryRouteSwapCandidate = {
+  stopId: string;
+  exhibition: GalleryExhibition;
+  status: GalleryVisitStatus;
+  distanceMiles: number;
+  walkingMinutes: number;
+  score: number;
+  reasons: string[];
+  trustLabel: string;
+  mapUrl: string;
+};
+
+export type GalleryRouteSwapInput = {
+  walkPlan: GalleryWalkPlan;
+  stopId: string;
+  exhibitions?: GalleryExhibition[];
+  savedIds?: string[];
+  referenceNow?: string;
+  personalizedScores?: Record<string, number>;
+  limit?: number;
+};
+
 export type GalleryNeighborhoodIntelligence = {
   neighborhood: string;
   walkLabel: string;
@@ -1513,6 +1535,345 @@ export function createGalleryWalkPlan(input: GalleryWalkPlanInput): GalleryWalkP
     readinessCopy,
     selectionReasons
   };
+}
+
+function createGalleryWalkPlanFromOrderedExhibitions(input: {
+  basePlan: GalleryWalkPlan;
+  orderedExhibitions: GalleryExhibition[];
+  sourceExhibitions: GalleryExhibition[];
+  savedIds?: string[];
+  referenceNow: string;
+  personalizedReasons?: Record<string, string[]>;
+  personalizedScores?: Map<string, number>;
+}): GalleryWalkPlan {
+  const savedIdSet = new Set(input.savedIds ?? []);
+  const minutesAtStop = 18;
+  const modeLabel = walkModeConfig[input.basePlan.mode].label;
+  const neighborhood = input.basePlan.neighborhood ?? "Gallery district";
+  const stops = input.orderedExhibitions.map((exhibition, index): GalleryWalkStop => {
+    const previous = input.orderedExhibitions[index - 1];
+    const groupedExhibitions = sortRouteGroupExhibitions(
+      input.sourceExhibitions.filter(
+        (candidate) =>
+          candidate.id === exhibition.id ||
+          (candidate.areaId === exhibition.areaId &&
+            candidate.neighborhood === exhibition.neighborhood &&
+            getGalleryRouteGroupKey(candidate) === getGalleryRouteGroupKey(exhibition) &&
+            isOnView(candidate, input.referenceNow))
+      ),
+      input.referenceNow,
+      savedIdSet,
+      input.basePlan.mode,
+      input.personalizedScores
+    );
+    const grouped = [
+      exhibition,
+      ...groupedExhibitions.filter((candidate) => candidate.id !== exhibition.id)
+    ];
+    const routeReasons = getRouteReasonSet(exhibition, previous, input.referenceNow, {
+      groupedExhibitionCount: grouped.length,
+      mode: input.basePlan.mode
+    });
+    const personalizedReasons = input.personalizedReasons?.[exhibition.id] ?? [];
+    const whyGoReasons = getGalleryWhyGoReasons(
+      exhibition,
+      input.sourceExhibitions,
+      input.referenceNow,
+      input.savedIds ?? []
+    );
+    const savedReasons = grouped.some((candidate) => savedIdSet.has(candidate.id))
+      ? ["Saved by user"]
+      : [];
+
+    return {
+      exhibition,
+      exhibitions: grouped,
+      groupedExhibitionCount: grouped.length,
+      status: getGalleryVisitStatus(exhibition, input.referenceNow),
+      reasons: Array.from(
+        new Set([...savedReasons, ...personalizedReasons, ...routeReasons, ...whyGoReasons])
+      ).slice(0, 5),
+      isSaved: grouped.some((candidate) => savedIdSet.has(candidate.id)),
+      minutesAtStop: minutesAtStop + Math.min(12, Math.max(0, grouped.length - 1) * 6),
+      stopNumber: index + 1,
+      mapUrl: getGalleryStopMapUrl(exhibition)
+    };
+  });
+  const legs = stops.slice(1).map((stop, index): GalleryWalkLeg => {
+    const previous = stops[index];
+    const distance = previous
+      ? getDistanceMiles(previous.exhibition.coordinates, stop.exhibition.coordinates)
+      : 0;
+
+    return {
+      fromStopNumber: previous?.stopNumber ?? stop.stopNumber,
+      toStopNumber: stop.stopNumber,
+      fromExhibitionId: previous?.exhibition.id ?? stop.exhibition.id,
+      toExhibitionId: stop.exhibition.id,
+      distanceMiles: Number(distance.toFixed(2)),
+      walkingMinutes: getWalkingMinutes(distance),
+      mapUrl: previous ? getGalleryLegMapUrl(previous.exhibition, stop.exhibition) : stop.mapUrl
+    };
+  });
+  const routeDistance = legs.reduce((total, leg) => total + leg.distanceMiles, 0);
+  const walkingMinutes = legs.reduce((total, leg) => total + leg.walkingMinutes, 0);
+  const totalMinutes =
+    stops.reduce((total, stop) => total + stop.minutesAtStop, 0) + walkingMinutes;
+  const startStop = stops[0];
+  const nextStop = stops[1];
+  const { readinessLevel, readinessCopy } = getWalkReadiness(
+    stops,
+    neighborhood,
+    modeLabel,
+    input.basePlan.mode
+  );
+  const selectionReasons = Array.from(new Set(stops.flatMap((stop) => stop.reasons))).slice(0, 8);
+
+  return {
+    ...input.basePlan,
+    title: `${modeLabel}: ${neighborhood}`,
+    summary:
+      stops.length > 0
+        ? `${stops.length} stops, ${totalMinutes} minutes, ${routeDistance.toFixed(1)} miles.`
+        : `No ${modeLabel} is ready in ${neighborhood} yet.`,
+    stops,
+    legs,
+    savedStopCount: stops.filter((stop) => stop.isSaved).length,
+    totalMinutes,
+    totalDistanceMiles: Number(routeDistance.toFixed(2)),
+    startsAt: input.referenceNow,
+    canStartNow: startStop?.status === "open-now",
+    startStopId: startStop?.exhibition.id,
+    nextStopId: nextStop?.exhibition.id,
+    routeMapUrl: getGalleryDirectionsMapUrl(stops),
+    guidance: startStop
+      ? `Start here: ${startStop.exhibition.galleryName}. ${
+          nextStop
+            ? `Next stop: ${nextStop.exhibition.galleryName}, ${legs[0]?.walkingMinutes ?? 0} min walk.`
+            : "No second stop is strong enough yet."
+        }`
+      : `No ${modeLabel} is ready in ${neighborhood} yet.`,
+    readinessLevel,
+    readinessCopy,
+    selectionReasons
+  };
+}
+
+export function createGalleryWalkPlanFromStopIds(input: {
+  basePlan: GalleryWalkPlan;
+  stopIds: string[];
+  exhibitions?: GalleryExhibition[];
+  savedIds?: string[];
+  referenceNow?: string;
+  personalizedReasons?: Record<string, string[]>;
+  personalizedScores?: Record<string, number>;
+}): GalleryWalkPlan {
+  const referenceNow = input.referenceNow ?? input.basePlan.startsAt ?? defaultReferenceNow;
+  const sourceExhibitions = input.exhibitions ?? galleryExhibitions;
+  const sourceById = new Map(sourceExhibitions.map((exhibition) => [exhibition.id, exhibition]));
+  const baseById = new Map(
+    input.basePlan.stops.map((stop) => [stop.exhibition.id, stop.exhibition] as const)
+  );
+  const baseStopIds = input.basePlan.stops.map((stop) => stop.exhibition.id);
+  const orderedStopIds = Array.from(
+    new Set([
+      ...input.stopIds.filter((stopId) => sourceById.has(stopId) || baseById.has(stopId)),
+      ...baseStopIds
+    ])
+  ).slice(0, Math.max(baseStopIds.length, input.stopIds.length));
+  const orderedExhibitions = orderedStopIds
+    .map((stopId) => sourceById.get(stopId) ?? baseById.get(stopId))
+    .filter((exhibition): exhibition is GalleryExhibition => Boolean(exhibition));
+
+  if (orderedExhibitions.length === 0) {
+    return input.basePlan;
+  }
+
+  return createGalleryWalkPlanFromOrderedExhibitions({
+    basePlan: input.basePlan,
+    orderedExhibitions,
+    sourceExhibitions,
+    savedIds: input.savedIds,
+    referenceNow,
+    personalizedReasons: input.personalizedReasons,
+    personalizedScores: new Map(
+      Object.entries(input.personalizedScores ?? {}).map(([id, score]) => [
+        id,
+        Number(score)
+      ] as const)
+    )
+  });
+}
+
+function getSwapReasonSet(input: {
+  candidate: GalleryExhibition;
+  targetStop: GalleryWalkStop;
+  routeGalleryNames: Set<string>;
+  candidateDistance: number;
+  originalDistance: number;
+  referenceNow: string;
+  personalizedScore: number;
+}): string[] {
+  const reasons: string[] = [];
+  const trust = getGalleryInventoryTrust(input.candidate);
+  const status = getGalleryVisitStatus(input.candidate, input.referenceNow);
+
+  if (input.candidateDistance < input.originalDistance || input.candidateDistance <= 0.35) {
+    reasons.push("closer");
+  }
+
+  if (status === "open-now") {
+    reasons.push("open now");
+  }
+
+  if (trust.isVerified) {
+    reasons.push("verified source");
+  }
+
+  if (input.personalizedScore >= 6) {
+    reasons.push("better taste match");
+  }
+
+  if (!input.routeGalleryNames.has(getGalleryRouteNameKey(input.candidate))) {
+    reasons.push("avoids repeat gallery");
+  }
+
+  if (getDaysUntilGalleryCloses(input.candidate, input.referenceNow) <= 7) {
+    reasons.push("closing soon");
+  }
+
+  if (input.candidate.neighborhood === input.targetStop.exhibition.neighborhood) {
+    reasons.push("same neighborhood");
+  }
+
+  return Array.from(new Set(reasons)).slice(0, 5);
+}
+
+export function getGalleryRouteSwapCandidates(input: GalleryRouteSwapInput): GalleryRouteSwapCandidate[] {
+  const referenceNow = input.referenceNow ?? input.walkPlan.startsAt ?? defaultReferenceNow;
+  const sourceExhibitions = input.exhibitions ?? galleryExhibitions;
+  const targetIndex = input.walkPlan.stops.findIndex(
+    (stop) => stop.exhibition.id === input.stopId || stop.exhibitions.some((item) => item.id === input.stopId)
+  );
+  const targetStop = input.walkPlan.stops[targetIndex];
+
+  if (!targetStop) {
+    return [];
+  }
+
+  const stopIds = new Set(input.walkPlan.stops.flatMap((stop) => stop.exhibitions.map((item) => item.id)));
+  const routeGalleryNames = new Set(input.walkPlan.stops.map((stop) => getGalleryRouteNameKey(stop.exhibition)));
+  const personalizedScores = new Map(
+    Object.entries(input.personalizedScores ?? {}).map(([id, score]) => [id, Number(score)] as const)
+  );
+  const previousStop = input.walkPlan.stops[targetIndex - 1];
+  const nextStop = input.walkPlan.stops[targetIndex + 1];
+  const anchor = previousStop?.exhibition ?? nextStop?.exhibition ?? targetStop.exhibition;
+  const originalDistance = previousStop
+    ? getDistanceMiles(previousStop.exhibition.coordinates, targetStop.exhibition.coordinates)
+    : targetStop.exhibition.distanceMiles;
+  const inMarketCandidates = sourceExhibitions.filter(
+    (candidate) =>
+      candidate.areaId === input.walkPlan.areaId &&
+      !stopIds.has(candidate.id) &&
+      isOnView(candidate, referenceNow)
+  );
+  const sameNeighborhoodCandidates = inMarketCandidates.filter(
+    (candidate) => candidate.neighborhood === targetStop.exhibition.neighborhood
+  );
+  const neighborhoodPool =
+    sameNeighborhoodCandidates.length >= 2 ? sameNeighborhoodCandidates : inMarketCandidates;
+  const usableCandidates = neighborhoodPool.filter((candidate) =>
+    isRouteUsableStatus(getGalleryVisitStatus(candidate, referenceNow))
+  );
+  const verifiedCandidates = usableCandidates.filter((candidate) => {
+    const trust = getGalleryInventoryTrust(candidate);
+
+    return trust.isVerified || trust.kind === "partner-submitted";
+  });
+  const candidatePool =
+    verifiedCandidates.length > 0
+      ? verifiedCandidates
+      : usableCandidates.length > 0
+        ? usableCandidates
+        : neighborhoodPool;
+
+  return candidatePool
+    .map((candidate): GalleryRouteSwapCandidate => {
+      const status = getGalleryVisitStatus(candidate, referenceNow);
+      const candidateDistance = getDistanceMiles(anchor.coordinates, candidate.coordinates);
+      const targetDistance = getDistanceMiles(targetStop.exhibition.coordinates, candidate.coordinates);
+      const trust = getGalleryInventoryTrust(candidate);
+      const personalizedScore = personalizedScores.get(candidate.id) ?? 0;
+      const duplicatePenalty = routeGalleryNames.has(getGalleryRouteNameKey(candidate)) ? 75 : 0;
+      const neighborhoodPenalty =
+        candidate.neighborhood === targetStop.exhibition.neighborhood ? 0 : 30;
+      const score =
+        visitStatusPriority[status] * 45 +
+        getRouteTrustPriority(candidate) * 20 +
+        duplicatePenalty +
+        neighborhoodPenalty +
+        candidateDistance * 24 +
+        targetDistance * 12 -
+        personalizedScore * 2;
+
+      return {
+        stopId: input.stopId,
+        exhibition: candidate,
+        status,
+        distanceMiles: Number(candidateDistance.toFixed(2)),
+        walkingMinutes: getWalkingMinutes(candidateDistance),
+        score,
+        reasons: getSwapReasonSet({
+          candidate,
+          targetStop,
+          routeGalleryNames,
+          candidateDistance,
+          originalDistance,
+          referenceNow,
+          personalizedScore
+        }),
+        trustLabel: trust.checkedLabel,
+        mapUrl: getGalleryStopMapUrl(candidate)
+      };
+    })
+    .sort((left, right) => {
+      const scoreDelta = left.score - right.score;
+
+      if (scoreDelta !== 0) {
+        return scoreDelta;
+      }
+
+      return left.exhibition.title.localeCompare(right.exhibition.title);
+    })
+    .slice(0, input.limit ?? 4);
+}
+
+export function createGalleryWalkPlanWithSwap(input: {
+  walkPlan: GalleryWalkPlan;
+  stopId: string;
+  replacementId: string;
+  exhibitions?: GalleryExhibition[];
+  savedIds?: string[];
+  referenceNow?: string;
+  personalizedReasons?: Record<string, string[]>;
+  personalizedScores?: Record<string, number>;
+}): GalleryWalkPlan {
+  const stopIds = input.walkPlan.stops.map((stop) =>
+    stop.exhibition.id === input.stopId || stop.exhibitions.some((item) => item.id === input.stopId)
+      ? input.replacementId
+      : stop.exhibition.id
+  );
+
+  return createGalleryWalkPlanFromStopIds({
+    basePlan: input.walkPlan,
+    stopIds,
+    exhibitions: input.exhibitions,
+    savedIds: input.savedIds,
+    referenceNow: input.referenceNow,
+    personalizedReasons: input.personalizedReasons,
+    personalizedScores: input.personalizedScores
+  });
 }
 
 export function createNeighborhoodIntelligence(

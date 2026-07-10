@@ -42,6 +42,7 @@ import {
 } from "../src/services/coverageAudit";
 import { importHtmlCalendarEvents } from "../src/services/htmlCalendarImporter";
 import {
+  createGalleryWalkPlanFromStopIds,
   createGallerySourceTrustSummary,
   createGallerySubmissionDraft,
   createGalleryWalkPlan,
@@ -49,6 +50,7 @@ import {
   filterGalleryExhibitions,
   getDaysUntilGalleryCloses,
   getGalleryInventoryTrust,
+  getGalleryRouteSwapCandidates,
   getGalleryVisitStatus,
   getGalleryWhyGoReasons,
   getLastChanceGalleryAlerts,
@@ -82,6 +84,7 @@ import {
   getActiveWalkProgress,
   getGalleryWalkRecap,
   markGalleryWalkStopVisited,
+  replaceGalleryWalkSessionStop,
   skipGalleryWalkStop
 } from "../src/services/galleryWalkSession";
 import { galleryQuizArtworks } from "../src/data/galleryQuizArtworks";
@@ -431,31 +434,49 @@ async function main() {
   const newTribecaVerifiedIds = [
     "verified-andrew-kreps-see-you-tomorrow",
     "verified-artists-space-richard-hunt",
-    "verified-nicelle-beauchene-invincible-summer"
+    "verified-nicelle-beauchene-invincible-summer",
+    "verified-canada-plants-animals-sky"
+  ];
+  const betaInventoryVerifiedIds = [
+    "verified-canada-plants-animals-sky",
+    "verified-56-henry-journey-to-the-west",
+    "verified-carrie-haddad-between-here-and-home"
   ];
 
   assert(
     nycTrust.exhibitionCount >= 30 &&
-      nycTrust.verifiedExhibitionCount >= 48 &&
+      nycTrust.verifiedExhibitionCount >= 50 &&
       laTrust.exhibitionCount >= 8 &&
       hudsonTrust.exhibitionCount >= 6,
     "Gallery source trust should report expanded verified NYC inventory while preserving LA and Hudson coverage."
   );
   assert(
-    nycVerifiedInventory.length >= 48 &&
-      hudsonVerifiedInventory.length >= 1 &&
+    nycVerifiedInventory.length >= 50 &&
+      hudsonVerifiedInventory.length >= 2 &&
       fixtureInventory.length > 0,
     "Verified inventory should materially increase NYC while leaving fixture/demo records explicitly identifiable."
   );
   assert(
     nycChinatownVerifiedInventory.length >= 3 &&
-      nycLowerEastSideVerifiedInventory.length >= 3 &&
-      nycTribecaVerifiedInventory.length >= 11 &&
+      nycLowerEastSideVerifiedInventory.length >= 4 &&
+      nycTribecaVerifiedInventory.length >= 12 &&
       nycUpperEastSideVerifiedInventory.length >= 4 &&
       newTribecaVerifiedIds.every((id) =>
         nycTribecaVerifiedInventory.some((exhibition) => exhibition.id === id)
       ),
     "Verified NYC inventory should add route-useful Lower East Side, Chinatown, Tribeca, and Upper East Side depth."
+  );
+  assert(
+    betaInventoryVerifiedIds.every((id) =>
+      verifiedInventory.some(
+        (exhibition) =>
+          exhibition.id === id &&
+          exhibition.externalUrl.startsWith("https://") &&
+          typeof exhibition.verifiedAsOf === "string" &&
+          typeof exhibition.sourceCheckedAt === "string"
+      )
+    ),
+    "Beta inventory expansion should add official links plus verifiedAsOf/sourceCheckedAt metadata for NYC and Hudson records."
   );
   assert(
     sampleFixtureTrust.kind === "fixture-demo" &&
@@ -683,6 +704,36 @@ async function main() {
     nycLastChanceWalk,
     "2026-07-09T16:35:00-04:00"
   );
+  const routeSwapCandidates = getGalleryRouteSwapCandidates({
+    walkPlan: chelseaTwoHourWalk,
+    stopId: firstWalkStopId,
+    exhibitions: galleryExhibitions,
+    savedIds: [],
+    referenceNow: galleryReferenceNow,
+    limit: 4
+  });
+  const preferredSwapCandidate = routeSwapCandidates[0];
+  const swappedChelseaWalk = preferredSwapCandidate
+    ? createGalleryWalkPlanFromStopIds({
+        basePlan: chelseaTwoHourWalk,
+        stopIds: chelseaTwoHourWalk.stops.map((stop) =>
+          stop.exhibition.id === firstWalkStopId
+            ? preferredSwapCandidate.exhibition.id
+            : stop.exhibition.id
+        ),
+        exhibitions: galleryExhibitions,
+        savedIds: [],
+        referenceNow: galleryReferenceNow
+      })
+    : chelseaTwoHourWalk;
+  const swappedActiveWalkSession = preferredSwapCandidate
+    ? replaceGalleryWalkSessionStop(
+        visitedWalkSession,
+        secondWalkStopId,
+        preferredSwapCandidate.exhibition.id,
+        "2026-07-09T16:12:00-04:00"
+      )
+    : visitedWalkSession;
 
   assert(
     walkSession.areaId === "nyc" &&
@@ -727,6 +778,37 @@ async function main() {
         nycLastChanceWalk.stops.map((stop) => stop.exhibition.id).join("|") &&
       walkSession.mode === "two-hour",
     "Starting a draft route should create a replacement walk session without mutating the preserved active walk."
+  );
+  assert(
+    routeSwapCandidates.length > 0 &&
+      routeSwapCandidates.every(
+        (candidate) =>
+          !chelseaTwoHourWalk.stops.some((stop) =>
+            stop.exhibitions.some((exhibition) => exhibition.id === candidate.exhibition.id)
+          )
+      ) &&
+      routeSwapCandidates[0]?.reasons.some((reason) =>
+        ["closer", "open now", "verified source", "better taste match", "avoids repeat gallery"].includes(
+          reason
+        )
+      ),
+    "Replacement candidates should prefer nearby, open, verified, or taste-relevant stops outside the current route."
+  );
+  assert(
+    preferredSwapCandidate &&
+      swappedChelseaWalk.stops[0]?.exhibition.id === preferredSwapCandidate.exhibition.id &&
+      swappedChelseaWalk.stops.length === chelseaTwoHourWalk.stops.length &&
+      swappedChelseaWalk.legs.length === Math.max(0, swappedChelseaWalk.stops.length - 1) &&
+      swappedChelseaWalk.routeMapUrl?.includes("travelmode=walking"),
+    "Swapping a draft route stop should preserve route order shape and recalculate route legs/map URLs."
+  );
+  assert(
+    preferredSwapCandidate &&
+      swappedActiveWalkSession.orderedStopIds.includes(preferredSwapCandidate.exhibition.id) &&
+      !swappedActiveWalkSession.orderedStopIds.includes(secondWalkStopId) &&
+      swappedActiveWalkSession.visitedStopIds.includes(firstWalkStopId) &&
+      swappedActiveWalkSession.currentStopId === preferredSwapCandidate.exhibition.id,
+    "Swapping inside an active walk should preserve visited/skipped progress and safely replace the current stop."
   );
 
   const persistedStorageMap = new Map<string, string>();
@@ -795,7 +877,9 @@ async function main() {
       preferredNeighborhoods: ["Chelsea"],
       preferredTags: ["quiet"]
     },
-    savedWalks: [persistedSavedWalk]
+    savedWalks: [persistedSavedWalk],
+    firstRunChoice: "find-walk" as const,
+    firstRunCompleted: true
   };
   const serializedGalleryState = serializeGalleryAppPersistedState(persistedState);
 
@@ -814,8 +898,10 @@ async function main() {
       persistedRoundTrip.completedWalkSessions.length === 1 &&
       persistedRoundTrip.tasteFeedback[0]?.kind === "more-like-this" &&
       persistedRoundTrip.tastePreferences?.preferredNeighborhoods.includes("Chelsea") &&
-      persistedRoundTrip.savedWalks[0]?.itineraryText.includes("Full route"),
-    "Gallery app persistence should round-trip completed walk, filters, alerts, art log, taste passport, feedback, preferences, and saved walks."
+      persistedRoundTrip.savedWalks[0]?.itineraryText.includes("Full route") &&
+      persistedRoundTrip.firstRunChoice === "find-walk" &&
+      persistedRoundTrip.firstRunCompleted === true,
+    "Gallery app persistence should round-trip completed walk, filters, alerts, art log, taste passport, feedback, preferences, saved walks, and first-run state."
   );
 
   const quizTasteAnswers: GalleryQuizAnswer[] = [
@@ -1968,6 +2054,11 @@ async function main() {
   const nicelleBeaucheneSource = gallerySourceCandidates.find(
     (source) => source.id === "source-nicelle-beauchene-tribeca"
   );
+  const canadaSource = gallerySourceCandidates.find((source) => source.id === "source-canada-tribeca");
+  const henry56Source = gallerySourceCandidates.find((source) => source.id === "source-56-henry-les");
+  const carrieHaddadSource = gallerySourceCandidates.find(
+    (source) => source.id === "source-carrie-haddad-hudson"
+  );
 
   assert(staleMiguelAbreuSource, "Stale source fixture should exist.");
   assert(jamesCohanSource, "James Cohan source fixture should exist.");
@@ -1981,6 +2072,9 @@ async function main() {
   assert(andrewKrepsSource, "Andrew Kreps source fixture should exist.");
   assert(artistsSpaceSource, "Artists Space source fixture should exist.");
   assert(nicelleBeaucheneSource, "Nicelle Beauchene source fixture should exist.");
+  assert(canadaSource, "CANADA source fixture should exist.");
+  assert(henry56Source, "56 Henry source fixture should exist.");
+  assert(carrieHaddadSource, "Carrie Haddad source fixture should exist.");
   assert(
     getGallerySourceEffectiveFreshness(staleMiguelAbreuSource, galleryReferenceNow) ===
       "stale-risk",
@@ -2001,7 +2095,10 @@ async function main() {
       magentaPlainsSource,
       andrewKrepsSource,
       artistsSpaceSource,
-      nicelleBeaucheneSource
+      nicelleBeaucheneSource,
+      canadaSource,
+      henry56Source,
+      carrieHaddadSource
     ].every(
       (source) =>
         source?.preferredImportLane === "official-page-ready" &&
