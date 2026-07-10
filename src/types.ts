@@ -327,7 +327,7 @@ export type DiscoveryMarketPlan = {
   sources: DiscoverySourcePlan[];
 };
 
-export type GalleryAreaId = "nyc" | "la" | "hudson";
+export type GalleryAreaId = "nyc" | "la" | "hudson" | "camogli";
 
 export type GalleryMedium =
   | "painting"
@@ -346,7 +346,9 @@ export type GalleryKind =
   | "nonprofit"
   | "artist-run"
   | "project-space"
-  | "museum";
+  | "museum"
+  | "cultural-venue"
+  | "heritage-site";
 
 export type GalleryEventKind =
   | "opening-reception"
@@ -369,6 +371,8 @@ export type GallerySourceCandidateType =
   | "artist-run"
   | "project-space"
   | "museum"
+  | "cultural-venue"
+  | "heritage-site"
   | "partner-submission";
 
 export type GalleryImportLane = "manual-seed" | "partner-submission" | "official-page-ready";
@@ -401,7 +405,7 @@ export type GalleryArea = {
   name: string;
   region: string;
   timezone: string;
-  role: "primary" | "secondary" | "arts-town-test";
+  role: "primary" | "secondary" | "arts-town-test" | "travel-test";
   description: string;
 };
 

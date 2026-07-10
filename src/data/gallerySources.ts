@@ -83,6 +83,16 @@ const hudsonFriSun12To6: GalleryHoursInterval[] = [
   { day: 0, opens: "12:00", closes: "17:00" }
 ];
 
+const camogliDaily10To6: GalleryHoursInterval[] = [
+  { day: 0, opens: "10:00", closes: "18:00" },
+  { day: 1, opens: "10:00", closes: "18:00" },
+  { day: 2, opens: "10:00", closes: "18:00" },
+  { day: 3, opens: "10:00", closes: "18:00" },
+  { day: 4, opens: "10:00", closes: "18:00" },
+  { day: 5, opens: "10:00", closes: "18:00" },
+  { day: 6, opens: "10:00", closes: "18:00" }
+];
+
 export const gallerySourceCandidates: GallerySourceCandidate[] = [
   {
     id: "source-david-zwirner-chelsea",
@@ -1183,5 +1193,71 @@ export const gallerySourceCandidates: GallerySourceCandidate[] = [
     confidence: 0.68,
     defaultHours: hudsonThuSun,
     notes: "Kingston extension only; useful for testing nearby-town imports."
+  },
+  {
+    id: "source-comune-camogli-cultura",
+    galleryName: "Comune di Camogli",
+    galleryKind: "cultural-venue",
+    areaId: "camogli",
+    neighborhood: "Camogli Centro",
+    city: "Camogli",
+    address: "Via XX Settembre, Camogli, GE, Italy",
+    coordinates: { latitude: 44.348, longitude: 9.155 },
+    websiteUrl: "https://www.comune.camogli.ge.it",
+    exhibitionsUrl: "https://www.comune.camogli.ge.it",
+    hoursUrl: "https://www.comune.camogli.ge.it",
+    contactUrl: "https://www.comune.camogli.ge.it",
+    sourceType: "cultural-venue",
+    preferredImportLane: "official-page-ready",
+    sourceLegalStatus: "official-public-page",
+    sourceFreshness: "fresh",
+    lastCheckedAt: "2026-07-10T17:30:00+02:00",
+    confidence: 0.78,
+    defaultHours: camogliDaily10To6,
+    notes: "Official municipality source for civic culture, Biblioteca/Museo notices, and cultural-walk anchor verification; verify event details before presenting time-sensitive claims."
+  },
+  {
+    id: "source-teatro-sociale-camogli",
+    galleryName: "Teatro Sociale Camogli",
+    galleryKind: "cultural-venue",
+    areaId: "camogli",
+    neighborhood: "Camogli Centro",
+    city: "Camogli",
+    address: "Piazza Giacomo Matteotti, Camogli, GE, Italy",
+    coordinates: { latitude: 44.3487, longitude: 9.1564 },
+    websiteUrl: "https://www.teatrosocialecamogli.it",
+    exhibitionsUrl: "https://www.teatrosocialecamogli.it",
+    hoursUrl: "https://www.teatrosocialecamogli.it",
+    contactUrl: "https://www.teatrosocialecamogli.it",
+    sourceType: "cultural-venue",
+    preferredImportLane: "official-page-ready",
+    sourceLegalStatus: "official-public-page",
+    sourceFreshness: "fresh",
+    lastCheckedAt: "2026-07-10T17:35:00+02:00",
+    confidence: 0.82,
+    defaultHours: camogliDaily10To6,
+    notes: "Official theatre source for Camogli cultural programming; use as a cultural-walk anchor and keep exact programme details behind the official link."
+  },
+  {
+    id: "source-welcome-camogli",
+    galleryName: "Welcome Camogli",
+    galleryKind: "heritage-site",
+    areaId: "camogli",
+    neighborhood: "Porto / Waterfront",
+    city: "Camogli",
+    address: "Camogli waterfront, Camogli, GE, Italy",
+    coordinates: { latitude: 44.347, longitude: 9.153 },
+    websiteUrl: "https://www.welcomecamogli.it",
+    exhibitionsUrl: "https://www.welcomecamogli.it",
+    hoursUrl: "https://www.welcomecamogli.it",
+    contactUrl: "https://www.welcomecamogli.it",
+    sourceType: "heritage-site",
+    preferredImportLane: "manual-seed",
+    sourceLegalStatus: "official-public-page",
+    sourceFreshness: "needs-review",
+    lastCheckedAt: "2026-07-10T17:40:00+02:00",
+    confidence: 0.64,
+    defaultHours: camogliDaily10To6,
+    notes: "Tourism/source-directory support for place discovery only; do not promote time-sensitive records from this source until manually verified."
   }
 ];

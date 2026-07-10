@@ -45,6 +45,8 @@ export type GalleryBetaFeedback = {
   routeMode: GalleryWalkMode;
   neighborhood?: string;
   activeWalkStatus?: GalleryWalkSession["status"];
+  currentStopLabel?: string;
+  nextStopLabel?: string;
   verifiedCount: number;
   demoReviewCount: number;
   createdAt: string;
@@ -110,6 +112,8 @@ export type GalleryBetaReviewReportInput = {
   routeMode: GalleryWalkMode;
   neighborhood?: string;
   activeWalkStatus?: GalleryWalkSession["status"];
+  currentStopLabel?: string;
+  nextStopLabel?: string;
   verifiedCount: number;
   demoReviewCount: number;
   previewUrl?: string;
@@ -408,6 +412,8 @@ export function createGalleryBetaReviewReport(input: GalleryBetaReviewReportInpu
     `Market: ${input.areaId.toUpperCase()}${input.neighborhood ? ` - ${input.neighborhood}` : ""}`,
     `Route mode: ${routeModeLabel}`,
     `Active walk: ${input.activeWalkStatus ?? "none"}`,
+    `Current stop: ${input.currentStopLabel ?? "none"}`,
+    `Next stop: ${input.nextStopLabel ?? "none"}`,
     `Trust: ${input.verifiedCount} verified, ${input.demoReviewCount} demo/review`,
     "",
     "Route usability",

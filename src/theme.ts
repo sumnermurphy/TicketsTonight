@@ -1,17 +1,56 @@
 import { Platform } from "react-native";
 
 export const colors = {
-  ink: "#111111",
-  mutedInk: "#6B6B66",
-  fog: "#F4F2ED",
-  paper: "#FFFDF8",
-  line: "#DDD8CF",
-  coral: "#8E6B4D",
-  coralDark: "#4B3528",
-  teal: "#111111",
-  tealSoft: "#EEEAE2",
-  gold: "#B39B72",
-  plum: "#2A2926"
+  ink: "#242423",
+  mutedInk: "#696862",
+  fog: "#F6F2EA",
+  paper: "#FFFDF7",
+  line: "#E4DED2",
+  coral: "#B8664F",
+  coralDark: "#7C3F32",
+  teal: "#214E8A",
+  tealSoft: "#E8EEF5",
+  gold: "#B89B66",
+  plum: "#2F2E34"
+};
+
+export const brandColors = {
+  galleryWhite: "#FFFDF7",
+  warmCanvas: "#F6F2EA",
+  graphite: "#242423",
+  graphiteMuted: "#696862",
+  ultramarine: "#214E8A",
+  ultramarineSoft: "#E8EEF5",
+  clay: "#B8664F",
+  claySoft: "#F2E4DC",
+  moss: "#60735C",
+  divider: "#E4DED2"
+};
+
+export const typeScale = {
+  eyebrow: 11,
+  caption: 12,
+  body: 14,
+  title: 18,
+  section: 22,
+  hero: 34
+};
+
+export const surfaceStyles = {
+  hairline: {
+    borderColor: brandColors.divider,
+    borderWidth: 1
+  },
+  quietCard: {
+    backgroundColor: brandColors.galleryWhite,
+    borderColor: brandColors.divider,
+    borderWidth: 1
+  },
+  accentCard: {
+    backgroundColor: brandColors.ultramarineSoft,
+    borderColor: "#D5DFEB",
+    borderWidth: 1
+  }
 };
 
 export const spacing = {

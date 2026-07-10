@@ -16,7 +16,12 @@ import type { GalleryWalkSession } from "./galleryWalkSession";
 import type { GallerySavedWalk } from "./galleryWalkSharing";
 
 export type GalleryPersistedLens = "all" | "open-now" | "opening-tonight" | "last-chance";
-export type GalleryFirstRunChoice = "find-walk" | "taste-quiz" | "resume-walk" | "dismissed";
+export type GalleryFirstRunChoice =
+  | "find-walk"
+  | "taste-quiz"
+  | "resume-walk"
+  | "camogli-test"
+  | "dismissed";
 
 export type GalleryAppPersistedState = {
   version: 1;
@@ -86,6 +91,7 @@ function sanitizeFirstRunChoice(value: unknown): GalleryFirstRunChoice | undefin
   return value === "find-walk" ||
     value === "taste-quiz" ||
     value === "resume-walk" ||
+    value === "camogli-test" ||
     value === "dismissed"
     ? value
     : undefined;
@@ -99,7 +105,11 @@ function sanitizeState(value: unknown): GalleryAppPersistedState | undefined {
   return {
     version: 1,
     selectedAreaId:
-      value.selectedAreaId === "la" || value.selectedAreaId === "hudson" ? value.selectedAreaId : "nyc",
+      value.selectedAreaId === "la" ||
+      value.selectedAreaId === "hudson" ||
+      value.selectedAreaId === "camogli"
+        ? value.selectedAreaId
+        : "nyc",
     selectedNeighborhood:
       typeof value.selectedNeighborhood === "string" ? value.selectedNeighborhood : undefined,
     selectedMedium:

@@ -58,6 +58,14 @@ export const galleryAreas: GalleryArea[] = [
     timezone: "America/New_York",
     role: "arts-town-test",
     description: "Small-market arts-town test with Warren Street as the anchor."
+  },
+  {
+    id: "camogli",
+    name: "Camogli",
+    region: "Liguria, Italy",
+    timezone: "Europe/Rome",
+    role: "travel-test",
+    description: "Small coastal cultural-walk test market with limited verified art inventory."
   }
 ];
 
@@ -180,6 +188,27 @@ export const galleryNeighborhoods: GalleryNeighborhood[] = [
     name: "Beacon",
     walkLabel: "Nearby day-trip extension",
     anchor: { latitude: 41.504, longitude: -73.969 }
+  },
+  {
+    id: "camogli-centro",
+    areaId: "camogli",
+    name: "Camogli Centro",
+    walkLabel: "Civic culture and museum loop",
+    anchor: { latitude: 44.348, longitude: 9.155 }
+  },
+  {
+    id: "camogli-porto-waterfront",
+    areaId: "camogli",
+    name: "Porto / Waterfront",
+    walkLabel: "Harbor, heritage, and sea-facing stops",
+    anchor: { latitude: 44.347, longitude: 9.153 }
+  },
+  {
+    id: "camogli-san-rocco-ruta",
+    areaId: "camogli",
+    name: "San Rocco / Ruta",
+    walkLabel: "Hill walk and cultural viewpoint",
+    anchor: { latitude: 44.337, longitude: 9.174 }
   }
 ];
 

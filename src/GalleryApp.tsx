@@ -188,7 +188,31 @@ const galleryVisualSources: Record<GalleryVisualKey, ImageSourcePropType> = {
   hero: require("../assets/gallery/gallery-hero.png"),
   painting: require("../assets/gallery/gallery-painting.png"),
   sculpture: require("../assets/gallery/gallery-sculpture.png"),
-  "photo-video": require("../assets/gallery/gallery-photo-video.png")
+  "photo-video": require("../assets/gallery/gallery-photo-video.png"),
+  "nyc-painting": require("../assets/gallery/editorial/nyc-painting.png"),
+  "nyc-photo": require("../assets/gallery/editorial/nyc-photo.png"),
+  "nyc-sculpture": require("../assets/gallery/editorial/nyc-sculpture.png"),
+  "nyc-installation": require("../assets/gallery/editorial/nyc-installation.png"),
+  "nyc-opening": require("../assets/gallery/editorial/nyc-opening.png"),
+  "nyc-quiet": require("../assets/gallery/editorial/nyc-quiet.png"),
+  "la-painting": require("../assets/gallery/editorial/la-painting.png"),
+  "la-photo": require("../assets/gallery/editorial/la-photo.png"),
+  "la-sculpture": require("../assets/gallery/editorial/la-sculpture.png"),
+  "la-installation": require("../assets/gallery/editorial/la-installation.png"),
+  "la-design": require("../assets/gallery/editorial/la-design.png"),
+  "la-opening": require("../assets/gallery/editorial/la-opening.png"),
+  "hudson-painting": require("../assets/gallery/editorial/hudson-painting.png"),
+  "hudson-sculpture": require("../assets/gallery/editorial/hudson-sculpture.png"),
+  "hudson-historic": require("../assets/gallery/editorial/hudson-historic.png"),
+  "hudson-quiet": require("../assets/gallery/editorial/hudson-quiet.png"),
+  "hudson-opening": require("../assets/gallery/editorial/hudson-opening.png"),
+  "hudson-mixed": require("../assets/gallery/editorial/hudson-mixed.png"),
+  "camogli-coastal": require("../assets/gallery/editorial/camogli-coastal.png"),
+  "camogli-historic": require("../assets/gallery/editorial/camogli-historic.png"),
+  "camogli-performance": require("../assets/gallery/editorial/camogli-performance.png"),
+  "camogli-design": require("../assets/gallery/editorial/camogli-design.png"),
+  "camogli-photo": require("../assets/gallery/editorial/camogli-photo.png"),
+  "camogli-quiet": require("../assets/gallery/editorial/camogli-quiet.png")
 };
 
 const lensLabels: Record<GalleryLens, string> = {
@@ -225,6 +249,7 @@ const betaFeedbackLabels: Record<GalleryBetaFeedbackKind, string> = {
   broken: "Broken",
   wish: "Wish"
 };
+const betaFeedbackQuickTags = ["wrong hours", "bad route", "missing place", "image feels wrong"];
 const alertWindowOptions: Array<3 | 7 | 14> = [3, 7, 14];
 const eventRouteIntentOptions: GalleryEventRouteIntent[] = [
   "social-opening",
@@ -503,6 +528,10 @@ function getAreaRoleCopy(areaId: GalleryAreaId): string {
     return "Secondary market";
   }
 
+  if (areaId === "camogli") {
+    return "Cultural-walk test";
+  }
+
   return "Arts-town test";
 }
 
@@ -742,25 +771,26 @@ function ProfessionalMobileHome({
         <View style={styles.mobileFeatureShade} />
         <View style={styles.mobileFeatureContent}>
           <View style={styles.mobileFeatureTopRow}>
-            <Text style={styles.mobileFeaturePill}>Tonight</Text>
-            <Text style={styles.mobileFeaturePill}>{routeScopeLabel}</Text>
+            <Text style={styles.mobileFeaturePill} numberOfLines={1}>Tonight</Text>
+            <Text style={styles.mobileFeaturePill} numberOfLines={1}>{routeScopeLabel}</Text>
+            <Text style={styles.mobileFeaturePill} numberOfLines={1}>{featuredVisual.creditLabel}</Text>
           </View>
-          <View>
-            <Text style={styles.mobileFeatureTitle}>Find tonight's best walk</Text>
+          <View style={styles.mobileFeatureCopy}>
+            <Text style={styles.mobileFeatureTitle}>Tonight's{"\n"}best walk</Text>
             <Text style={styles.mobileFeatureSubtitle}>
               {featuredExhibition
-                ? `${featuredExhibition.galleryName} anchors a ${walkPlan.totalMinutes} minute route.`
+                ? `${walkPlan.totalMinutes} minute route in ${walkPlan.neighborhood}.`
                 : `${walkPlan.summary} with source-labeled stops.`}
             </Text>
             <View style={styles.mobileFeatureActions}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Find tonight's best walk"
+                accessibilityLabel="Find a walk near me"
                 onPress={onFindWalk}
                 style={styles.mobilePrimaryCta}
               >
                 <Route size={15} color={colors.ink} />
-                <Text style={styles.mobilePrimaryCtaText}>Find best walk</Text>
+                <Text style={styles.mobilePrimaryCtaText} numberOfLines={1}>Start</Text>
               </Pressable>
               {activeWalk ? (
                 <Pressable
@@ -769,7 +799,7 @@ function ProfessionalMobileHome({
                   onPress={onResumeWalk}
                   style={styles.mobileSecondaryCta}
                 >
-                  <Text style={styles.mobileSecondaryCtaText}>Resume</Text>
+                  <Text style={styles.mobileSecondaryCtaText} numberOfLines={1}>Resume</Text>
                 </Pressable>
               ) : (
                 <Pressable
@@ -778,7 +808,7 @@ function ProfessionalMobileHome({
                   onPress={onOpenRoute}
                   style={styles.mobileSecondaryCta}
                 >
-                  <Text style={styles.mobileSecondaryCtaText}>Open map</Text>
+                  <Text style={styles.mobileSecondaryCtaText} numberOfLines={1}>Open map</Text>
                 </Pressable>
               )}
             </View>
@@ -981,6 +1011,7 @@ function FirstRunChoicePanel({
   betaProgress = getGalleryBetaTasks([]),
   onFindWalk,
   onTasteQuiz,
+  onCamogliTest,
   onResumeWalk,
   onBetaTask,
   onResetDemo,
@@ -993,6 +1024,7 @@ function FirstRunChoicePanel({
   betaProgress?: GalleryBetaTaskProgress;
   onFindWalk: () => void;
   onTasteQuiz: () => void;
+  onCamogliTest: () => void;
   onResumeWalk: () => void;
   onBetaTask: (taskId: GalleryBetaTaskId) => void;
   onResetDemo: () => void;
@@ -1020,12 +1052,12 @@ function FirstRunChoicePanel({
       <View style={styles.firstRunActionRow}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Find a walk tonight"
+          accessibilityLabel="Find a walk near me"
           onPress={onFindWalk}
           style={styles.firstRunPrimaryAction}
         >
           <Route size={15} color={colors.paper} />
-          <Text style={styles.firstRunPrimaryActionText}>Find a walk tonight</Text>
+          <Text style={styles.firstRunPrimaryActionText}>Find a walk near me</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -1047,6 +1079,15 @@ function FirstRunChoicePanel({
             <Text style={styles.firstRunSecondaryActionText}>Resume walk</Text>
           </Pressable>
         ) : null}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open Camogli cultural walk test"
+          onPress={onCamogliTest}
+          style={styles.firstRunSecondaryAction}
+        >
+          <MapPin size={15} color={colors.ink} />
+          <Text style={styles.firstRunSecondaryActionText}>Camogli test</Text>
+        </Pressable>
       </View>
       <View style={styles.betaTaskGrid}>
         {betaProgress.tasks.map((task) => (
@@ -1259,6 +1300,19 @@ function BetaFeedbackPanel({
           placeholderTextColor={colors.mutedInk}
           style={styles.betaFeedbackInput}
         />
+      </View>
+      <View style={styles.feedbackRow}>
+        {betaFeedbackQuickTags.map((tag) => (
+          <Pressable
+            key={tag}
+            accessibilityRole="button"
+            accessibilityLabel={`Add beta feedback tag ${tag}`}
+            onPress={() => onNote(note.trim().length > 0 ? `${note.trim()} - ${tag}` : tag)}
+            style={styles.feedbackTagButton}
+          >
+            <Text style={styles.feedbackTagText}>{tag}</Text>
+          </Pressable>
+        ))}
       </View>
       <View style={styles.firstRunActionRow}>
         <Pressable
@@ -2611,6 +2665,7 @@ function ExhibitionCard({
         <View style={styles.cardVisualTopRow}>
           <Text style={styles.visualBadge}>{trust.label}</Text>
           <Text style={styles.visualBadge}>{galleryVisitStatusLabels[status]}</Text>
+          <Text style={styles.visualBadge}>{visual.creditLabel}</Text>
         </View>
         <View style={styles.cardVisualCopy}>
           <Text style={styles.cardVisualGallery}>{exhibition.galleryName}</Text>
@@ -2799,7 +2854,10 @@ function ExhibitionDetailSheet({
       >
         <View style={styles.cardImageShade} />
         <View style={styles.detailTopRow}>
-          <Text style={styles.visualBadge}>{trust.label}</Text>
+          <View style={styles.cardVisualTopRow}>
+            <Text style={styles.visualBadge}>{trust.label}</Text>
+            <Text style={styles.visualBadge}>{visual.creditLabel}</Text>
+          </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Close details for ${exhibition.title}`}
@@ -3534,13 +3592,23 @@ export function GalleryApp() {
   ).length;
   const routeScopeLabel = selectedNeighborhood ?? walkPlan.neighborhood ?? "All neighborhoods";
   const compactAreaName =
-    selectedAreaId === "nyc" ? "NYC" : selectedAreaId === "la" ? "LA" : "Hudson";
+    selectedAreaId === "nyc"
+      ? "NYC"
+      : selectedAreaId === "la"
+        ? "LA"
+        : selectedAreaId === "camogli"
+          ? "Camogli"
+          : "Hudson";
   const heroTitle = isCompactLayout
     ? `${compactAreaName} Tonight`
     : `Tonight in ${selectedArea?.name ?? "the city"}`;
   const heroSubtitle = isCompactLayout
-    ? `${routeScopeLabel} route`
-    : `${walkPlan.title} for ${routeScopeLabel}. Open now, nearby, and source-labeled.`;
+    ? selectedAreaId === "camogli"
+      ? `${routeScopeLabel} cultural walk`
+      : `${routeScopeLabel} route`
+    : selectedAreaId === "camogli"
+      ? `${walkPlan.title} for ${routeScopeLabel}. Limited verified art inventory; use official links before you go.`
+      : `${walkPlan.title} for ${routeScopeLabel}. Open now, nearby, and source-labeled.`;
   const heroRouteSummary = isCompactLayout
     ? `${walkPlan.stops.length} stops`
     : walkPlan.summary;
@@ -3812,6 +3880,12 @@ export function GalleryApp() {
         routeMode: walkMode,
         neighborhood: selectedNeighborhood,
         activeWalkStatus: activeWalkSession?.status,
+        currentStopLabel:
+          activeWalkCurrentStop?.exhibition.galleryName ??
+          displayStartStop?.exhibition.galleryName,
+        nextStopLabel:
+          activeWalkNextStop?.exhibition.galleryName ??
+          plannerNextStop?.exhibition.galleryName,
         verifiedCount: sourceTrust.verifiedExhibitionCount,
         demoReviewCount: sourceTrust.fixtureExhibitionCount + sourceTrust.needsReviewExhibitionCount,
         previewUrl: "http://localhost:19006",
@@ -3819,7 +3893,11 @@ export function GalleryApp() {
       }),
     [
       activeWalkSession,
+      activeWalkCurrentStop,
+      activeWalkNextStop,
       betaFeedback,
+      displayStartStop,
+      plannerNextStop,
       routeUsabilityReport,
       selectedAreaId,
       selectedNeighborhood,
@@ -3848,6 +3926,14 @@ export function GalleryApp() {
     if (areaId === "hudson") {
       completeBetaTask("check-hudson");
     }
+  }
+
+  function chooseCamogliTestFirstRun() {
+    completeFirstRun("camogli-test");
+    resetMarket("camogli");
+    setSelectedNeighborhood("Camogli Centro");
+    setActiveLens("open-now");
+    setShareStatus("Camogli is a cultural-walk test market. Use official links before you go.");
   }
 
   function completeFirstRun(choice: GalleryFirstRunChoice) {
@@ -4448,7 +4534,10 @@ export function GalleryApp() {
               <View style={styles.heroImageShade} />
               <View style={styles.heroContent}>
                 <View style={styles.headerTopline}>
-                  <Text style={styles.heroEyebrow}>{getAreaRoleCopy(selectedAreaId)}</Text>
+                  <View style={styles.heroHeaderBadgeRow}>
+                    <Text style={styles.heroEyebrow}>{getAreaRoleCopy(selectedAreaId)}</Text>
+                    <Text style={styles.heroEyebrow}>{heroVisual.creditLabel}</Text>
+                  </View>
                   <Text style={styles.marketClock}>
                     Demo clock {formatShortDate(referenceNow)}, {formatShortTime(referenceNow)}
                   </Text>
@@ -4481,6 +4570,7 @@ export function GalleryApp() {
               betaProgress={betaProgress}
               onFindWalk={chooseFindWalkFirstRun}
               onTasteQuiz={chooseTasteQuizFirstRun}
+              onCamogliTest={chooseCamogliTestFirstRun}
               onResumeWalk={chooseResumeWalkFirstRun}
               onBetaTask={handleBetaTask}
               onResetDemo={resetGalleryDemoState}
@@ -4652,7 +4742,7 @@ export function GalleryApp() {
             >
               <View style={styles.tonightPickShade} />
               <View style={styles.tonightPickCopy}>
-                <Text style={styles.tonightPickLabel}>Start browsing here</Text>
+                <Text style={styles.tonightPickLabel}>Start browsing here - {tonightPickVisual.creditLabel}</Text>
                 <Text style={styles.tonightPickTitle}>{tonightPick.title}</Text>
                 <Text style={styles.tonightPickMeta}>
                   {tonightPick.galleryName} - {tonightPick.neighborhood} - {galleryVisitStatusLabels[getGalleryVisitStatus(tonightPick, referenceNow)]}
@@ -5198,60 +5288,81 @@ const styles = StyleSheet.create({
   mobileFeatureContent: {
     flex: 1,
     justifyContent: "space-between",
+    minWidth: 0,
     padding: spacing.md
   },
   mobileFeatureTopRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: spacing.xs
+    gap: spacing.xs,
+    minWidth: 0,
+    width: "100%"
   },
   mobileFeaturePill: {
     backgroundColor: "rgba(255, 253, 248, 0.92)",
     borderRadius: radii.pill,
     color: colors.ink,
+    flexShrink: 1,
     fontSize: 10,
     fontWeight: "900",
+    maxWidth: "100%",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     textTransform: "uppercase"
   },
+  mobileFeatureCopy: {
+    minWidth: 0,
+    width: "100%"
+  },
   mobileFeatureTitle: {
     color: colors.paper,
-    fontSize: 33,
+    flexShrink: 1,
+    fontSize: 27,
     fontWeight: "900",
-    lineHeight: 37,
-    maxWidth: "100%"
+    lineHeight: 32,
+    maxWidth: "100%",
+    minWidth: 0,
+    width: "100%"
   },
   mobileFeatureSubtitle: {
     color: "#F2EDE4",
+    flexShrink: 1,
     fontSize: 14,
     fontWeight: "800",
     lineHeight: 20,
-    marginTop: spacing.sm
+    marginTop: spacing.sm,
+    maxWidth: "100%",
+    minWidth: 0,
+    width: "100%"
   },
   mobileFeatureActions: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.sm,
-    marginTop: spacing.md
+    marginTop: spacing.md,
+    minWidth: 0,
+    width: "100%"
   },
   mobilePrimaryCta: {
     alignItems: "center",
+    alignSelf: "stretch",
     backgroundColor: colors.paper,
     borderRadius: radii.pill,
     flexDirection: "row",
-    flexGrow: 1,
     gap: spacing.xs,
     justifyContent: "center",
+    maxWidth: "100%",
     minHeight: 44,
-    minWidth: 168,
+    minWidth: 0,
     paddingHorizontal: spacing.md
   },
   mobilePrimaryCtaText: {
     color: colors.ink,
+    flexShrink: 1,
     fontSize: 14,
-    fontWeight: "900"
+    fontWeight: "900",
+    minWidth: 0
   },
   mobileSecondaryCta: {
     alignItems: "center",
@@ -5259,14 +5370,17 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 253, 248, 0.28)",
     borderRadius: radii.pill,
     borderWidth: 1,
+    flexGrow: 1,
     justifyContent: "center",
     minHeight: 44,
     paddingHorizontal: spacing.md
   },
   mobileSecondaryCtaText: {
     color: colors.paper,
+    flexShrink: 1,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "900",
+    minWidth: 0
   },
   mobileTrustStrip: {
     backgroundColor: colors.paper,
@@ -5455,6 +5569,12 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     justifyContent: "space-between",
     gap: spacing.md
+  },
+  heroHeaderBadgeRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm
   },
   compactHeaderTopline: {
     alignItems: "flex-start",
@@ -7921,7 +8041,7 @@ const styles = StyleSheet.create({
   },
   exhibitionCard: {
     backgroundColor: colors.paper,
-    borderColor: "rgba(17, 17, 17, 0.08)",
+    borderColor: colors.line,
     borderRadius: radii.md,
     borderWidth: 1,
     overflow: "hidden",
@@ -8290,6 +8410,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "900",
     lineHeight: 30
+  },
+  feedbackTagButton: {
+    backgroundColor: colors.tealSoft,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  feedbackTagText: {
+    color: colors.teal,
+    fontSize: 11,
+    fontWeight: "900"
   },
   activeFeedbackButtonText: {
     color: colors.paper

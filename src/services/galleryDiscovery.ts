@@ -1994,7 +1994,9 @@ export function createGallerySourceTrustSummary(
       exhibition.sourceLegalStatus === "partner-submission"
   ).length;
   const recommendedNextAction =
-    areaId === "nyc" && verifiedExhibitionCount < 30
+    areaId === "camogli"
+      ? "Camogli is a cultural-walk test market with limited verified art inventory; use official links before walking."
+      : areaId === "nyc" && verifiedExhibitionCount < 30
       ? "Convert more official NYC pages into verified inventory before featuring full-market claims."
       : fixtureExhibitionCount > verifiedExhibitionCount
         ? "Replace fixture/demo listings with official-page verified records."

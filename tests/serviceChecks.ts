@@ -87,7 +87,11 @@ import {
   getPersonalizationLearningSummary,
   getGalleryBetaTasks
 } from "../src/services/galleryBetaReadiness";
-import { getGalleryHeroVisual, getGalleryVisual } from "../src/services/galleryVisuals";
+import {
+  galleryVisualKeys,
+  getGalleryHeroVisual,
+  getGalleryVisual
+} from "../src/services/galleryVisuals";
 import {
   advanceGalleryWalk,
   completeGalleryWalk,
@@ -371,14 +375,15 @@ async function main() {
   const galleryAreaIds = galleryAreas.map((area) => area.id);
 
   assert(
-    galleryAreaIds.join("|") === "nyc|la|hudson",
-    "Gallery discovery should stay scoped to New York, Los Angeles, and Hudson."
+    galleryAreaIds.join("|") === "nyc|la|hudson|camogli",
+    "Gallery discovery should cover New York, Los Angeles, Hudson, and Camogli cultural-walk testing."
   );
 
   for (const [areaId, expectedNeighborhoods] of [
     ["nyc", ["Chelsea", "Tribeca", "Lower East Side", "Chinatown", "SoHo", "Brooklyn/Bushwick"]],
     ["la", ["Culver City", "Hollywood/Sycamore", "DTLA", "Chinatown", "West Hollywood"]],
-    ["hudson", ["Warren Street", "Claverack", "Catskill", "Kingston", "Beacon"]]
+    ["hudson", ["Warren Street", "Claverack", "Catskill", "Kingston", "Beacon"]],
+    ["camogli", ["Camogli Centro", "Porto / Waterfront", "San Rocco / Ruta"]]
   ] as const) {
     const marketNeighborhoods = galleryNeighborhoods
       .filter((neighborhood) => neighborhood.areaId === areaId)
@@ -399,11 +404,19 @@ async function main() {
     galleryExhibitions,
     galleryReferenceNow
   );
+  const camogliTrust = createGallerySourceTrustSummary(
+    "camogli",
+    galleryExhibitions,
+    galleryReferenceNow
+  );
   const verifiedInventory = galleryExhibitions.filter(isGalleryVerifiedInventory);
   const fixtureInventory = galleryExhibitions.filter(isGalleryFixtureInventory);
   const nycVerifiedInventory = verifiedInventory.filter((exhibition) => exhibition.areaId === "nyc");
   const hudsonVerifiedInventory = verifiedInventory.filter(
     (exhibition) => exhibition.areaId === "hudson"
+  );
+  const camogliVerifiedInventory = verifiedInventory.filter(
+    (exhibition) => exhibition.areaId === "camogli"
   );
   const nycChinatownVerifiedInventory = nycVerifiedInventory.filter(
     (exhibition) => exhibition.neighborhood === "Chinatown"
@@ -433,6 +446,25 @@ async function main() {
     galleryExhibitions[0];
   const sampleFixtureVisual = getGalleryVisual(sampleFixtureExhibition);
   const sampleVerifiedVisual = getGalleryVisual(sampleVerifiedExhibition);
+  const camogliArea = galleryAreas.find((area) => area.id === "camogli");
+  const camogliCulturalSource = gallerySourceCandidates.find(
+    (source) => source.id === "source-comune-camogli-cultura"
+  );
+  const camogliTheatreSource = gallerySourceCandidates.find(
+    (source) => source.id === "source-teatro-sociale-camogli"
+  );
+  const camogliTourismSource = gallerySourceCandidates.find(
+    (source) => source.id === "source-welcome-camogli"
+  );
+  const camogliMuseumAnchor = camogliVerifiedInventory.find(
+    (exhibition) => exhibition.id === "verified-camogli-museo-marinaro-cultural-anchor"
+  );
+  const camogliMuseumVisual = camogliMuseumAnchor
+    ? getGalleryVisual(camogliMuseumAnchor)
+    : undefined;
+  const uniqueVisualKeysForInventory = new Set(
+    galleryExhibitions.slice(0, 80).map((exhibition) => getGalleryVisual(exhibition).assetKey)
+  );
   const warren510Source = gallerySourceCandidates.find(
     (source) => source.id === "source-510-warren-hudson"
   );
@@ -488,14 +520,43 @@ async function main() {
       nycTrust.verifiedExhibitionCount >= 60 &&
       laTrust.exhibitionCount >= 8 &&
       hudsonTrust.exhibitionCount >= 6 &&
-      hudsonTrust.verifiedExhibitionCount >= 5,
-    "Gallery source trust should report expanded verified NYC inventory while preserving LA and Hudson coverage."
+      hudsonTrust.verifiedExhibitionCount >= 5 &&
+      camogliTrust.verifiedExhibitionCount >= 4,
+    "Gallery source trust should report expanded verified NYC inventory while preserving LA, Hudson, and Camogli coverage."
   );
   assert(
     nycVerifiedInventory.length >= 60 &&
       hudsonVerifiedInventory.length >= 5 &&
+      camogliVerifiedInventory.length >= 4 &&
       fixtureInventory.length > 0,
-    "Verified inventory should materially increase NYC while leaving fixture/demo records explicitly identifiable."
+    "Verified inventory should materially increase NYC while adding Camogli cultural-walk anchors and leaving fixture/demo records explicitly identifiable."
+  );
+  assert(
+    camogliArea?.timezone === "Europe/Rome" &&
+      camogliArea.role === "travel-test" &&
+      camogliArea.description.includes("cultural-walk") &&
+      camogliTrust.recommendedNextAction.includes("cultural-walk test market"),
+    "Camogli should be modeled as a Europe/Rome cultural-walk travel-test market with honest thin-market guidance."
+  );
+  assert(
+    camogliCulturalSource?.sourceType === "cultural-venue" &&
+      camogliCulturalSource.sourceLegalStatus === "official-public-page" &&
+      camogliTheatreSource?.sourceType === "cultural-venue" &&
+      camogliTheatreSource.sourceLegalStatus === "official-public-page" &&
+      camogliTourismSource?.sourceType === "heritage-site" &&
+      camogliTourismSource.sourceFreshness === "needs-review",
+    "Camogli source candidates should separate official cultural anchors from tourism-directory support."
+  );
+  assert(
+    camogliVerifiedInventory.every(
+      (exhibition) =>
+        exhibition.externalUrl.startsWith("https://") &&
+        typeof exhibition.verifiedAsOf === "string" &&
+        typeof exhibition.sourceCheckedAt === "string"
+    ) &&
+      camogliVerifiedInventory.some((exhibition) => exhibition.galleryKind === "cultural-venue") &&
+      camogliVerifiedInventory.some((exhibition) => exhibition.galleryKind === "heritage-site"),
+    "Camogli verified records should include official links, freshness dates, and cultural-walk venue kinds."
   );
   assert(
     nycChinatownVerifiedInventory.length >= 3 &&
@@ -542,14 +603,18 @@ async function main() {
     sampleFixtureVisual.assetKey === getGalleryVisual(sampleFixtureExhibition).assetKey &&
       sampleVerifiedVisual.assetKey === getGalleryVisual(sampleVerifiedExhibition).assetKey &&
       sampleFixtureVisual.alt.includes(sampleFixtureExhibition.galleryName) &&
-      sampleVerifiedVisual.alt.includes(sampleVerifiedExhibition.galleryName),
-    "Gallery visual helper should return stable, meaningful assets for fixture and verified records."
+      sampleVerifiedVisual.alt.includes(sampleVerifiedExhibition.galleryName) &&
+      sampleVerifiedVisual.creditLabel === "Editorial image",
+    "Gallery visual helper should return stable, meaningful editorial assets for fixture and verified records."
   );
   assert(
-    getGalleryHeroVisual("nyc").assetKey === "hero" &&
-      getGalleryHeroVisual("hudson").assetKey === "sculpture" &&
-      ["hero", "painting", "sculpture", "photo-video"].includes(sampleVerifiedVisual.assetKey),
-    "Gallery visual helper should expose predictable hero and card asset keys for the redesign."
+    getGalleryHeroVisual("nyc").assetKey === "nyc-opening" &&
+      getGalleryHeroVisual("hudson").assetKey === "hudson-historic" &&
+      getGalleryHeroVisual("camogli").assetKey === "camogli-coastal" &&
+      galleryVisualKeys.includes(sampleVerifiedVisual.assetKey) &&
+      uniqueVisualKeysForInventory.size >= 12 &&
+      camogliMuseumVisual?.assetKey === "camogli-design",
+    "Gallery visual helper should expose stable, more varied editorial image keys for cards and market heroes."
   );
   assert(
     verifiedInventory.every(
@@ -664,6 +729,12 @@ async function main() {
     neighborhood: "Warren Street",
     referenceNow: galleryReferenceNow
   });
+  const camogliWalk = createGalleryWalkPlan({
+    areaId: "camogli",
+    mode: "quick-loop",
+    neighborhood: "Camogli Centro",
+    referenceNow: "2026-07-10T17:30:00+02:00"
+  });
 
   assert(
     chelseaWalk.stops.length === 2 &&
@@ -700,6 +771,16 @@ async function main() {
     hudsonWalk.stops.length >= 3 && hudsonWalk.neighborhood === "Warren Street",
     "Hudson should support a Warren Street gallery walk while remaining an arts-town test."
   );
+  assert(
+    camogliWalk.stops.length >= 2 &&
+      camogliWalk.areaId === "camogli" &&
+      camogliWalk.neighborhood === "Camogli Centro" &&
+      camogliWalk.stops.every((stop) =>
+        ["museum", "cultural-venue", "heritage-site"].includes(stop.exhibition.galleryKind)
+      ) &&
+      camogliWalk.routeMapUrl?.includes("google.com/maps/dir"),
+    "Camogli should support sparse cultural-walk routes from verified civic, theatre, and heritage anchors."
+  );
   const chelseaRouteReport = createGalleryRouteUsabilityReport({
     walkPlan: chelseaTwoHourWalk,
     referenceNow: galleryReferenceNow
@@ -708,6 +789,14 @@ async function main() {
   const hudsonRouteReport = createGalleryRouteUsabilityReport({
     walkPlan: hudsonWalk,
     referenceNow: galleryReferenceNow
+  });
+  const camogliRouteWarnings = getGalleryRouteTimingWarnings(
+    camogliWalk,
+    "2026-07-10T17:30:00+02:00"
+  );
+  const camogliRouteReport = createGalleryRouteUsabilityReport({
+    walkPlan: camogliWalk,
+    referenceNow: "2026-07-10T17:30:00+02:00"
   });
 
   assert(
@@ -720,6 +809,12 @@ async function main() {
     hudsonRouteWarnings.some((warning) => warning.kind === "low-verified-supply") &&
       ["thin", "needs-review"].includes(hudsonRouteReport.confidence),
     "Hudson Warren Street route usability should honestly flag thin verified walk supply."
+  );
+  assert(
+    camogliRouteWarnings.some((warning) => warning.kind === "low-verified-supply") &&
+      ["thin", "needs-review"].includes(camogliRouteReport.confidence) &&
+      camogliRouteReport.summary.includes("verified"),
+    "Camogli route usability should honestly flag limited verified cultural-walk supply."
   );
   const personalizationLearningSummary = getPersonalizationLearningSummary({
     logEntries: [
@@ -748,6 +843,8 @@ async function main() {
     routeReport: chelseaRouteReport,
     areaId: "nyc",
     routeMode: "quick-loop",
+    currentStopLabel: chelseaTwoHourWalk.stops[0]?.exhibition.galleryName,
+    nextStopLabel: chelseaTwoHourWalk.stops[1]?.exhibition.galleryName,
     verifiedCount: nycTrust.verifiedExhibitionCount,
     demoReviewCount: nycTrust.fixtureExhibitionCount + nycTrust.needsReviewExhibitionCount,
     previewUrl: "http://localhost:19006",
@@ -763,8 +860,10 @@ async function main() {
   assert(
     betaReviewReport.includes("Gallery walk beta review") &&
       betaReviewReport.includes("Route usability") &&
-      betaReviewReport.includes("Route was easy to follow."),
-    "Beta review report should serialize route, trust, active walk, and tester note context."
+      betaReviewReport.includes("Route was easy to follow.") &&
+      betaReviewReport.includes("Current stop:") &&
+      betaReviewReport.includes("Next stop:"),
+    "Beta review report should serialize route, trust, current/next stop, active walk, and tester note context."
   );
   assert(
     chelseaWalk.legs.length === Math.max(0, chelseaWalk.stops.length - 1) &&
@@ -1028,7 +1127,7 @@ async function main() {
       preferredTags: ["quiet"]
     },
     savedWalks: [persistedSavedWalk],
-    firstRunChoice: "find-walk" as const,
+    firstRunChoice: "camogli-test" as const,
     firstRunCompleted: true,
     betaCompletedTaskIds: betaTaskProgress.completedTaskIds,
     betaFeedback: [betaFeedbackEntry],
@@ -1052,7 +1151,7 @@ async function main() {
       persistedRoundTrip.tasteFeedback[0]?.kind === "more-like-this" &&
       persistedRoundTrip.tastePreferences?.preferredNeighborhoods.includes("Chelsea") &&
       persistedRoundTrip.savedWalks[0]?.itineraryText.includes("Full route") &&
-      persistedRoundTrip.firstRunChoice === "find-walk" &&
+      persistedRoundTrip.firstRunChoice === "camogli-test" &&
       persistedRoundTrip.firstRunCompleted === true &&
       persistedRoundTrip.betaCompletedTaskIds.includes("swap-stop") &&
       persistedRoundTrip.betaFeedback[0]?.kind === "useful" &&
