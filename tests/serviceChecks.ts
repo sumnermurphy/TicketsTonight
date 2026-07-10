@@ -88,9 +88,16 @@ import {
   getGalleryBetaTasks
 } from "../src/services/galleryBetaReadiness";
 import {
+  createWalkerImageReadinessReport,
   galleryVisualKeys,
   getGalleryHeroVisual,
-  getGalleryVisual
+  getGalleryVisual,
+  getWalkerCityBanner,
+  getWalkerExhibitionBanner,
+  getWalkerGalleryBanner,
+  getWalkerNeighborhoodBanner,
+  getWalkerVisualForRole,
+  walkerVisualAssets
 } from "../src/services/galleryVisuals";
 import {
   createCamogliFieldGuide,
@@ -639,6 +646,61 @@ async function main() {
       uniqueCamogliVisualKeys.has("camogli-maritime-museum") &&
       uniqueCamogliVisualKeys.has("camogli-theatre-evening"),
     "Camogli verified cultural anchors should receive distinct stable editorial imagery."
+  );
+  const imageReadinessReport = createWalkerImageReadinessReport(galleryExhibitions);
+  const cityBannerAreaIds = new Set(
+    walkerVisualAssets
+      .filter((asset) => asset.role === "city-banner")
+      .map((asset) => asset.areaId)
+  );
+  const camogliMuseoExhibition = galleryExhibitions.find(
+    (exhibition) => exhibition.galleryName === "Museo Marinaro Gio Bono Ferrari"
+  );
+  const camogliMuseoBanner = camogliMuseoExhibition
+    ? getWalkerExhibitionBanner(camogliMuseoExhibition)
+    : undefined;
+  const genericVerifiedBanner = getWalkerExhibitionBanner(sampleVerifiedExhibition);
+  assert(
+    cityBannerAreaIds.has("nyc") &&
+      cityBannerAreaIds.has("la") &&
+      cityBannerAreaIds.has("hudson") &&
+      cityBannerAreaIds.has("camogli") &&
+      getWalkerCityBanner("nyc").role === "city-banner" &&
+      getWalkerNeighborhoodBanner("camogli", "Camogli Centro").assetKey === "camogli-stone-lanes",
+    "Walker visual asset system should provide city and neighborhood banners for all active markets."
+  );
+  assert(
+    camogliMuseoBanner?.role === "gallery-banner" &&
+      camogliMuseoBanner.assetKey === "camogli-maritime-museum" &&
+      getWalkerGalleryBanner(sampleVerifiedExhibition).role === "gallery-banner" &&
+      genericVerifiedBanner.role === "exhibition-banner" &&
+      genericVerifiedBanner.creditLabel === "Editorial image",
+    "Walker visual resolver should prefer safe gallery/exhibit banners and fall back to editorial imagery."
+  );
+  assert(
+    walkerVisualAssets.every(
+      (asset) =>
+        asset.permissionStatus &&
+        asset.licenseLabel.length > 0 &&
+        asset.attribution.length > 0 &&
+        asset.checkedAt.length > 0
+    ) &&
+      walkerVisualAssets
+        .filter((asset) => asset.sourceType !== "walker-generated")
+        .every((asset) => Boolean(asset.sourceUrl)) &&
+      imageReadinessReport.cityBannerCount >= 4 &&
+      imageReadinessReport.neighborhoodBannerCount >= 4 &&
+      imageReadinessReport.unsafeOfficialAssetIds.length === 0,
+    "Walker visual assets should carry rights metadata and flag unsafe official/photo records."
+  );
+  assert(
+    getWalkerVisualForRole({ role: "city-banner", areaId: "hudson" }).assetKey === "hudson-historic" &&
+      getWalkerVisualForRole({
+        role: "exhibition-banner",
+        exhibition: sampleFixtureExhibition
+      }).sourceType === "walker-generated" &&
+      imageReadinessReport.editorialFallbackCount >= galleryExhibitions.length - walkerVisualAssets.length,
+    "Walker role-aware visual resolver should keep deterministic editorial fallback coverage for sparse photo supply."
   );
   assert(
     verifiedInventory.every(

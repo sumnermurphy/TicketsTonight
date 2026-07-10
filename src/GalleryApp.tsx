@@ -87,8 +87,9 @@ import {
 } from "./services/galleryBetaReadiness";
 import { createGalleryMarketDataAudit } from "./services/galleryDataFoundation";
 import {
-  getGalleryHeroVisual,
   getGalleryVisual,
+  getWalkerExhibitionBanner,
+  getWalkerVisualForRole,
   type GalleryVisualKey
 } from "./services/galleryVisuals";
 import {
@@ -732,7 +733,7 @@ function WalkerExploreResultRow({
   logEntry?: GalleryLogEntry;
   onOpenDetails: () => void;
 }) {
-  const visual = getGalleryVisual(exhibition);
+  const visual = getWalkerVisualForRole({ role: "card-thumbnail", exhibition });
   const status = getGalleryVisitStatus(exhibition, referenceNow);
   const trust = getGalleryInventoryTrust(exhibition);
   const isSaved =
@@ -2257,7 +2258,7 @@ function ActiveWalkJourneyScreen({
     return null;
   }
 
-  const visual = getGalleryVisual(currentStop.exhibition);
+  const visual = getWalkerExhibitionBanner(currentStop.exhibition);
   const prompt = getWalkerStopArrivalPrompt(currentStop.exhibition);
   const nextCopy = nextLeg
     ? `${nextLeg.walkingMinutes} min walk - ${nextLeg.distanceMiles.toFixed(1)} mi`
@@ -3370,7 +3371,7 @@ function ExhibitionCard({
   const reasons = getGalleryWhyGoReasons(exhibition, allExhibitions, referenceNow, savedIds);
   const openingTonight = isGalleryOpeningTonight(exhibition, referenceNow);
   const trust = getGalleryInventoryTrust(exhibition);
-  const visual = getGalleryVisual(exhibition);
+  const visual = getWalkerVisualForRole({ role: "card-thumbnail", exhibition });
 
   return (
     <View style={styles.exhibitionCard}>
@@ -3545,7 +3546,7 @@ function ExhibitionDetailSheet({
     : hasActiveWalk
       ? "Use as swap cue"
       : "Add to walk";
-  const visual = getGalleryVisual(exhibition);
+  const visual = getWalkerExhibitionBanner(exhibition);
   const openingTonight = isGalleryOpeningTonight(exhibition, referenceNow);
   const groupedShows = allExhibitions.filter(
     (candidate) =>
@@ -4447,8 +4448,12 @@ export function GalleryApp() {
   const selectedExhibition =
     visibleExhibitions.find((exhibition) => exhibition.id === selectedExhibitionId) ??
     galleryExhibitions.find((exhibition) => exhibition.id === selectedExhibitionId);
-  const heroVisual = getGalleryHeroVisual(selectedAreaId);
-  const tonightPickVisual = tonightPick ? getGalleryVisual(tonightPick) : heroVisual;
+  const heroVisual = getWalkerVisualForRole({
+    role: "neighborhood-banner",
+    areaId: selectedAreaId,
+    neighborhood: selectedNeighborhood ?? walkPlan.neighborhood
+  });
+  const tonightPickVisual = tonightPick ? getWalkerExhibitionBanner(tonightPick) : heroVisual;
   const startStop = walkPlan.stops.find((stop) => stop.exhibition.id === walkPlan.startStopId);
   const nextStop = walkPlan.stops.find((stop) => stop.exhibition.id === walkPlan.nextStopId);
   const routeStopProgressById =
