@@ -1,38 +1,59 @@
-# Tickets Tonight
+# Walker
 
-Mobile discovery starter for curated local shows: concerts, DJ sets, dance, ballet, opera, plays, theater, comedy, variety, and adjacent live events. The active MVP is discovery, discount tracking, external ticket links, and Spotify-powered recommendations; checkout remains deferred.
+Walker is a mobile-first cultural-walk companion. The active review surface helps a user decide what is worth seeing tonight, which galleries or cultural anchors are open, which neighborhoods can support a walk, and which listings are verified versus fixture/demo inventory.
 
-## What is built
+This branch intentionally replaces the legacy iOS-era TicketsTonight product surface with a modern Expo React Native app. The package name and legacy service filenames stay unchanged for now, but the visible product is Walker.
 
-- Expo React Native app with provider-backed local-area event discovery.
-- City selector, near-me area resolution, search, category filters, neighborhood filters, budget filters, sort controls, date windows, deal-only filtering, active-filter summary/reset, grouped result sections, event cards, and a show-detail sheet.
-- First-class category coverage for concerts, DJ sets, dance, ballet, opera, plays, theater, comedy, and variety/adjacent live events.
-- Deal-aware ticket inventory with list prices, savings, access method, inventory source, max quantities, and link-ready market snapshots.
-- Best-bets ranking that lifts urgent deals, local-source picks, nearby shows, and weekend options above the full chronological list.
-- Discount discovery ranking that prioritizes stronger savings and urgent deal windows before checkout is active.
-- Deal alerts can track the current area/category/date filters with optional under-$35, under-$50, or under-$75 price thresholds.
-- External ticket links can be opened from provider-backed offers while in-app checkout remains deferred, including link-only provider listings when live sources do not expose prices.
-- Market coverage audits target New York, Los Angeles, and Hudson with ticket-link, category-lane, and Spotify-matchable inventory counts.
-- Checkout groundwork remains behind services, but purchase UI, account sign-in, and wallet are out of the active MVP for now.
-- Saved shows, deal alerts, in-app deal notifications, and persisted discovery preferences through a replaceable repository layer.
-- Spotify PKCE auth can connect a listener with `user-top-read`, pull top artists, tracks, and genres, and rank provider-backed recommendations in-app.
-- Explicit discovery source plans for New York, Los Angeles, and Hudson so provider work stays focused.
-- Source planning separates broad event APIs from reusable local pipelines, so small venues can fill gaps without turning every venue into a bespoke integration.
-- Local source directory seeds venue calendars, newsletters, partner-feed leads, and permission-gated nightlife candidates by market with a repeatable discover-to-monitor onboarding process for new geographies.
-- Broad API acquisition planning ranks next candidate sources before any bespoke local venue work.
-- Category-level coverage planning flags where broad APIs are enough for baseline discovery and where local pipelines add meaningful depth.
-- Ticketmaster Discovery-shaped adapter for paginated live event ingestion plus normalizing real provider events, classifications, venues, price ranges, link-only ticket pages, and cached detail lookup.
-- Ticketmaster unfiltered area loads fan out across music/nightlife, stage/comedy, performing arts, and adjacent-live lanes to improve broad discovery coverage before bespoke local work.
-- Async event-provider pipeline with cross-source dedupe powering visible results, area inventory, deal rails, alerts, saved shows, and provider-fed future checkout groundwork.
-- Typed service boundaries for replacing seed data with real event feeds, taste providers, and ticket providers.
+## Review Snapshot
 
-## Alpha Markets
+- Active app: `src/GalleryApp.tsx`, mounted from `src/App.tsx`.
+- Primary market: New York gallery walks, with Chelsea, Tribeca, Lower East Side, Upper East Side, and Chinatown route support.
+- Small-market test: Hudson Warren Street.
+- Secondary market: Los Angeles remains covered but lower priority.
+- Current data stance: verified/manual official-page inventory is clearly separated from fixture/demo, partner/submitted, and needs-review inventory.
+- Draft PR: this branch is meant for review, not merge, until the repo replacement is accepted.
 
-- New York, NY: primary alpha market for the densest mix of theater, dance, opera, concerts, DJ sets, and last-minute discounts.
-- Los Angeles, CA: secondary validation market for West Coast concerts, DJ sets, opera, and venue-direct inventory.
-- Hudson, NY: arts-town test market for regional performing arts, weekend trips, and smaller-market discovery behavior.
+## What Is Built
 
-## Run it
+- Walker route builder with quick loop, 2-hour walk, opening crawl, last-chance, and For you route modes.
+- Map-like route planner with ordered stops, walking distance/time, route reasons, selected start-point handoff, grouped same-gallery stops, stop swapping, and external Google Maps links.
+- Active-walk companion state with start/resume, current/next stop progress, visited/skipped actions, completed recap, and local persistence.
+- First-run choice surface for finding a walk, taking the taste quiz, or resuming an active walk.
+- Walker mobile web shell with a wordmark, location/date context, visual featured recommendation, Open Now feed, compact trust strip, and bottom tabs for Tonight, Walk, For You, and Journal.
+- Walker memory personalization with taste-card responses, behavior signals, personalized picks, quests, badges, stamps, saved walks, and journal notes.
+- Opening-night routing that prefers upcoming or active receptions and explains timing.
+- Last-chance and closing-soon signals.
+- Neighborhood Intelligence for walkable clusters.
+- Why Go cards, personal art-log controls, saved/visited/skipped states, and private notes.
+- Trust labels for `Verified as of`, `Official gallery link`, `Fixture/demo`, `Needs review`, and submitted/partner inventory.
+- Place-confidence detail cards that show whether a stop is verified, demo, or a thin-market cultural anchor before a user walks there.
+- Walker image-role system for city, neighborhood, gallery, and exhibit banners; current images remain labeled editorial placeholders and are separated from official gallery links.
+- PWA-readiness metadata, static icon assets, and an exported-web service worker that caches the app shell/local assets after first load while keeping official links/maps live-check only.
+- Compact beta preview path with "Try a NYC walk", "Try For You", "Check Hudson", feedback capture, and copyable Walker beta review report.
+- Route usability signals for open-now confidence, timing risk, best-start reasoning, closed/closing-soon warnings, and thin verified-route fallback copy.
+- Verified NYC gallery inventory depth above the initial fixture count, currently targeted at 72+ NYC exhibitions with 60+ imported/manual official-page records.
+- Hudson coverage kept honest as a smaller market: Warren Street remains the walk test, while nearby Hudson Valley official-page records add context without being presented as Warren Street stops.
+
+## What Is Deliberately Out Of Scope
+
+- Ops console
+- Checkout
+- Spotify/music recommendations
+- Concert/ticketing UI
+- Native iOS packaging
+- Full native map stack
+- Aggressive scraping
+
+## Screenshots
+
+Review screenshots are checked in here:
+
+- Desktop: `docs/pr/gallery-walk-desktop.png`
+- Mobile: `docs/pr/gallery-walk-mobile.png`
+
+The screenshots should show the mobile-first Tonight shell, trust signals, useful route actions, personalization, and the route-first planning surface.
+
+## Local Setup
 
 Requires Node.js `20.19.4` or newer.
 
@@ -41,169 +62,92 @@ npm install
 npm run web
 ```
 
-Optional live Ticketmaster Discovery inventory can be enabled with public Expo env vars:
+Open the Expo web app at the URL printed by Expo. In this workspace the running local preview is usually:
 
-```bash
-EXPO_PUBLIC_TICKETMASTER_API_KEY=your_key npm run web
+```text
+http://localhost:19006
 ```
 
-For local CLI audits, copy `.env.example` to `.env.local` and set `EXPO_PUBLIC_TICKETMASTER_API_KEY` there. Local `.env` files are ignored by git.
+On this Codex desktop workspace, the shell can resolve an older Node. Prefix checks with the bundled Node 20 runtime when needed:
 
 ```bash
-cp .env.example .env.local
-# edit .env.local and set EXPO_PUBLIC_TICKETMASTER_API_KEY=...
-npm run audit:live-inventory
+PATH=/Users/s/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH npm run typecheck
+PATH=/Users/s/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH npm run test:services
+PATH=/Users/s/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH npm run audit:galleries
 ```
 
-The adapter defaults to 100 results per page and up to 3 pages, which is the recommended local audit setting to avoid provider rate limits. Override the live fetch breadth for an intentionally deeper run with:
+To validate a static web preview build locally:
 
 ```bash
-EXPO_PUBLIC_TICKETMASTER_PAGE_SIZE=100 EXPO_PUBLIC_TICKETMASTER_MAX_PAGES=5 npm run audit:providers
+PATH=/Users/s/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH npm run export:web
 ```
 
-Without that key, the app stays on the checked-in seed catalog, partner-feed fixtures, and reusable local calendar fixtures.
+## Validation
 
-Optional Spotify recommendations can be enabled with a public Spotify app client id:
-
-```bash
-EXPO_PUBLIC_SPOTIFY_CLIENT_ID=your_spotify_client_id npm run web
-```
-
-Register the exact redirect URI in Spotify. Native builds default to `ticketstonight://spotify-auth`; web/local Expo testing should set `EXPO_PUBLIC_SPOTIFY_REDIRECT_URI` to the allowed callback registered in Spotify. Do not put a Spotify client secret in Expo public env or commit it to this repo.
-
-Run focused service checks:
+Run the required gates:
 
 ```bash
+npm run typecheck
 npm run test:services
+npm run audit:galleries
 ```
 
-Run the market coverage audit for New York, Los Angeles, and Hudson:
+Useful additional audits remain available:
 
 ```bash
 npm run audit:coverage
-```
-
-Run the live supply audit for New York, Los Angeles, and Hudson:
-
-```bash
-npm run audit:live-supply
-```
-
-Run the live inventory audit for fixture, parser, and Ticketmaster source readiness:
-
-```bash
 npm run audit:live-inventory
-```
-
-Run the source-readiness audit for ranked next-source decisions, including RA partner/API posture and Hudson local-calendar lift:
-
-```bash
 npm run audit:sources
-```
-
-Run the local source directory audit for repeatable small-venue, bar, newsletter, and partner-feed source buildup:
-
-```bash
 npm run audit:source-directory
 ```
 
-Run the default discovery quality audit for the app-facing shaped result lists:
+## Browser Smoke Checklist
 
-```bash
-npm run audit:quality
-```
+- NYC shows materially more than 12 exhibitions.
+- The top Walker surface explains the featured route plus open-now, verified, demo/review, walkable, opening, and closing-soon supply.
+- Route modes switch between 45-minute loop, 2-hour walk, opening crawl, last chance, and For you.
+- Route swap works from the route preview or stop list without silently overwriting a preserved active walk.
+- Active walk progress survives refresh after marking a stop visited.
+- Grouped same-gallery stops still render compactly with show titles preserved.
+- Trust labels and official links are visible on cards and stops.
+- Hudson Warren Street renders as a smaller, honest market.
+- The beta preview surface shows field-test context and can copy a Walker report with market, route mode, active-walk status, selected start point, current/next stop, verified/demo counts, route warnings, field tags, and tester notes.
+- Desktop and mobile layouts have no obvious overlap or cramped controls.
+- Browser console has no errors.
 
-Run the non-secret Spotify readiness audit:
+## Beta Test Path
 
-```bash
-npm run audit:spotify
-```
+1. Open the preview.
+2. Tap "Try a NYC walk" and confirm the route has verified/open stops and map links.
+3. Tap "Try For You", save or skip a recommendation, and confirm the visible learning copy changes.
+4. Tap "Check Hudson" and confirm Warren Street remains labeled as a smaller/thinner walk.
+5. Add a tester note, copy the beta review report, and attach it to PR feedback.
 
-Run live Ticketmaster provider diagnostics for New York, Los Angeles, and Hudson:
+Known limitations: the exported web preview has a lightweight app-shell/local-asset service worker after first load, but official gallery links, external maps, and live hours verification still need network access. There is no auth/backend sync, push notification system, native packaging, map SDK, or automated scraping.
 
-```bash
-EXPO_PUBLIC_TICKETMASTER_API_KEY=your_key npm run audit:providers
-```
+## Architecture Guide
 
-The live inventory and provider diagnostics commands run in no-key mode without making Ticketmaster requests. When a key is configured, they redact API keys from printed request URLs and separate raw events, normalized events, duplicates, discarded events, priced offers, and link-only ticket pages.
+- `src/GalleryApp.tsx`: active gallery-walk discovery UI.
+- `src/data/galleryCatalog.ts`: gallery areas, neighborhoods, fixture/demo inventory, and imported verified inventory composition.
+- `src/data/verifiedGalleryInventory.ts`: manually verified official-page gallery exhibition records.
+- `src/data/gallerySources.ts`: official gallery source directory and review/freshness status.
+- `src/services/galleryDiscovery.ts`: filtering, trust labels, walk planning, route grouping, opening timing, last-chance alerts, and base route map URLs.
+- `src/services/walkerFieldReadiness.ts`: start-point-aware map handoff, real-world readiness warnings, Camogli field-test shortcuts, and offline/PWA summary copy.
+- `src/services/galleryVisuals.ts`: Walker editorial image registry and role-aware city/neighborhood/gallery/exhibit visual resolution with provenance labels.
+- `src/services/galleryWalkSession.ts`: active walk sessions, progress, replacement-safe stop swaps, and recaps.
+- `src/services/galleryAppPersistence.ts`: local persistence for walk state, art log, filters, alerts, personalization, saved walks, and first-run state.
+- `src/services/galleryTastePassport.ts`: quiz/behavior taste signals, personalized ranking, For you routes, Walker quests, badges, and stamps.
+- `src/services/galleryDataFoundation.ts`: import records, source audits, submission review queue, and market data audit helpers.
+- `scripts/galleryDiscoveryAudit.ts`: market-level gallery inventory and route-readiness audit.
+- `tests/serviceChecks.ts`: focused service checks for gallery inventory, route behavior, map links, trust labels, and legacy service seams.
 
-For native preview, use:
+## PR Notes
 
-```bash
-npm run ios
-npm run android
-```
+This PR is intentionally large because it moves the repo from an old native TicketsTonight codebase to Walker, a modern Expo-based cultural-walk discovery app. Review should focus on:
 
-## Architecture
+- Whether replacing the legacy app tree is the accepted direction.
+- Whether the gallery-walk product surface is understandable and useful enough for the next iteration.
+- Whether fixture/demo and verified inventory distinctions remain honest.
+- Whether route planning, active-walk state, and swap-stop editing are practical without pretending to be a full native map product.
 
-- `src/data/catalog.ts`: alpha-market areas, categories, and seed event inventory.
-- `src/data/broadApiCandidates.ts`: ranked broad API candidates for baseline event coverage, ticket links, price inventory, and coverage-gap auditing.
-- `src/data/discoveryPlans.ts`: market-by-market discovery source strategy for New York, Los Angeles, and Hudson.
-- `src/data/htmlCalendarFixtures.ts`: sample HTML calendar payloads with JSON-LD event blocks for parser-backed local import tests.
-- `src/data/localCalendarFeeds.ts`: reusable calendar source metadata and fixture-backed/parser-ready local calendar examples for NYC performing arts, Hudson Hall, Fisher Center, and Basilica Hudson.
-- `src/data/localSourceCandidates.ts`: geography-aware source directory for small venues, bars, official calendars, newsletters, partner-feed leads, permission-gated nightlife candidates, and the repeatable onboarding stages.
-- `src/data/partnerFeeds.ts`: raw partner feed fixtures that mimic external inventory in the supported alpha markets.
-- `src/data/ticketmasterFixtures.ts`: Ticketmaster Discovery-shaped fixture payload for adapter tests.
-- `src/services/auth.ts`: dormant auth provider groundwork for future checkout/account features.
-- `src/services/checkoutBackend.ts`: dormant backend-style checkout groundwork for future purchase flow.
-- `src/services/calendarFeedProvider.ts`: generic local calendar feed normalizer for ICS/RSS/HTML/manual-import style listings.
-- `src/services/coverageAudit.ts`: 30-day market coverage audit for event-count, ticket-link, priced-offer, link-only-offer, category-lane, date-window, and source-breadth targets.
-- `src/services/dealAlerts.ts`: alert creation and discounted-ticket matching.
-- `src/services/discoveryAcquisition.ts`: broad API recommendation and local-pipeline trigger planning so provider work starts with scalable sources.
-- `src/services/discoveryFacets.ts`: market summaries, source diversity, link-ready show counts, neighborhood facets, category facets, and date-window availability with discounted-count signals for the selected market.
-- `src/services/discoveryFilterSummary.ts`: compact active-filter labels and reset affordance state for the discovery UI.
-- `src/services/dealDiscovery.ts`: discount insight scoring, savings math, urgency labels, and area deal summaries.
-- `src/services/discoveryPlanning.ts`: helper layer for broad-API/local-pipeline lanes, category coverage, source readiness, category gaps, primary-market ordering, and discount levers.
-- `src/services/discoveryRanking.ts`: best-bets scoring for urgent deals, local-source inventory, timing, and distance.
-- `src/services/discoveryResultSections.ts`: scan-friendly result grouping for soonest discovery while preserving cheapest/nearby sort order.
-- `src/services/feedProvider.ts`: feed normalization from provider taxonomy/inventory into the app `Show` model.
-- `src/services/htmlCalendarImporter.ts`: reusable JSON-LD HTML calendar importer that turns event pages/listings into local calendar events.
-- `src/services/eventCatalog.ts`: discovery search, date-window filtering, deal search, recommendation scoring, composite event providers, cross-source event dedupe, calendar-feed inventory, and runtime caching for provider-fed shows.
-- `src/services/eventProviderFactory.ts`: default provider stack that keeps fixtures active and adds Ticketmaster Discovery when public Expo config is present.
-- `src/services/location.ts`: location provider interface, demo location provider, distance calculation, and nearest-area resolution.
-- `src/services/liveSupplyAudit.ts`: focused NYC live-supply target audit for the current 50-event provider sprint.
-- `src/services/localSourcePlanning.ts`: ranks local source candidates, summarizes category/intake coverage, and returns the reusable source-onboarding checklist for new geographies.
-- `src/services/notifications.ts`: in-app notification provider for deal-alert matches, with read-state merge helpers for future push/email channels.
-- `src/services/payments.ts`: dormant payment provider groundwork shaped for future Stripe/provider-native checkout.
-- `src/services/personalization.ts`: Spotify PKCE auth, token exchange, top artists/tracks/genres fetches, demo taste provider, and recommendation-context creation.
-- `src/services/storage.ts`: repository for preferences and orders, backed by browser storage on web and memory fallback elsewhere.
-- `src/services/ticketLinks.ts`: safe external ticket-link intent selection for provider-backed offers while checkout is deferred.
-- `src/services/providerDiagnostics.ts`: live provider diagnostics for Ticketmaster fan-out, duplicate events, category mix, priced offers, link-only ticket pages, and redacted request URLs.
-- `src/services/sourceInventoryAudit.ts`: source-level freshness/import summaries for fixture, parsed calendar, and live API inventory.
-- `src/services/sourceReadinessAudit.ts`: ranked source-readiness decisions by market, category lift, ticket-link coverage, duplicate rate, legal/terms posture, and integration effort.
-- `src/services/ticketmasterProvider.ts`: Ticketmaster Discovery request builder, lane fan-out fetcher, fetch client, event normalizer, and `EventProvider` implementation.
-- `src/services/ticketing.ts`: ticketing provider interface plus a mock provider.
-- `src/types.ts`: shared app, ticketing, and recommendation types.
-- `src/App.tsx`: provider-backed mobile discovery, detail, saved-show, discount alert, inbox, and preference UI.
-- `scripts/env.ts`: local `.env.local` loader for audit scripts without committing provider keys.
-- `scripts/liveInventoryAudit.ts`: multi-market live inventory audit for fixture fallback, parsed calendar imports, and Ticketmaster no-key/keyed readiness.
-- `scripts/sourceDirectoryAudit.ts`: repeatable local source directory report for small venues, bars, newsletters, partner-feed leads, category coverage, and intake mix by market.
-- `scripts/sourceReadinessAudit.ts`: multi-market source-readiness report for broad APIs, local calendars, planned pipelines, and Resident Advisor partner/API feasibility.
-- `tests/serviceChecks.ts`: discovery, market scope, feed normalization, provider adapters, deal filtering, discount alerts, and dormant checkout groundwork checks.
-
-## Provider seams
-
-- `EventProvider`: replace or extend `CompositeEventProvider` with `TicketmasterDiscoveryProvider`, Eventbrite, venue-direct, and promoter feed providers.
-- `AuthProvider`: replace `MockAuthProvider` with email/password, passkeys, OAuth, or a backend identity session.
-- `TicketingProvider`: dormant seam for Stripe Payment Sheet, provider-native checkout, or venue-direct order creation later.
-- `PaymentProvider`: dormant seam for Stripe Payment Sheet, Apple Pay/Google Pay, or provider-native payment confirmation later.
-- `CheckoutBackend`: dormant seam for future HTTPS endpoints so holds, payment intents, order creation, inventory checks, and seller-of-record logic stay server-side.
-- `TasteProfileProvider`: Spotify OAuth, saved auth token metadata, top artists/tracks/genres, and recommendation-context refresh groundwork.
-- `LocationProvider`: replace `DemoLocationProvider` with Expo Location or native permissions when device geolocation is ready.
-- `AppRepository`: replace browser/memory storage with AsyncStorage, SQLite, or authenticated backend sync.
-- `NotificationProvider`: extend in-app deal notifications to push notifications or email once notification permissions and backend delivery are added.
-
-## Next integrations
-
-- Event inventory: follow the checked-in discovery source plans: New York first, Los Angeles second, Hudson as the smaller-market arts-town test.
-- Data strategy: keep Ticketmaster as the broad ticketed baseline, add reusable local calendar/feed pipelines next for measured arts-depth gaps, then evaluate Eventbrite for community/ticket-link breadth, SeatGeek for price-marketplace validation, and PredictHQ-style event intelligence for coverage-gap auditing.
-- Local-source prioritization: use category coverage to pick local pipeline work only when it adds depth beyond broad API coverage.
-- New geographies: start by adding at least five official HTML-calendar candidates, one partner/manual lead path, terms posture, sample listings, duplicate checks, and freshness monitoring through the local source directory before writing bespoke adapters.
-- New York performing arts: Ticketmaster remains the broad baseline, while the reusable calendar-feed path now supplies parser-ready dance, ballet, and opera depth before any venue-specific adapter work.
-- Los Angeles performing arts: keep Ticketmaster as the broad baseline, then evaluate reusable performing-arts calendars before venue-direct one-offs.
-- Hudson local pipeline: start with the generic regional calendar-feed path, keep it category-complete for concerts, dance, opera, plays, theater, and variety, and only add bespoke venue adapters after audits show durable gaps.
-- Resident Advisor: treat as a high-fit nightlife candidate for NYC/LA only through a permitted partner/API path; do not scrape or ingest RA without authorization.
-- Discounts: partner-funded promo codes, unsold inventory drops, preview allocations, early-arrival prices, matinee value, and simple last-minute deals.
-- Later checkout: Stripe Payment Sheet or provider-native checkout once seller-of-record and payout flow are decided.
-- Recommendations: deepen Spotify ranking with saved shows, clicked events, followed venues, and artist follow alerts.
-- Location: Expo Location for nearby search, plus explicit city selection for planning trips.
+The next product iteration should probably be beta tester feedback triage, deeper official-page inventory, and eventual map/PWA hardening, not ops tooling.

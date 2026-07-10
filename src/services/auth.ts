@@ -9,7 +9,7 @@ export interface AuthProvider {
 
 export class MockAuthProvider implements AuthProvider {
   id = "mock-auth";
-  label = "Tickets Tonight account";
+  label = "Walker account";
 
   async signIn(): Promise<UserSession> {
     const now = new Date().toISOString();

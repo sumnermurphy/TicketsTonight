@@ -326,3 +326,214 @@ export type DiscoveryMarketPlan = {
   discountLevers: string[];
   sources: DiscoverySourcePlan[];
 };
+
+export type GalleryAreaId = "nyc" | "la" | "hudson" | "camogli";
+
+export type GalleryMedium =
+  | "painting"
+  | "photography"
+  | "sculpture"
+  | "installation"
+  | "video"
+  | "performance"
+  | "design"
+  | "prints"
+  | "mixed-media";
+
+export type GalleryKind =
+  | "blue-chip"
+  | "emerging"
+  | "nonprofit"
+  | "artist-run"
+  | "project-space"
+  | "museum"
+  | "cultural-venue"
+  | "heritage-site";
+
+export type GalleryEventKind =
+  | "opening-reception"
+  | "artist-talk"
+  | "walkthrough"
+  | "rsvp-preview"
+  | "closing-party";
+
+export type GallerySourceLegalStatus =
+  | "official-public-page"
+  | "partner-submission"
+  | "permission-required"
+  | "do-not-ingest";
+
+export type GallerySourceFreshness = "fresh" | "needs-review" | "stale-risk";
+
+export type GallerySourceCandidateType =
+  | "commercial-gallery"
+  | "nonprofit"
+  | "artist-run"
+  | "project-space"
+  | "museum"
+  | "cultural-venue"
+  | "heritage-site"
+  | "partner-submission";
+
+export type GalleryImportLane = "manual-seed" | "partner-submission" | "official-page-ready";
+
+export type GalleryImportRecordKind = "manual-seed" | "partner-submission";
+
+export type GallerySubmissionReviewStatus =
+  | "needs-review"
+  | "approved"
+  | "rejected"
+  | "needs-more-info";
+
+export type GalleryHoursInterval = {
+  day: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  opens: string;
+  closes: string;
+};
+
+export type GallerySpecialEvent = {
+  id: string;
+  kind: GalleryEventKind;
+  title: string;
+  startsAt: string;
+  endsAt?: string;
+  rsvpUrl?: string;
+};
+
+export type GalleryArea = {
+  id: GalleryAreaId;
+  name: string;
+  region: string;
+  timezone: string;
+  role: "primary" | "secondary" | "arts-town-test" | "travel-test";
+  description: string;
+};
+
+export type GalleryNeighborhood = {
+  id: string;
+  areaId: GalleryAreaId;
+  name: string;
+  walkLabel: string;
+  anchor: Coordinates;
+};
+
+export type GalleryExhibition = {
+  id: string;
+  sourceCandidateId?: string;
+  importRecordId?: string;
+  verifiedAsOf?: string;
+  sourceCheckedAt?: string;
+  title: string;
+  artists: string[];
+  galleryName: string;
+  galleryKind: GalleryKind;
+  areaId: GalleryAreaId;
+  neighborhood: string;
+  address: string;
+  coordinates: Coordinates;
+  distanceMiles: number;
+  mediums: GalleryMedium[];
+  opensAt: string;
+  closesAt: string;
+  receptionAt?: string;
+  specialEvents: GallerySpecialEvent[];
+  hours: GalleryHoursInterval[];
+  externalUrl: string;
+  rsvpUrl?: string;
+  imageTone: string;
+  source: "seed-fixture" | "official-page" | "gallery-submission" | "manual-review";
+  sourceLegalStatus: GallerySourceLegalStatus;
+  sourceFreshness: GallerySourceFreshness;
+  sourceUpdatedAt: string;
+  description: string;
+  whyGoSignals: string[];
+};
+
+export type GalleryLogStatus = "saved" | "want-to-see" | "visited" | "skipped";
+
+export type GalleryLogEntry = {
+  exhibitionId: string;
+  status: GalleryLogStatus;
+  note?: string;
+  updatedAt: string;
+};
+
+export type GallerySubmissionDraft = {
+  id: string;
+  galleryName: string;
+  areaId: GalleryAreaId;
+  title: string;
+  artists: string[];
+  opensAt: string;
+  closesAt: string;
+  receptionAt?: string;
+  externalUrl: string;
+  submitterEmail?: string;
+  notes?: string;
+  sourceLegalStatus: "partner-submission";
+  status: "ready-for-review" | "needs-required-fields";
+  createdAt: string;
+};
+
+export type GallerySourceCandidate = {
+  id: string;
+  galleryName: string;
+  galleryKind: GalleryKind;
+  areaId: GalleryAreaId;
+  neighborhood: string;
+  city: string;
+  address: string;
+  coordinates: Coordinates;
+  websiteUrl: string;
+  exhibitionsUrl: string;
+  hoursUrl?: string;
+  submissionUrl?: string;
+  contactUrl?: string;
+  sourceType: GallerySourceCandidateType;
+  preferredImportLane: GalleryImportLane;
+  sourceLegalStatus: GallerySourceLegalStatus;
+  sourceFreshness: GallerySourceFreshness;
+  lastCheckedAt: string;
+  confidence: number;
+  defaultHours: GalleryHoursInterval[];
+  notes: string;
+};
+
+export type GalleryImportPayload = {
+  title: string;
+  artists: string[];
+  mediums: GalleryMedium[];
+  opensAt: string;
+  closesAt: string;
+  receptionAt?: string;
+  externalUrl: string;
+  description: string;
+  imageTone?: string;
+};
+
+export type GalleryImportRecord = {
+  id: string;
+  sourceCandidateId: string;
+  kind: GalleryImportRecordKind;
+  sourceUrl: string;
+  sourceCheckedAt: string;
+  sourceFreshness: GallerySourceFreshness;
+  sourceLegalStatus: GallerySourceLegalStatus;
+  confidence: number;
+  payload: GalleryImportPayload;
+  normalizedExhibitionId?: string;
+  errors: string[];
+};
+
+export type GallerySubmissionQueueItem = {
+  id: string;
+  draft: GallerySubmissionDraft;
+  sourceCandidateId?: string;
+  status: GallerySubmissionReviewStatus;
+  submittedAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  reviewNotes?: string;
+  approvedImportRecordId?: string;
+  approvedExhibitionId?: string;
+};

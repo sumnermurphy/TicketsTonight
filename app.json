@@ -1,12 +1,16 @@
 {
   "expo": {
-    "name": "Tickets Tonight",
+    "name": "Walker",
     "slug": "tickets-tonight",
     "scheme": "ticketstonight",
     "version": "0.1.0",
+    "description": "Walker is a mobile-first cultural walk companion for discovering, planning, saving, and reflecting on art walks.",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "icon": "./assets/icons/walker-icon-512.png",
+    "backgroundColor": "#FAF6EF",
+    "primaryColor": "#0D3B2E",
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -17,11 +21,17 @@
     "android": {
       "package": "com.ticketstonight.app",
       "adaptiveIcon": {
-        "backgroundColor": "#F8F3EA"
+        "backgroundColor": "#FAF6EF"
       }
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "name": "Walker",
+      "shortName": "Walker",
+      "display": "standalone",
+      "themeColor": "#0D3B2E",
+      "backgroundColor": "#FAF6EF",
+      "favicon": "./assets/icons/walker-icon-192.png"
     }
   }
 }
