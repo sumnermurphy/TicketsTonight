@@ -181,6 +181,7 @@ type TonightFeedItem = {
   actionLabel: string;
   onPress: () => void;
 };
+type WalkerMobileTab = "home" | "explore" | "walks" | "saved" | "journal";
 
 const referenceNow = "2026-07-09T15:30:00-04:00";
 
@@ -1390,39 +1391,195 @@ function BetaFeedbackPanel({
   );
 }
 
-function MobileCommandBar({
+function WalkerBottomNav({
+  activeTab,
   activeWalk,
-  betaProgress,
-  onTonight,
-  onWalk,
-  onForYou,
-  onLog
+  onTab
 }: {
+  activeTab: WalkerMobileTab;
   activeWalk: boolean;
-  betaProgress: GalleryBetaTaskProgress;
-  onTonight: () => void;
-  onWalk: () => void;
-  onForYou: () => void;
-  onLog: () => void;
+  onTab: (tab: WalkerMobileTab) => void;
 }) {
+  const tabs: Array<{
+    id: WalkerMobileTab;
+    label: string;
+    icon: "home" | "search" | "route" | "saved" | "journal";
+  }> = [
+    { id: "home", label: "Home", icon: "home" },
+    { id: "explore", label: "Explore", icon: "search" },
+    { id: "walks", label: activeWalk ? "Walking" : "Walks", icon: "route" },
+    { id: "saved", label: "Saved", icon: "saved" },
+    { id: "journal", label: "Journal", icon: "journal" }
+  ];
+  const renderIcon = (icon: typeof tabs[number]["icon"], active: boolean) => {
+    const iconColor = active ? colors.paper : colors.teal;
+
+    if (icon === "search") {
+      return <Search size={17} color={iconColor} />;
+    }
+
+    if (icon === "route") {
+      return <Route size={17} color={iconColor} />;
+    }
+
+    if (icon === "saved") {
+      return <Heart size={17} color={iconColor} />;
+    }
+
+    if (icon === "journal") {
+      return <NotebookPen size={17} color={iconColor} />;
+    }
+
+    return <Home size={17} color={iconColor} />;
+  };
+
   return (
     <View style={styles.mobileCommandBar}>
-      <Pressable accessibilityRole="button" onPress={onTonight} style={styles.mobileCommandButton}>
-        <Home size={17} color={colors.teal} />
-        <Text style={styles.mobileCommandText}>Tonight</Text>
-      </Pressable>
-      <Pressable accessibilityRole="button" onPress={onWalk} style={styles.mobileCommandButton}>
-        <Route size={17} color={colors.teal} />
-        <Text style={styles.mobileCommandText}>{activeWalk ? "Walking" : "Walk"}</Text>
-      </Pressable>
-      <Pressable accessibilityRole="button" onPress={onForYou} style={styles.mobileCommandButton}>
-        <Sparkles size={17} color={colors.teal} />
-        <Text style={styles.mobileCommandText}>For You</Text>
-      </Pressable>
-      <Pressable accessibilityRole="button" onPress={onLog} style={styles.mobileCommandButton}>
-        <ListChecks size={17} color={colors.teal} />
-        <Text style={styles.mobileCommandText}>Journal</Text>
-      </Pressable>
+      {tabs.map((tab) => {
+        const active = activeTab === tab.id;
+
+        return (
+          <Pressable
+            key={tab.id}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${tab.label}`}
+            onPress={() => onTab(tab.id)}
+            style={[styles.mobileCommandButton, active ? styles.activeMobileCommandButton : null]}
+          >
+            {renderIcon(tab.icon, active)}
+            <Text style={[styles.mobileCommandText, active ? styles.activeMobileCommandText : null]}>
+              {tab.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function WalkerSavedMemoryPanel({
+  savedWalks,
+  logEntries,
+  exhibitions,
+  memory,
+  badges,
+  stamps,
+  onCopySavedWalk
+}: {
+  savedWalks: GallerySavedWalk[];
+  logEntries: GalleryLogEntry[];
+  exhibitions: GalleryExhibition[];
+  memory: GalleryPassportMemory;
+  badges: GalleryPassportBadge[];
+  stamps: GalleryPassportStamp[];
+  onCopySavedWalk: (savedWalk: GallerySavedWalk) => void;
+}) {
+  const exhibitionById = new Map(exhibitions.map((exhibition) => [exhibition.id, exhibition]));
+  const savedEntries = logEntries.filter((entry) => entry.status === "saved" || entry.status === "want-to-see");
+  const visitedEntries = logEntries.filter((entry) => entry.status === "visited");
+  const notedEntries = logEntries.filter((entry) => Boolean(entry.note?.trim()));
+
+  return (
+    <View style={styles.mobileMemoryShell}>
+      <View style={styles.mobileMemoryHero}>
+        <View style={styles.walkerTopBrand}>
+          <WalkerMark size={24} />
+          <View>
+            <Text style={[styles.walkerWordmark, styles.mobileMemoryWordmark]}>Walker</Text>
+            <Text style={[styles.mobileDateLabel, styles.mobileMemoryDateLabel]}>Saved, Journal & Memory</Text>
+          </View>
+        </View>
+        <Text style={styles.mobileMemoryTitle}>Capture what moves you.</Text>
+        <Text style={styles.mobileMemoryCopy}>{getWalkerMemorySummary(memory)}</Text>
+        <View style={styles.mobileMemoryStats}>
+          <Text style={styles.mobileMemoryStat}>{savedEntries.length} saved</Text>
+          <Text style={styles.mobileMemoryStat}>{visitedEntries.length} visited</Text>
+          <Text style={styles.mobileMemoryStat}>{notedEntries.length} notes</Text>
+        </View>
+      </View>
+
+      <View style={styles.mobileCollectionPanel}>
+        <View style={styles.mobileSectionHeading}>
+          <Text style={styles.mobileSectionTitle}>Collections</Text>
+          <Text style={styles.mobileSectionMeta}>{savedWalks.length} walks</Text>
+        </View>
+        {savedWalks.slice(0, 4).map((savedWalk) => (
+          <View key={savedWalk.id} style={styles.mobileSavedRow}>
+            <View style={styles.mobileSavedThumb}>
+              <Route size={16} color={colors.teal} />
+            </View>
+            <View style={styles.mobileFeedCopy}>
+              <Text style={styles.mobileFeedTitle} numberOfLines={1}>{savedWalk.title}</Text>
+              <Text style={styles.mobileFeedDetail} numberOfLines={1}>{savedWalk.summary}</Text>
+              <Text style={styles.mobileFeedMeta} numberOfLines={1}>
+                {savedWalk.stopIds.length} stops - {formatShortDate(savedWalk.savedAt)}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Copy saved walk ${savedWalk.title}`}
+              onPress={() => onCopySavedWalk(savedWalk)}
+              style={styles.mobileFeedActionButton}
+            >
+              <Copy size={13} color={colors.teal} />
+            </Pressable>
+          </View>
+        ))}
+        {savedWalks.length === 0 ? (
+          <Text style={styles.emptyText}>Save a route from the Walks tab to build a collection.</Text>
+        ) : null}
+      </View>
+
+      <View style={styles.mobileCollectionPanel}>
+        <View style={styles.mobileSectionHeading}>
+          <Text style={styles.mobileSectionTitle}>Journal</Text>
+          <Text style={styles.mobileSectionMeta}>{logEntries.length} entries</Text>
+        </View>
+        {logEntries.slice(0, 6).map((entry) => (
+          (() => {
+            const exhibition = exhibitionById.get(entry.exhibitionId);
+
+            return (
+              <View key={entry.exhibitionId} style={styles.mobileJournalRow}>
+                <View style={styles.mobileTimelineDot} />
+                <View style={styles.mobileFeedCopy}>
+                  <Text style={styles.mobileFeedLabel}>{logStatusLabels[entry.status]}</Text>
+                  <Text style={styles.mobileFeedTitle} numberOfLines={1}>
+                    {exhibition?.title ?? "Saved exhibition"}
+                  </Text>
+                  <Text style={styles.mobileFeedDetail} numberOfLines={1}>
+                    {exhibition?.galleryName ?? "Walker"} - {formatShortDate(entry.updatedAt)}
+                  </Text>
+                  {entry.note ? (
+                    <Text style={styles.mobileFeedMeta} numberOfLines={2}>{entry.note}</Text>
+                  ) : null}
+                </View>
+              </View>
+            );
+          })()
+        ))}
+        {logEntries.length === 0 ? (
+          <Text style={styles.emptyText}>Mark shows saved, wanted, visited, or skipped to start your timeline.</Text>
+        ) : null}
+      </View>
+
+      <View style={styles.mobileRecapCard}>
+        <Text style={styles.mobileFeedLabel}>Monthly recap</Text>
+        <Text style={styles.mobileRecapTitle}>Your cultural recap</Text>
+        <View style={styles.mobileMemoryStats}>
+          <Text style={styles.mobileMemoryStat}>{memory.completedWalkCount} walks</Text>
+          <Text style={styles.mobileMemoryStat}>{memory.visitedStopCount} places</Text>
+          <Text style={styles.mobileMemoryStat}>{memory.stamps.length} stamps</Text>
+        </View>
+        <View style={styles.routeReasonRow}>
+          {badges.slice(0, 3).map((badge) => (
+            <Text key={badge.id} style={styles.passportBadge}>{badge.label}</Text>
+          ))}
+          {stamps.slice(0, 3).map((stamp) => (
+            <Text key={stamp.id} style={styles.passportStamp}>{stamp.label}</Text>
+          ))}
+        </View>
+      </View>
     </View>
   );
 }
@@ -2105,11 +2262,12 @@ function RoutePreview({
         <View style={[styles.routeMapRoadBand, styles.routeMapRoadBandSouth]} />
         <View style={[styles.routeMapRoadBandVertical, styles.routeMapRoadBandWest]} />
         <View style={[styles.routeMapRoadBandVertical, styles.routeMapRoadBandEast]} />
+        <View style={styles.routeMapCurrentDot} />
         <Svg style={styles.routeMapSvg} viewBox="0 0 100 100" pointerEvents="none">
           <Polyline
             points={routePath}
             fill="none"
-            stroke={colors.ink}
+            stroke={colors.teal}
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeWidth={2.4}
@@ -3249,6 +3407,7 @@ export function GalleryApp() {
     persistedState?.alertWindowDays ?? 14
   );
   const [query, setQuery] = useState("");
+  const [mobileTab, setMobileTab] = useState<WalkerMobileTab>("home");
   const [selectedExhibitionId, setSelectedExhibitionId] = useState<string | undefined>();
   const [highlightedRouteStopId, setHighlightedRouteStopId] = useState<string | undefined>();
   const [activeWalkSession, setActiveWalkSession] = useState<GalleryWalkSession | undefined>(
@@ -4374,6 +4533,7 @@ export function GalleryApp() {
 
     setActiveWalkSession(createGalleryWalkSession(walkPlan, referenceNow));
     setDraftWalkStopIds(undefined);
+    setMobileTab("walks");
     completeFirstRun("find-walk");
     completeBetaTask("start-route");
   }
@@ -4387,6 +4547,7 @@ export function GalleryApp() {
     setSelectedNeighborhood(activeWalkSession.neighborhood);
     setWalkMode(activeWalkSession.mode);
     setSelectedExhibitionId(undefined);
+    setMobileTab("walks");
   }
 
   function markRouteStopVisited(stopId?: string, exhibitionId?: string) {
@@ -4522,10 +4683,384 @@ export function GalleryApp() {
     walkMode
   ]);
 
+  const mobileExploreContent = (
+    <View style={styles.mobileTabShell}>
+      <View style={styles.mobileScreenHeader}>
+        <View style={styles.walkerTopBrand}>
+          <WalkerMark size={24} />
+          <View>
+            <Text style={styles.walkerWordmark}>Explore</Text>
+            <Text style={styles.mobileDateLabel}>{selectedArea?.name ?? compactAreaName} - {visibleExhibitions.length} results</Text>
+          </View>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Show current walk map"
+          onPress={() => setMobileTab("walks")}
+          style={styles.mobileHeaderIconButton}
+        >
+          <MapPin size={18} color={colors.teal} />
+        </Pressable>
+      </View>
+
+      <View style={styles.mobileSearchPanel}>
+        <View style={styles.searchBox}>
+          <Search size={18} color={colors.mutedInk} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search places, exhibits, walks..."
+            placeholderTextColor={colors.mutedInk}
+            style={styles.searchInput}
+          />
+          <SlidersHorizontal size={17} color={colors.teal} />
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mediumRow}>
+          {galleryAreas.map((area) => (
+            <ChipButton
+              key={area.id}
+              label={area.name}
+              active={selectedAreaId === area.id}
+              onPress={() => resetMarket(area.id)}
+              compact
+            />
+          ))}
+        </ScrollView>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mediumRow}>
+          {lensOptions.map((lens) => (
+            <ChipButton
+              key={lens}
+              label={lensLabels[lens]}
+              active={activeLens === lens}
+              onPress={() => setActiveLens(lens)}
+              compact
+            />
+          ))}
+          <ChipButton
+            label="Verified"
+            active={verifiedOnly}
+            onPress={() => setVerifiedOnly((value) => !value)}
+            compact
+          />
+        </ScrollView>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mediumRow}>
+          <ChipButton
+            label="All media"
+            active={!selectedMedium}
+            onPress={() => setSelectedMedium(undefined)}
+            compact
+          />
+          {mediumOptions.map((medium) => (
+            <ChipButton
+              key={medium}
+              label={mediumLabels[medium]}
+              active={selectedMedium === medium}
+              onPress={() => setSelectedMedium(medium)}
+              compact
+            />
+          ))}
+        </ScrollView>
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mobileNeighborhoodRail}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Show all neighborhoods"
+          onPress={() => {
+            setSelectedNeighborhood(undefined);
+            setSelectedExhibitionId(undefined);
+          }}
+          style={[styles.mobileNeighborhoodChip, !selectedNeighborhood ? styles.activeMobileNeighborhoodChip : null]}
+        >
+          <Text style={styles.mobileNeighborhoodName}>All</Text>
+          <Text style={styles.mobileNeighborhoodMeta}>{sourceTrust.verifiedExhibitionCount} verified</Text>
+        </Pressable>
+        {neighborhoodIntelligence.slice(0, 8).map((item) => (
+          <Pressable
+            key={item.neighborhood}
+            accessibilityRole="button"
+            accessibilityLabel={`Explore ${item.neighborhood}`}
+            onPress={() => {
+              setSelectedNeighborhood(item.neighborhood);
+              setSelectedExhibitionId(undefined);
+            }}
+            style={[
+              styles.mobileNeighborhoodChip,
+              selectedNeighborhood === item.neighborhood ? styles.activeMobileNeighborhoodChip : null
+            ]}
+          >
+            <Text style={styles.mobileNeighborhoodName} numberOfLines={1}>{item.neighborhood}</Text>
+            <Text style={styles.mobileNeighborhoodMeta}>{item.verifiedCount} verified - {item.openNowCount} open</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      {selectedExhibition ? (
+        <View style={styles.mobileDetailWrap}>
+          <ExhibitionDetailSheet
+            exhibition={selectedExhibition}
+            allExhibitions={galleryExhibitions}
+            savedIds={savedIds}
+            logEntry={logEntryById.get(selectedExhibition.id)}
+            routeProgress={selectedActiveWalkProgress}
+            routeAdvisory={selectedRouteAdvisory}
+            routeConfidenceLabel={displayRouteMapModel.confidence.label}
+            isInDisplayedRoute={selectedIsInDisplayedRoute}
+            hasActiveWalk={activeWalkSession?.status === "active"}
+            displayRouteStop={selectedDisplayRouteStop}
+            swapTargetStop={detailSwapTargetStop}
+            swapCandidates={selectedRouteSwapCandidates}
+            conciergeReasons={selectedConciergeReasons}
+            feedback={feedbackByExhibitionId.get(selectedExhibition.id)}
+            onStatus={(status) => setLogStatus(selectedExhibition.id, status)}
+            onNote={(note) => setLogNote(selectedExhibition.id, note)}
+            onMarkRouteVisited={() =>
+              markRouteStopVisited(selectedActiveWalkStop?.exhibition.id, selectedExhibition.id)
+            }
+            onSkipRouteStop={() =>
+              skipRouteStop(selectedActiveWalkStop?.exhibition.id, selectedExhibition.id)
+            }
+            onSwapRouteStop={replaceRouteStop}
+            onSwapSelectedIntoRoute={(targetStopId) =>
+              replaceRouteStop(targetStopId, selectedExhibition.id)
+            }
+            onFeedback={(kind) => recordTasteFeedback(selectedExhibition.id, kind)}
+            onStartRouteFromHere={() => startRouteFromExhibition(selectedExhibition)}
+            onAddToActiveWalk={() => addExhibitionToActiveWalk(selectedExhibition)}
+            onShare={() => {
+              void shareExhibition(selectedExhibition);
+            }}
+            onClose={() => setSelectedExhibitionId(undefined)}
+          />
+        </View>
+      ) : null}
+
+      <View style={styles.mobileListPanel}>
+        <View style={styles.mobileSectionHeading}>
+          <Text style={styles.mobileSectionTitle}>Results</Text>
+          <Text style={styles.mobileSectionMeta}>{visibleExhibitions.length} shows</Text>
+        </View>
+        {visibleExhibitions.slice(0, 16).map((exhibition) => (
+          <ExhibitionCard
+            key={exhibition.id}
+            exhibition={exhibition}
+            allExhibitions={galleryExhibitions}
+            savedIds={savedIds}
+            logEntry={logEntryById.get(exhibition.id)}
+            onStatus={(status) => setLogStatus(exhibition.id, status)}
+            onNote={(note) => setLogNote(exhibition.id, note)}
+            savedAlertArtists={savedAlertArtists}
+            savedAlertGalleries={savedAlertGalleries}
+            savedAlertNeighborhoods={savedAlertNeighborhoods}
+            savedAlertMediums={savedAlertMediums}
+            onToggleAlertArtist={(artist) =>
+              setSavedAlertArtists((values) => toggleStringValue(values, artist))
+            }
+            onToggleAlertGallery={(gallery) =>
+              setSavedAlertGalleries((values) => toggleStringValue(values, gallery))
+            }
+            onToggleAlertNeighborhood={(neighborhood) =>
+              setSavedAlertNeighborhoods((values) => toggleStringValue(values, neighborhood))
+            }
+            onToggleAlertMedium={(medium) =>
+              setSavedAlertMediums((values) => toggleMediumValue(values, medium))
+            }
+            onOpenDetails={() => setSelectedExhibitionId(exhibition.id)}
+          />
+        ))}
+      </View>
+    </View>
+  );
+
+  const mobileWalkContent = (
+    <View style={styles.mobileTabShell}>
+      <RouteCommandPanel
+        walkPlan={walkPlan}
+        walkMode={walkMode}
+        routeUsabilityReport={routeUsabilityReport}
+        routeVerifiedStopCount={routeVerifiedStopCount}
+        routeFixtureStopCount={routeFixtureStopCount}
+        startStop={startStop}
+        nextStop={nextStop}
+        activeWalkSession={activeWalkSession}
+        activeWalkProgress={activeWalkProgress}
+        activeWalkRecap={activeWalkRecap}
+        activeWalkPlan={activeWalkPlan}
+        activeWalkCurrentStop={activeWalkCurrentStop}
+        activeWalkNextStop={activeWalkNextStop}
+        activeWalkNextLeg={activeWalkNextLeg}
+        activeWalkIsDraft={activeWalkIsDraft}
+        activeWalkRouteMatchesCurrent={activeWalkRouteMatchesCurrent}
+        onMode={setWalkMode}
+        onStartWalk={startWalk}
+        onResumeWalk={resumeWalk}
+        onMarkCurrentVisited={() =>
+          markRouteStopVisited(
+            activeWalkProgress?.currentStopId,
+            activeWalkCurrentStop?.exhibition.id
+          )
+        }
+        onSkipCurrent={() =>
+          skipRouteStop(activeWalkProgress?.currentStopId, activeWalkCurrentStop?.exhibition.id)
+        }
+        onEndWalk={endActiveWalk}
+        onCopyItinerary={copyCurrentItinerary}
+        onShareRoute={shareCurrentRoute}
+        onSaveWalk={saveCurrentWalk}
+        walkRecapRewardCopy={walkRecapRewardCopy}
+        routeMapModel={displayRouteMapModel}
+        shareCard={activeWalkShareCard}
+        compact
+      />
+
+      <RoutePreview
+        routeMapModel={displayRouteMapModel}
+        highlightedStopId={highlightedRouteStopId}
+        focusedSwapCandidates={focusedRouteSwapCandidates}
+        onHighlightStop={setHighlightedRouteStopId}
+        onSwapFocusedStop={(replacementId) => {
+          if (focusedRouteStopId) {
+            replaceRouteStop(focusedRouteStopId, replacementId);
+          }
+        }}
+      />
+
+      <View style={styles.walkStops}>
+        {displayWalkPlan.stops.map((stop, index) => (
+          <WalkStopRow
+            key={stop.exhibition.id}
+            stop={stop}
+            leg={index > 0 ? displayWalkPlan.legs[index - 1] : undefined}
+            isStart={displayWalkPlan.startStopId === stop.exhibition.id}
+            isNext={displayWalkPlan.nextStopId === stop.exhibition.id}
+            isLast={index === displayWalkPlan.stops.length - 1}
+            progress={routeStopProgressById?.[stop.exhibition.id]}
+            freshnessLabel={getGalleryFreshnessState(stop.exhibition, referenceNow).label}
+            advisory={displayRouteAdvisoryById.get(stop.exhibition.id)}
+            highlighted={highlightedRouteStopId === stop.exhibition.id}
+            swapCandidates={swapCandidatesByStopId.get(stop.exhibition.id) ?? []}
+            onHighlight={() => setHighlightedRouteStopId(stop.exhibition.id)}
+            onSwapStop={(replacementId) => replaceRouteStop(stop.exhibition.id, replacementId)}
+          />
+        ))}
+      </View>
+    </View>
+  );
+
+  const mobileJournalContent = (
+    <View style={styles.mobileTabShell}>
+      <GalleryPassportPanel
+        quizAnswers={quizAnswers}
+        passport={tastePassport}
+        picks={personalizedPicks}
+        badges={passportBadges}
+        stamps={passportStamps}
+        quests={galleryQuests}
+        memory={passportMemory}
+        newBadgeCount={newBadgeCount}
+        feedback={tasteFeedback}
+        preferences={tastePreferences}
+        mediumOptions={mediumOptions}
+        neighborhoodOptions={galleryNeighborhoods
+          .filter((neighborhood) => neighborhood.areaId === selectedAreaId)
+          .map((neighborhood) => neighborhood.name)}
+        activeWalkMode={walkMode}
+        onQuizAnswer={answerQuizCard}
+        onOpenPick={(exhibitionId) => setSelectedExhibitionId(exhibitionId)}
+        onFeedback={recordTasteFeedback}
+        onTogglePreferredMedium={togglePreferredMedium}
+        onToggleAvoidedMedium={toggleAvoidedMedium}
+        onTogglePreferredNeighborhood={togglePreferredNeighborhood}
+        onTogglePreferredTag={togglePreferredTag}
+        onUseForYouRoute={() => {
+          setWalkMode("for-you");
+          setMobileTab("walks");
+        }}
+      />
+    </View>
+  );
+
+  const mobileSavedContent = (
+    <WalkerSavedMemoryPanel
+      savedWalks={savedWalks}
+      logEntries={logEntries}
+      exhibitions={galleryExhibitions}
+      memory={passportMemory}
+      badges={passportBadges}
+      stamps={passportStamps}
+      onCopySavedWalk={(savedWalk) => {
+        void writeTextToClipboard(savedWalk.itineraryText).then((copied) => {
+          setShareStatus(copied ? "Saved itinerary copied." : "Saved itinerary ready.");
+        });
+      }}
+    />
+  );
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, isCompactLayout ? styles.mobileShellContent : null]}>
+        {isCompactLayout ? (
+          <View style={styles.mobileAppShell}>
+            {mobileTab === "home" ? (
+              <ProfessionalMobileHome
+                areaLabel={selectedArea?.name ?? compactAreaName}
+                dateLabel={`${formatShortDate(referenceNow)} - ${formatShortTime(referenceNow)}`}
+                routeScopeLabel={routeScopeLabel}
+                walkPlan={walkPlan}
+                featuredExhibition={tonightPick}
+                featuredVisual={tonightPickVisual}
+                personalizedPick={personalizedPicks[0]}
+                openingSignal={eventSignals[0]}
+                lastChanceAlert={lastChanceAlerts[0]}
+                neighborhoods={neighborhoodIntelligence}
+                sourceTrust={sourceTrust}
+                freshnessLabel={freshnessAudit.summaryLabel}
+                openNowCount={openNowCount}
+                closingSoonCount={closingSoonCount}
+                activeWalk={activeWalkSession?.status === "active"}
+                onFindWalk={() => {
+                  chooseFindWalkFirstRun();
+                  setMobileTab("walks");
+                }}
+                onStartWalk={startWalk}
+                onOpenRoute={() => {
+                  if (displayWalkPlan.routeMapUrl) {
+                    void Linking.openURL(displayWalkPlan.routeMapUrl);
+                  }
+                }}
+                onForYou={() => {
+                  setWalkMode("for-you");
+                  setMobileTab("journal");
+                  completeBetaTask("taste-quiz");
+                }}
+                onResumeWalk={resumeWalk}
+                onOpenFeatured={() => {
+                  if (tonightPick) {
+                    setSelectedExhibitionId(tonightPick.id);
+                    setMobileTab("explore");
+                  }
+                }}
+                onSelectNeighborhood={(neighborhood) => {
+                  setSelectedNeighborhood(neighborhood);
+                  setSelectedExhibitionId(undefined);
+                  setMobileTab("explore");
+                }}
+              />
+            ) : null}
+            {mobileTab === "explore" ? mobileExploreContent : null}
+            {mobileTab === "walks" ? mobileWalkContent : null}
+            {mobileTab === "saved" ? mobileSavedContent : null}
+            {mobileTab === "journal" ? mobileJournalContent : null}
+            {shareStatus ? (
+              <View style={styles.mobileShareStatusBar}>
+                <Share2 size={14} color={colors.teal} />
+                <Text style={styles.shareStatusText}>{shareStatus}</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : (
+        <>
         <View style={styles.headerBand}>
           {isCompactLayout ? (
             <ProfessionalMobileHome
@@ -5237,28 +5772,21 @@ export function GalleryApp() {
             />
           ))}
         </View>
+        </>
+        )}
       </ScrollView>
       {isCompactLayout ? (
-        <MobileCommandBar
+        <WalkerBottomNav
+          activeTab={mobileTab}
           activeWalk={activeWalkSession?.status === "active"}
-          betaProgress={betaProgress}
-          onTonight={() => {
-            setActiveLens("open-now");
-            setSelectedExhibitionId(undefined);
-            completeBetaTask("find-walk");
-            setShareStatus("Tonight view is focused on open galleries.");
-          }}
-          onWalk={() => {
-            setSelectedExhibitionId(undefined);
-            setShareStatus(displayWalkPlan.guidance);
-          }}
-          onForYou={() => {
-            setWalkMode("for-you");
-            completeBetaTask("taste-quiz");
-            setShareStatus("For You route mode is active.");
-          }}
-          onLog={() => {
-            setShareStatus(betaProgress.summaryLabel);
+          onTab={(tab) => {
+            setMobileTab(tab);
+            if (tab === "explore") {
+              setActiveLens("all");
+            }
+            if (tab === "walks") {
+              setSelectedExhibitionId(undefined);
+            }
           }}
         />
       ) : null}
@@ -5273,6 +5801,65 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingBottom: 112
+  },
+  mobileShellContent: {
+    paddingBottom: 118
+  },
+  mobileAppShell: {
+    backgroundColor: colors.fog,
+    gap: spacing.lg,
+    minHeight: "100%"
+  },
+  mobileTabShell: {
+    backgroundColor: colors.fog,
+    gap: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md
+  },
+  mobileScreenHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    minHeight: 48
+  },
+  mobileHeaderIconButton: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: "center",
+    width: 40
+  },
+  mobileSearchPanel: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md,
+    ...shadows.card
+  },
+  mobileListPanel: {
+    gap: spacing.md
+  },
+  mobileDetailWrap: {
+    marginHorizontal: -spacing.md
+  },
+  mobileShareStatusBar: {
+    alignItems: "center",
+    alignSelf: "center",
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.xs,
+    marginHorizontal: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
   },
   headerBand: {
     backgroundColor: colors.fog,
@@ -5601,6 +6188,10 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     width: 148
   },
+  activeMobileNeighborhoodChip: {
+    backgroundColor: colors.tealSoft,
+    borderColor: colors.teal
+  },
   mobileNeighborhoodName: {
     color: colors.teal,
     fontSize: 13,
@@ -5612,6 +6203,124 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     lineHeight: 15,
     marginTop: spacing.xs
+  },
+  mobileMemoryShell: {
+    backgroundColor: colors.fog,
+    gap: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md
+  },
+  mobileMemoryHero: {
+    backgroundColor: colors.teal,
+    borderColor: "rgba(200, 161, 90, 0.38)",
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.lg,
+    ...shadows.card
+  },
+  mobileMemoryTitle: {
+    color: colors.paper,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 30,
+    fontWeight: "700",
+    lineHeight: 35
+  },
+  mobileMemoryWordmark: {
+    color: colors.paper
+  },
+  mobileMemoryDateLabel: {
+    color: "#EFE6E1"
+  },
+  mobileMemoryCopy: {
+    color: "#EFE6E1",
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 19
+  },
+  mobileMemoryStats: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  mobileMemoryStat: {
+    backgroundColor: "rgba(255, 253, 247, 0.12)",
+    borderColor: "rgba(255, 253, 247, 0.22)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.paper,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  mobileCollectionPanel: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md,
+    ...shadows.card
+  },
+  mobileSavedRow: {
+    alignItems: "center",
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingTop: spacing.sm
+  },
+  mobileSavedThumb: {
+    alignItems: "center",
+    backgroundColor: colors.tealSoft,
+    borderRadius: radii.md,
+    height: 46,
+    justifyContent: "center",
+    width: 46
+  },
+  mobileFeedActionButton: {
+    alignItems: "center",
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    height: 34,
+    justifyContent: "center",
+    width: 34
+  },
+  mobileJournalRow: {
+    alignItems: "flex-start",
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingTop: spacing.sm
+  },
+  mobileTimelineDot: {
+    backgroundColor: colors.teal,
+    borderColor: colors.gold,
+    borderRadius: radii.pill,
+    borderWidth: 2,
+    height: 14,
+    marginTop: spacing.xs,
+    width: 14
+  },
+  mobileRecapCard: {
+    backgroundColor: colors.teal,
+    borderColor: colors.gold,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.lg
+  },
+  mobileRecapTitle: {
+    color: colors.paper,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 28,
+    fontWeight: "700",
+    lineHeight: 34
   },
   heroImageCard: {
     minHeight: 372,
@@ -6679,10 +7388,16 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: spacing.xs
   },
+  activeMobileCommandButton: {
+    backgroundColor: colors.teal
+  },
   mobileCommandText: {
     color: colors.teal,
     fontSize: 10,
     fontWeight: "900"
+  },
+  activeMobileCommandText: {
+    color: colors.paper
   },
   routeFirstPanel: {
     backgroundColor: colors.paper,
@@ -7377,13 +8092,14 @@ const styles = StyleSheet.create({
     fontWeight: "900"
   },
   routePreview: {
-    backgroundColor: colors.fog,
+    backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     borderWidth: 1,
     marginHorizontal: spacing.lg,
     marginTop: spacing.md,
-    paddingVertical: spacing.md
+    paddingVertical: spacing.md,
+    ...shadows.card
   },
   routePreviewHeader: {
     alignItems: "center",
@@ -7582,9 +8298,9 @@ const styles = StyleSheet.create({
     lineHeight: 17
   },
   routeMapCanvas: {
-    backgroundColor: "#EEEAE2",
+    backgroundColor: "#EEF2ED",
     borderColor: colors.line,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     borderWidth: 1,
     height: 238,
     marginHorizontal: spacing.md,
@@ -7600,8 +8316,8 @@ const styles = StyleSheet.create({
     top: 0
   },
   routeMapRoadBand: {
-    backgroundColor: "rgba(255, 253, 248, 0.86)",
-    borderColor: "rgba(17, 17, 17, 0.06)",
+    backgroundColor: "rgba(255, 253, 248, 0.92)",
+    borderColor: "rgba(13, 59, 46, 0.08)",
     borderWidth: 1,
     height: 34,
     left: "-10%",
@@ -7617,8 +8333,8 @@ const styles = StyleSheet.create({
     transform: [{ rotate: "7deg" }]
   },
   routeMapRoadBandVertical: {
-    backgroundColor: "rgba(255, 253, 248, 0.72)",
-    borderColor: "rgba(17, 17, 17, 0.05)",
+    backgroundColor: "rgba(255, 253, 248, 0.78)",
+    borderColor: "rgba(13, 59, 46, 0.07)",
     borderWidth: 1,
     height: "118%",
     position: "absolute",
@@ -7647,9 +8363,21 @@ const styles = StyleSheet.create({
     position: "absolute",
     transform: [{ translateX: -14 }, { translateY: -10 }]
   },
+  routeMapCurrentDot: {
+    backgroundColor: "#2F80ED",
+    borderColor: colors.paper,
+    borderRadius: radii.pill,
+    borderWidth: 3,
+    bottom: "14%",
+    height: 20,
+    left: "26%",
+    position: "absolute",
+    width: 20,
+    zIndex: 2
+  },
   routeMapPin: {
     alignItems: "center",
-    backgroundColor: colors.ink,
+    backgroundColor: colors.teal,
     borderColor: colors.paper,
     borderRadius: radii.pill,
     borderWidth: 2,
@@ -7664,7 +8392,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gold
   },
   routeMapPinVisited: {
-    backgroundColor: colors.mutedInk
+    backgroundColor: colors.teal
   },
   routeMapPinSkipped: {
     backgroundColor: colors.line,
@@ -7675,7 +8403,8 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     height: 34,
     transform: [{ translateX: -17 }, { translateY: -17 }],
-    width: 34
+    width: 34,
+    zIndex: 3
   },
   routeMapPinText: {
     color: colors.paper,
