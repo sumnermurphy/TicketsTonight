@@ -14,6 +14,7 @@ import type {
 } from "./galleryTastePassport";
 import type { GalleryWalkSession } from "./galleryWalkSession";
 import type { GallerySavedWalk } from "./galleryWalkSharing";
+import type { WalkerStopReaction } from "./walkerJourneyMoments";
 
 export type GalleryPersistedLens = "all" | "open-now" | "opening-tonight" | "last-chance";
 export type GalleryFirstRunChoice =
@@ -51,6 +52,7 @@ export type GalleryAppPersistedState = {
   betaCompletedTaskIds: GalleryBetaTaskId[];
   betaFeedback: GalleryBetaFeedback[];
   betaChecklistDismissed: boolean;
+  stopReactions: WalkerStopReaction[];
 };
 
 export type GalleryStorageAdapter = {
@@ -172,7 +174,10 @@ function sanitizeState(value: unknown): GalleryAppPersistedState | undefined {
     betaFeedback: Array.isArray(value.betaFeedback)
       ? (value.betaFeedback as GalleryBetaFeedback[])
       : [],
-    betaChecklistDismissed: value.betaChecklistDismissed === true
+    betaChecklistDismissed: value.betaChecklistDismissed === true,
+    stopReactions: Array.isArray(value.stopReactions)
+      ? (value.stopReactions as WalkerStopReaction[])
+      : []
   };
 }
 

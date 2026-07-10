@@ -146,6 +146,13 @@ import {
   getWalkerMemorySummary,
   getWalkerShareCardTheme
 } from "../src/services/galleryPassportMemory";
+import {
+  createWalkerCompletedWalkShareCard,
+  createWalkerReactionLogEntry,
+  createWalkerStopReaction,
+  getWalkerStopArrivalPrompt,
+  walkerReactionLabels
+} from "../src/services/walkerJourneyMoments";
 import { createTicketmasterProviderDiagnostics } from "../src/services/providerDiagnostics";
 import { checkoutBackend } from "../src/services/checkoutBackend";
 import {
@@ -1022,6 +1029,45 @@ async function main() {
       completedWalkRecap.neighborhoods.includes("Chelsea"),
     "Completed walk recap should summarize visited, skipped, notes, and neighborhoods."
   );
+  const firstWalkStop = chelseaTwoHourWalk.stops[0]?.exhibition;
+  const arrivalPrompt = firstWalkStop ? getWalkerStopArrivalPrompt(firstWalkStop) : undefined;
+  const walkerReaction = createWalkerStopReaction({
+    exhibitionId: firstWalkStopId,
+    sessionId: completedWalkSession.id,
+    reaction: "moved",
+    saved: true,
+    note: "The room felt quiet and focused.",
+    now: galleryReferenceNow
+  });
+  const reactionLogEntries = createWalkerReactionLogEntry({
+    entries: [],
+    exhibitionId: firstWalkStopId,
+    reaction: "moved",
+    saved: true,
+    note: "The room felt quiet and focused.",
+    now: galleryReferenceNow
+  });
+  const walkerCompletedShareCard = createWalkerCompletedWalkShareCard({
+    walkPlan: chelseaTwoHourWalk,
+    session: completedWalkSession,
+    recap: completedWalkRecap,
+    reactions: [walkerReaction]
+  });
+  assert(
+    arrivalPrompt?.title === "One thing to notice" &&
+      Boolean(arrivalPrompt.body) &&
+      walkerReactionLabels[walkerReaction.reaction] === "Moved" &&
+      reactionLogEntries[0]?.status === "saved" &&
+      reactionLogEntries[0]?.note?.includes("Moved"),
+    "Walker stop arrival and reaction helpers should create prompt copy and persisted log entries."
+  );
+  assert(
+    walkerCompletedShareCard.heading === "Walk Complete" &&
+      walkerCompletedShareCard.stats.some((stat) => stat.includes("min")) &&
+      walkerCompletedShareCard.highlights.some((highlight) => highlight.includes("saved")) &&
+      walkerCompletedShareCard.shareText.includes("Walker recap"),
+    "Walker completed walk share card should serialize route stats, reaction saves, and share copy."
+  );
   assert(
     replacementWalkSession.id !== walkSession.id &&
       replacementWalkSession.mode === nycLastChanceWalk.mode &&
@@ -1164,7 +1210,8 @@ async function main() {
     firstRunCompleted: true,
     betaCompletedTaskIds: betaTaskProgress.completedTaskIds,
     betaFeedback: [betaFeedbackEntry],
-    betaChecklistDismissed: true
+    betaChecklistDismissed: true,
+    stopReactions: [walkerReaction]
   };
   const serializedGalleryState = serializeGalleryAppPersistedState(persistedState);
 
@@ -1188,8 +1235,9 @@ async function main() {
       persistedRoundTrip.firstRunCompleted === true &&
       persistedRoundTrip.betaCompletedTaskIds.includes("swap-stop") &&
       persistedRoundTrip.betaFeedback[0]?.kind === "useful" &&
-      persistedRoundTrip.betaChecklistDismissed === true,
-    "Gallery app persistence should round-trip completed walk, filters, alerts, art log, taste passport, feedback, preferences, saved walks, first-run state, and beta state."
+      persistedRoundTrip.betaChecklistDismissed === true &&
+      persistedRoundTrip.stopReactions[0]?.reaction === "moved",
+    "Gallery app persistence should round-trip completed walk, filters, alerts, art log, taste passport, feedback, preferences, saved walks, first-run state, beta state, and stop reactions."
   );
   assert(
     betaTaskProgress.completedCount === 2 &&

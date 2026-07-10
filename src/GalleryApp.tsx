@@ -165,6 +165,17 @@ import {
   type GalleryPassportMemory,
   type GalleryWalkShareCard
 } from "./services/galleryPassportMemory";
+import {
+  createWalkerCompletedWalkShareCard,
+  createWalkerReactionLogEntry,
+  createWalkerStopReaction,
+  getWalkerStopArrivalPrompt,
+  walkerReactionLabels,
+  walkerReactionOptions,
+  type WalkerCompletedWalkShareCard,
+  type WalkerReactionKind,
+  type WalkerStopReaction
+} from "./services/walkerJourneyMoments";
 import { colors, radii, shadows, spacing, walkerType } from "./theme";
 import type {
   GalleryAreaId,
@@ -177,6 +188,7 @@ import type {
 type GalleryLens = GalleryPersistedLens;
 type GalleryWalkPlan = ReturnType<typeof createGalleryWalkPlan>;
 type GalleryWalkStop = GalleryWalkPlan["stops"][number];
+type WalkerJourneyStep = "walking" | "arrival" | "reaction";
 type TonightFeedItem = {
   id: string;
   label: string;
@@ -1717,6 +1729,7 @@ function RouteCommandPanel({
   walkRecapRewardCopy,
   routeMapModel,
   shareCard,
+  walkerShareCard,
   compact = false
 }: {
   walkPlan: GalleryWalkPlan;
@@ -1747,6 +1760,7 @@ function RouteCommandPanel({
   walkRecapRewardCopy?: string;
   routeMapModel: GalleryRouteMapModel;
   shareCard?: GalleryWalkShareCard;
+  walkerShareCard?: WalkerCompletedWalkShareCard;
   compact?: boolean;
 }) {
   const showingActiveWalk =
@@ -1887,29 +1901,50 @@ function RouteCommandPanel({
         <View style={styles.walkRecapCard}>
           <View style={styles.walkRecapHeader}>
             <View>
-              <Text style={styles.routeFirstKicker}>Walk recap</Text>
-              <Text style={styles.walkRecapTitle}>Walk complete</Text>
+              <Text style={styles.routeFirstKicker}>Walk completed</Text>
+              <Text style={styles.walkRecapTitle}>{walkerShareCard?.heading ?? "Walk Complete"}</Text>
             </View>
             <Text style={styles.walkRecapNeighborhood}>
               {activeWalkRecap.neighborhoods.join(", ") || displayPlan.neighborhood}
             </Text>
           </View>
           <Text style={styles.walkRecapCopy}>
-            {activeWalkRecap.visitedStopCount} visited, {activeWalkRecap.skippedStopCount} skipped, {activeWalkRecap.notedStopCount} notes saved.
+            {activeWalkRecap.visitedStopCount} stops completed, {activeWalkRecap.skippedStopCount} skipped, {activeWalkRecap.notedStopCount} notes saved.
           </Text>
-          <Text style={styles.walkRecapRewardCopy}>{routeUsabilityReport.summary}</Text>
+          <View style={styles.completedStatsGrid}>
+            <View style={styles.completedStatTile}>
+              <Text style={styles.completedStatValue}>{displayPlan.totalMinutes}</Text>
+              <Text style={styles.completedStatLabel}>total min</Text>
+            </View>
+            <View style={styles.completedStatTile}>
+              <Text style={styles.completedStatValue}>{activeWalkRecap.visitedStopCount}/{activeWalkRecap.totalStopCount}</Text>
+              <Text style={styles.completedStatLabel}>stops</Text>
+            </View>
+            <View style={styles.completedStatTile}>
+              <Text style={styles.completedStatValue}>{displayPlan.totalDistanceMiles.toFixed(1)}</Text>
+              <Text style={styles.completedStatLabel}>miles</Text>
+            </View>
+            <View style={styles.completedStatTile}>
+              <Text style={styles.completedStatValue}>{activeWalkRecap.notedStopCount}</Text>
+              <Text style={styles.completedStatLabel}>notes</Text>
+            </View>
+          </View>
           {walkRecapRewardCopy ? (
             <Text style={styles.walkRecapRewardCopy}>{walkRecapRewardCopy}</Text>
           ) : null}
-          {shareCard ? (
-            <View style={styles.walkShareCard}>
-              <Text style={styles.walkShareCardTitle}>{shareCard.subtitle}</Text>
-              <Text style={styles.walkShareCardMeta}>{shareCard.stats.join(" - ")}</Text>
-              {shareCard.highlights.slice(0, 2).map((highlight) => (
-                <Text key={highlight} style={styles.walkShareCardHighlight}>{highlight}</Text>
-              ))}
+          <View style={styles.walkShareCard}>
+            <View style={styles.walkShareCardBrandRow}>
+              <WalkerMark size={20} />
+              <Text style={styles.walkShareCardBrand}>Walker</Text>
             </View>
-          ) : null}
+            <Text style={styles.walkShareCardTitle}>{walkerShareCard?.subtitle ?? shareCard?.subtitle}</Text>
+            <Text style={styles.walkShareCardMeta}>
+              {(walkerShareCard?.stats ?? shareCard?.stats ?? []).join(" - ")}
+            </Text>
+            {(walkerShareCard?.highlights ?? shareCard?.highlights ?? []).slice(0, 3).map((highlight) => (
+                <Text key={highlight} style={styles.walkShareCardHighlight}>{highlight}</Text>
+            ))}
+          </View>
           <View style={styles.activeWalkProgressRow}>
             <Text style={[styles.activeWalkProgressPill, styles.walkRecapPill]}>{activeWalkRecap.totalStopCount} stops</Text>
             <Text style={[styles.activeWalkProgressPill, styles.walkRecapPill]}>{activeWalkRecap.remainingStopCount} left open</Text>
@@ -1932,7 +1967,7 @@ function RouteCommandPanel({
               onPress={onCopyItinerary}
               style={styles.secondaryRouteButton}
             >
-              <Text style={styles.secondaryRouteButtonText}>Copy itinerary</Text>
+              <Text style={styles.secondaryRouteButtonText}>Copy summary</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
@@ -2049,6 +2084,269 @@ function RouteCommandPanel({
           <Text style={styles.routeTimingCopy}>{routeUsabilityReport.bestStartReason}</Text>
         </>
       )}
+    </View>
+  );
+}
+
+function ActiveWalkJourneyScreen({
+  walkPlan,
+  routeMapModel,
+  currentStop,
+  nextStop,
+  nextLeg,
+  progress,
+  journeyStep,
+  reaction,
+  reactionNote,
+  reactionSaved,
+  onArrived,
+  onContinueToReaction,
+  onReaction,
+  onReactionNote,
+  onToggleSaved,
+  onSaveReaction,
+  onSkip,
+  onEnd,
+  onHighlightStop,
+  highlightedStopId,
+  focusedSwapCandidates,
+  onSwapFocusedStop
+}: {
+  walkPlan: GalleryWalkPlan;
+  routeMapModel: GalleryRouteMapModel;
+  currentStop?: GalleryWalkStop;
+  nextStop?: GalleryWalkStop;
+  nextLeg?: GalleryWalkPlan["legs"][number];
+  progress?: GalleryWalkProgress;
+  journeyStep: WalkerJourneyStep;
+  reaction: WalkerReactionKind;
+  reactionNote: string;
+  reactionSaved: boolean;
+  onArrived: () => void;
+  onContinueToReaction: () => void;
+  onReaction: (reaction: WalkerReactionKind) => void;
+  onReactionNote: (note: string) => void;
+  onToggleSaved: () => void;
+  onSaveReaction: () => void;
+  onSkip: () => void;
+  onEnd: () => void;
+  onHighlightStop: (stopId: string) => void;
+  highlightedStopId?: string;
+  focusedSwapCandidates?: GalleryRouteSwapCandidate[];
+  onSwapFocusedStop?: (replacementId: string) => void;
+}) {
+  if (!currentStop || !progress) {
+    return null;
+  }
+
+  const visual = getGalleryVisual(currentStop.exhibition);
+  const prompt = getWalkerStopArrivalPrompt(currentStop.exhibition);
+  const nextCopy = nextLeg
+    ? `${nextLeg.walkingMinutes} min walk - ${nextLeg.distanceMiles.toFixed(1)} mi`
+    : nextStop
+      ? galleryVisitStatusLabels[nextStop.status]
+      : "Final stop";
+
+  if (journeyStep === "arrival") {
+    return (
+      <View style={styles.arrivalScreen}>
+        <ImageBackground
+          source={galleryVisualSources[visual.assetKey]}
+          accessibilityLabel={visual.alt}
+          imageStyle={styles.arrivalImage}
+          style={styles.arrivalHero}
+        >
+          <View style={styles.cardImageShade} />
+          <View style={styles.arrivalTopRow}>
+            <Text style={styles.arrivalBadge}>Stop {currentStop.stopNumber}</Text>
+            <Text style={styles.arrivalBadge}>{galleryVisitStatusLabels[currentStop.status]}</Text>
+          </View>
+          <View style={styles.arrivalHeroCopy}>
+            <Text style={styles.arrivalGallery}>{currentStop.exhibition.galleryName}</Text>
+            <Text style={styles.arrivalTitle}>{currentStop.exhibition.title}</Text>
+          </View>
+        </ImageBackground>
+        <View style={styles.arrivalPromptCard}>
+          <Text style={styles.arrivalPromptKicker}>{prompt.title}</Text>
+          <Text style={styles.arrivalPromptBody}>{prompt.body}</Text>
+          <Text style={styles.arrivalPromptSignal}>{prompt.signal}</Text>
+        </View>
+        <View style={styles.arrivalActionRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Continue to post visit reaction"
+            onPress={onContinueToReaction}
+            style={styles.walkerPrimaryAction}
+          >
+            <Text style={styles.walkerPrimaryActionText}>Continue walk</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={`Open map for ${currentStop.exhibition.galleryName}`}
+            onPress={() => {
+              void Linking.openURL(currentStop.mapUrl);
+            }}
+            style={styles.walkerSecondaryAction}
+          >
+            <MapPin size={14} color={colors.teal} />
+            <Text style={styles.walkerSecondaryActionText}>Map</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  if (journeyStep === "reaction") {
+    return (
+      <View style={styles.reactionScreen}>
+        <View style={styles.reactionHeader}>
+          <Text style={styles.reactionKicker}>Share your reaction</Text>
+          <Text style={styles.reactionTitle}>{currentStop.exhibition.galleryName}</Text>
+          <Text style={styles.reactionMeta}>{currentStop.exhibition.title}</Text>
+        </View>
+        <View style={styles.reactionChipGrid}>
+          {walkerReactionOptions.map((option) => (
+            <Pressable
+              key={option}
+              accessibilityRole="button"
+              accessibilityLabel={`Reaction ${walkerReactionLabels[option]}`}
+              onPress={() => onReaction(option)}
+              style={[
+                styles.reactionChip,
+                reaction === option ? styles.selectedReactionChip : null
+              ]}
+            >
+              <Text
+                style={[
+                  styles.reactionChipText,
+                  reaction === option ? styles.selectedReactionChipText : null
+                ]}
+              >
+                {walkerReactionLabels[option]}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <Pressable
+          accessibilityRole="switch"
+          accessibilityLabel="Save this stop to Walker"
+          onPress={onToggleSaved}
+          style={styles.reactionSaveRow}
+        >
+          <Text style={styles.reactionSaveLabel}>Save to Walker</Text>
+          <Text style={styles.reactionSaveSwitch}>{reactionSaved ? "On" : "Off"}</Text>
+        </Pressable>
+        <TextInput
+          accessibilityLabel="Optional visit note"
+          value={reactionNote}
+          onChangeText={onReactionNote}
+          placeholder="What stood out to you?"
+          placeholderTextColor={colors.mutedInk}
+          multiline
+          style={styles.reactionNoteInput}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Save reaction and continue"
+          onPress={onSaveReaction}
+          style={styles.walkerPrimaryAction}
+        >
+          <Text style={styles.walkerPrimaryActionText}>Save & continue</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.activeJourneyScreen}>
+      <View style={styles.activeJourneyHeader}>
+        <View>
+          <Text style={styles.activeJourneyKicker}>Active walk</Text>
+          <Text style={styles.activeJourneyTitle}>{currentStop.exhibition.galleryName}</Text>
+          <Text style={styles.activeJourneyMeta}>
+            {currentStop.exhibition.neighborhood} - {galleryVisitStatusLabels[currentStop.status]}
+          </Text>
+        </View>
+        <View style={styles.activeJourneyMeter}>
+          <Text style={styles.activeJourneyMeterValue}>
+            {progress.completedStopCount}/{progress.totalStopCount}
+          </Text>
+          <Text style={styles.activeJourneyMeterLabel}>complete</Text>
+        </View>
+      </View>
+
+      <View style={styles.activeJourneyNotice}>
+        <Text style={styles.activeJourneyNoticeLabel}>Next stop</Text>
+        <Text style={styles.activeJourneyNoticeTitle}>
+          {nextStop?.exhibition.galleryName ?? "Walk complete after this stop"}
+        </Text>
+        <Text style={styles.activeJourneyMeta}>{nextCopy}</Text>
+      </View>
+
+      <View style={styles.activeJourneyDots}>
+        {walkPlan.stops.map((stop) => {
+          const stopProgress = progress.stopProgressById[stop.exhibition.id];
+
+          return (
+            <View
+              key={stop.exhibition.id}
+              style={[
+                styles.activeJourneyDot,
+                stopProgress === "current" ? styles.currentActiveJourneyDot : null,
+                stopProgress === "visited" ? styles.visitedActiveJourneyDot : null,
+                stopProgress === "skipped" ? styles.skippedActiveJourneyDot : null
+              ]}
+            >
+              <Text style={styles.activeJourneyDotText}>{stop.stopNumber}</Text>
+            </View>
+          );
+        })}
+      </View>
+
+      <RoutePreview
+        routeMapModel={routeMapModel}
+        highlightedStopId={highlightedStopId}
+        focusedSwapCandidates={focusedSwapCandidates}
+        onHighlightStop={onHighlightStop}
+        onSwapFocusedStop={onSwapFocusedStop}
+      />
+
+      <View style={styles.activeJourneyStickyActions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="I have arrived at this stop"
+          onPress={onArrived}
+          style={styles.activeJourneyPrimaryButton}
+        >
+          <Text style={styles.activeJourneyPrimaryText}>I've arrived</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={`Open map for ${currentStop.exhibition.galleryName}`}
+          onPress={() => {
+            void Linking.openURL(currentStop.mapUrl);
+          }}
+          style={styles.activeJourneySecondaryButton}
+        >
+          <Text style={styles.activeJourneySecondaryText}>Open map</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Skip this stop"
+          onPress={onSkip}
+          style={styles.activeJourneySecondaryButton}
+        >
+          <Text style={styles.activeJourneySecondaryText}>Skip</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="End this walk"
+          onPress={onEnd}
+          style={styles.activeJourneySecondaryButton}
+        >
+          <Text style={styles.activeJourneySecondaryText}>End</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -3571,6 +3869,13 @@ export function GalleryApp() {
   const [draftWalkStopIds, setDraftWalkStopIds] = useState<string[] | undefined>();
   const [eventRouteIntent, setEventRouteIntent] = useState<GalleryEventRouteIntent>("social-opening");
   const [shareStatus, setShareStatus] = useState<string | undefined>();
+  const [walkerJourneyStep, setWalkerJourneyStep] = useState<WalkerJourneyStep>("walking");
+  const [selectedReaction, setSelectedReaction] = useState<WalkerReactionKind>("inspired");
+  const [reactionNote, setReactionNote] = useState("");
+  const [reactionSaved, setReactionSaved] = useState(true);
+  const [stopReactions, setStopReactions] = useState<WalkerStopReaction[]>(
+    persistedState?.stopReactions ?? []
+  );
   const selectedArea = galleryAreas.find((area) => area.id === selectedAreaId) ?? galleryAreas[0];
   const isCompactLayout = viewportWidth < 720;
   const areaInventory = useMemo(
@@ -4171,6 +4476,19 @@ export function GalleryApp() {
       passportStamps
     ]
   );
+  const walkerCompletedShareCard = useMemo(
+    () =>
+      createWalkerCompletedWalkShareCard({
+        walkPlan:
+          activeWalkSession?.status === "active" && !hasDraftWalk && activeWalkPlan
+            ? activeWalkPlan
+            : displayWalkPlan,
+        session: activeWalkSession,
+        recap: activeWalkRecap,
+        reactions: stopReactions
+      }),
+    [activeWalkPlan, activeWalkRecap, activeWalkSession, displayWalkPlan, hasDraftWalk, stopReactions]
+  );
   const betaProgress = useMemo(
     () => getGalleryBetaTasks(betaCompletedTaskIds),
     [betaCompletedTaskIds]
@@ -4394,6 +4712,11 @@ export function GalleryApp() {
     setBetaFeedbackKind("useful");
     setBetaFeedbackNote("");
     setDraftWalkStopIds(undefined);
+    setWalkerJourneyStep("walking");
+    setSelectedReaction("inspired");
+    setReactionNote("");
+    setReactionSaved(true);
+    setStopReactions([]);
     setShareStatus("Demo state reset.");
   }
 
@@ -4498,13 +4821,24 @@ export function GalleryApp() {
   }
 
   async function copyCurrentItinerary() {
-    const copied = await writeTextToClipboard(createGalleryWalkItineraryText(displayWalkPlan, activeWalkSession));
+    const text =
+      activeWalkSession?.status === "completed"
+        ? walkerCompletedShareCard.shareText
+        : createGalleryWalkItineraryText(displayWalkPlan, activeWalkSession);
+    const copied = await writeTextToClipboard(text);
 
     setShareStatus(copied ? "Itinerary copied." : "Itinerary ready to copy from the route card.");
   }
 
   async function shareCurrentRoute() {
-    const fallbackPayload = createGalleryWalkShareSummary(displayWalkPlan, activeWalkRecap);
+    const fallbackPayload =
+      activeWalkSession?.status === "completed"
+        ? {
+            title: walkerCompletedShareCard.heading,
+            text: walkerCompletedShareCard.shareText,
+            url: displayWalkPlan.routeMapUrl
+          }
+        : createGalleryWalkShareSummary(displayWalkPlan, activeWalkRecap);
     const payload = activeWalkShareCard
       ? {
           title: activeWalkShareCard.title,
@@ -4665,6 +4999,10 @@ export function GalleryApp() {
 
     setActiveWalkSession(createGalleryWalkSession(walkPlan, referenceNow));
     setDraftWalkStopIds(undefined);
+    setWalkerJourneyStep("walking");
+    setReactionNote("");
+    setSelectedReaction("inspired");
+    setReactionSaved(true);
     setMobileTab("walks");
     completeFirstRun("find-walk");
     completeBetaTask("start-route");
@@ -4679,7 +5017,65 @@ export function GalleryApp() {
     setSelectedNeighborhood(activeWalkSession.neighborhood);
     setWalkMode(activeWalkSession.mode);
     setSelectedExhibitionId(undefined);
+    setWalkerJourneyStep("walking");
     setMobileTab("walks");
+  }
+
+  function arriveAtCurrentStop() {
+    if (!activeWalkCurrentStop) {
+      return;
+    }
+
+    setWalkerJourneyStep("arrival");
+    setReactionNote("");
+    setSelectedReaction("inspired");
+    setReactionSaved(true);
+  }
+
+  function continueToReaction() {
+    setWalkerJourneyStep("reaction");
+  }
+
+  function saveStopReactionAndAdvance() {
+    const stopId = activeWalkProgress?.currentStopId;
+    const exhibitionId = activeWalkCurrentStop?.exhibition.id;
+
+    if (!stopId || !exhibitionId) {
+      setWalkerJourneyStep("walking");
+      return;
+    }
+
+    const reactionEntry = createWalkerStopReaction({
+      exhibitionId,
+      sessionId: activeWalkSession?.id,
+      reaction: selectedReaction,
+      saved: reactionSaved,
+      note: reactionNote,
+      now: referenceNow
+    });
+
+    setStopReactions((entries) => [
+      reactionEntry,
+      ...entries.filter((entry) => entry.id !== reactionEntry.id)
+    ].slice(0, 40));
+    setLogEntries((entries) =>
+      createWalkerReactionLogEntry({
+        entries,
+        exhibitionId,
+        reaction: selectedReaction,
+        saved: reactionSaved,
+        note: reactionNote,
+        now: referenceNow
+      })
+    );
+    setActiveWalkSession((session) =>
+      session ? markGalleryWalkStopVisited(session, stopId, referenceNow) : session
+    );
+    setWalkerJourneyStep("walking");
+    setReactionNote("");
+    setSelectedReaction("inspired");
+    setReactionSaved(true);
+    completeBetaTask("mark-visited");
   }
 
   function markRouteStopVisited(stopId?: string, exhibitionId?: string) {
@@ -4695,6 +5091,7 @@ export function GalleryApp() {
       setLogStatus(exhibitionId, "visited");
     }
 
+    setWalkerJourneyStep("walking");
     completeBetaTask("mark-visited");
   }
 
@@ -4710,12 +5107,15 @@ export function GalleryApp() {
     if (exhibitionId) {
       setLogStatus(exhibitionId, "skipped");
     }
+
+    setWalkerJourneyStep("walking");
   }
 
   function endActiveWalk() {
     setActiveWalkSession((session) =>
       session ? completeGalleryWalk(session, referenceNow) : session
     );
+    setWalkerJourneyStep("walking");
   }
 
   function toggleStringValue(values: string[], value: string): string[] {
@@ -4784,7 +5184,8 @@ export function GalleryApp() {
       firstRunCompleted,
       betaCompletedTaskIds,
       betaFeedback,
-      betaChecklistDismissed
+      betaChecklistDismissed,
+      stopReactions
     });
   }, [
     activeLens,
@@ -4811,6 +5212,7 @@ export function GalleryApp() {
     tasteFeedback,
     tastePassport,
     tastePreferences,
+    stopReactions,
     verifiedOnly,
     walkMode
   ]);
@@ -5004,8 +5406,44 @@ export function GalleryApp() {
     </View>
   );
 
+  const showingMobileActiveJourney =
+    activeWalkSession?.status === "active" &&
+    !activeWalkIsDraft &&
+    Boolean(activeWalkCurrentStop && activeWalkProgress && activeWalkPlan);
+
   const mobileWalkContent = (
-    <View style={styles.mobileTabShell}>
+    <View style={showingMobileActiveJourney ? styles.activeJourneyMobileShell : styles.mobileTabShell}>
+      {showingMobileActiveJourney ? (
+        <ActiveWalkJourneyScreen
+          walkPlan={activeWalkPlan ?? displayWalkPlan}
+          routeMapModel={displayRouteMapModel}
+          currentStop={activeWalkCurrentStop}
+          nextStop={activeWalkNextStop}
+          nextLeg={activeWalkNextLeg}
+          progress={activeWalkProgress}
+          journeyStep={walkerJourneyStep}
+          reaction={selectedReaction}
+          reactionNote={reactionNote}
+          reactionSaved={reactionSaved}
+          onArrived={arriveAtCurrentStop}
+          onContinueToReaction={continueToReaction}
+          onReaction={setSelectedReaction}
+          onReactionNote={setReactionNote}
+          onToggleSaved={() => setReactionSaved((saved) => !saved)}
+          onSaveReaction={saveStopReactionAndAdvance}
+          onSkip={() => skipRouteStop(activeWalkProgress?.currentStopId, activeWalkCurrentStop?.exhibition.id)}
+          onEnd={endActiveWalk}
+          onHighlightStop={setHighlightedRouteStopId}
+          highlightedStopId={highlightedRouteStopId}
+          focusedSwapCandidates={focusedRouteSwapCandidates}
+          onSwapFocusedStop={(replacementId) => {
+            if (focusedRouteStopId) {
+              replaceRouteStop(focusedRouteStopId, replacementId);
+            }
+          }}
+        />
+      ) : (
+        <>
       {camogliFieldGuide ? (
         <CamogliFieldModeCard guide={camogliFieldGuide} onMode={chooseCamogliFieldMode} />
       ) : null}
@@ -5046,6 +5484,7 @@ export function GalleryApp() {
         walkRecapRewardCopy={walkRecapRewardCopy}
         routeMapModel={displayRouteMapModel}
         shareCard={activeWalkShareCard}
+        walkerShareCard={walkerCompletedShareCard}
         compact
       />
 
@@ -5080,6 +5519,8 @@ export function GalleryApp() {
           />
         ))}
       </View>
+        </>
+      )}
     </View>
   );
 
@@ -5356,6 +5797,7 @@ export function GalleryApp() {
             walkRecapRewardCopy={walkRecapRewardCopy}
             routeMapModel={displayRouteMapModel}
             shareCard={activeWalkShareCard}
+            walkerShareCard={walkerCompletedShareCard}
             compact={isCompactLayout}
           />
 
@@ -5954,6 +6396,368 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md
   },
+  activeJourneyMobileShell: {
+    backgroundColor: colors.teal,
+    gap: spacing.lg,
+    minHeight: "100%",
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md
+  },
+  activeJourneyScreen: {
+    backgroundColor: colors.teal,
+    gap: spacing.md,
+    minHeight: 760,
+    paddingBottom: spacing.xl
+  },
+  activeJourneyHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: spacing.md,
+    justifyContent: "space-between"
+  },
+  activeJourneyKicker: {
+    color: "rgba(250, 246, 239, 0.76)",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1,
+    lineHeight: 15,
+    textTransform: "uppercase"
+  },
+  activeJourneyTitle: {
+    color: colors.paper,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 31,
+    fontWeight: "700",
+    lineHeight: 37,
+    marginTop: spacing.xs
+  },
+  activeJourneyMeta: {
+    color: "rgba(250, 246, 239, 0.78)",
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 19,
+    marginTop: spacing.xs
+  },
+  activeJourneyMeter: {
+    alignItems: "center",
+    backgroundColor: "rgba(250, 246, 239, 0.95)",
+    borderRadius: radii.lg,
+    minWidth: 76,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm
+  },
+  activeJourneyMeterValue: {
+    color: colors.teal,
+    fontSize: 20,
+    fontWeight: "800",
+    lineHeight: 24
+  },
+  activeJourneyMeterLabel: {
+    color: colors.mutedInk,
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase"
+  },
+  activeJourneyNotice: {
+    backgroundColor: "rgba(250, 246, 239, 0.1)",
+    borderColor: "rgba(200, 161, 90, 0.36)",
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    padding: spacing.md
+  },
+  activeJourneyNoticeLabel: {
+    color: colors.gold,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase"
+  },
+  activeJourneyNoticeTitle: {
+    color: colors.paper,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 21,
+    fontWeight: "700",
+    lineHeight: 26,
+    marginTop: spacing.xs
+  },
+  activeJourneyDots: {
+    flexDirection: "row",
+    gap: spacing.xs
+  },
+  activeJourneyDot: {
+    alignItems: "center",
+    backgroundColor: "rgba(250, 246, 239, 0.16)",
+    borderRadius: radii.pill,
+    height: 26,
+    justifyContent: "center",
+    width: 26
+  },
+  currentActiveJourneyDot: {
+    backgroundColor: colors.gold
+  },
+  visitedActiveJourneyDot: {
+    backgroundColor: colors.paper
+  },
+  skippedActiveJourneyDot: {
+    backgroundColor: "rgba(250, 246, 239, 0.36)"
+  },
+  activeJourneyDotText: {
+    color: colors.teal,
+    fontSize: 11,
+    fontWeight: "800"
+  },
+  activeJourneyStickyActions: {
+    backgroundColor: colors.paper,
+    borderRadius: radii.lg,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    padding: spacing.sm,
+    ...shadows.card
+  },
+  activeJourneyPrimaryButton: {
+    alignItems: "center",
+    backgroundColor: colors.teal,
+    borderRadius: radii.pill,
+    flexGrow: 1,
+    justifyContent: "center",
+    minHeight: 46,
+    minWidth: 160,
+    paddingHorizontal: spacing.md
+  },
+  activeJourneyPrimaryText: {
+    color: colors.paper,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  activeJourneySecondaryButton: {
+    alignItems: "center",
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 40,
+    paddingHorizontal: spacing.md
+  },
+  activeJourneySecondaryText: {
+    color: colors.teal,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  activeJourneySharePreview: {
+    backgroundColor: "rgba(250, 246, 239, 0.1)",
+    borderColor: "rgba(200, 161, 90, 0.32)",
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    padding: spacing.md
+  },
+  activeJourneyShareTitle: {
+    color: colors.paper,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 18,
+    fontWeight: "700"
+  },
+  activeJourneyShareMeta: {
+    color: "rgba(250, 246, 239, 0.78)",
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: spacing.xs
+  },
+  arrivalScreen: {
+    backgroundColor: colors.paper,
+    borderRadius: radii.lg,
+    gap: spacing.md,
+    overflow: "hidden",
+    paddingBottom: spacing.md
+  },
+  arrivalHero: {
+    minHeight: 300,
+    justifyContent: "space-between",
+    padding: spacing.md
+  },
+  arrivalImage: {
+    resizeMode: "cover"
+  },
+  arrivalTopRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  arrivalBadge: {
+    backgroundColor: "rgba(250, 246, 239, 0.92)",
+    borderRadius: radii.pill,
+    color: colors.teal,
+    fontSize: 10,
+    fontWeight: "800",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    textTransform: "uppercase"
+  },
+  arrivalHeroCopy: {
+    gap: spacing.xs
+  },
+  arrivalGallery: {
+    color: colors.paper,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 29,
+    fontWeight: "700",
+    lineHeight: 35
+  },
+  arrivalTitle: {
+    color: "rgba(250, 246, 239, 0.86)",
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 19
+  },
+  arrivalPromptCard: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: spacing.xs,
+    marginHorizontal: spacing.md,
+    padding: spacing.md
+  },
+  arrivalPromptKicker: {
+    color: colors.gold,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase"
+  },
+  arrivalPromptBody: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "500",
+    lineHeight: 21
+  },
+  arrivalPromptSignal: {
+    color: colors.teal,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  arrivalActionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md
+  },
+  reactionScreen: {
+    backgroundColor: colors.paper,
+    borderRadius: radii.lg,
+    gap: spacing.md,
+    padding: spacing.md
+  },
+  reactionHeader: {
+    gap: spacing.xs
+  },
+  reactionKicker: {
+    color: colors.gold,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase"
+  },
+  reactionTitle: {
+    color: colors.teal,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 25,
+    fontWeight: "700",
+    lineHeight: 30
+  },
+  reactionMeta: {
+    color: colors.mutedInk,
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 18
+  },
+  reactionChipGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm
+  },
+  reactionChip: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
+  },
+  selectedReactionChip: {
+    backgroundColor: colors.teal,
+    borderColor: colors.teal
+  },
+  reactionChipText: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  selectedReactionChipText: {
+    color: colors.paper
+  },
+  reactionSaveRow: {
+    alignItems: "center",
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: spacing.md
+  },
+  reactionSaveLabel: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  reactionSaveSwitch: {
+    color: colors.teal,
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  reactionNoteInput: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "500",
+    minHeight: 110,
+    padding: spacing.md,
+    textAlignVertical: "top"
+  },
+  walkerPrimaryAction: {
+    alignItems: "center",
+    backgroundColor: colors.teal,
+    borderRadius: radii.pill,
+    flexGrow: 1,
+    justifyContent: "center",
+    minHeight: 46,
+    paddingHorizontal: spacing.lg
+  },
+  walkerPrimaryActionText: {
+    color: colors.paper,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  walkerSecondaryAction: {
+    alignItems: "center",
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.xs,
+    justifyContent: "center",
+    minHeight: 46,
+    paddingHorizontal: spacing.md
+  },
+  walkerSecondaryActionText: {
+    color: colors.teal,
+    fontSize: 13,
+    fontWeight: "800"
+  },
   mobileScreenHeader: {
     alignItems: "center",
     flexDirection: "row",
@@ -6036,7 +6840,7 @@ const styles = StyleSheet.create({
   mobileLocationLabel: {
     color: colors.ink,
     fontSize: 15,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 20
   },
   mobileDateLabel: {
@@ -6058,7 +6862,7 @@ const styles = StyleSheet.create({
   mobileVerifiedBadgeText: {
     color: colors.paper,
     fontSize: 11,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   mobileFeatureCard: {
     borderColor: "rgba(200, 161, 90, 0.35)",
@@ -6096,7 +6900,7 @@ const styles = StyleSheet.create({
     color: colors.teal,
     flexShrink: 1,
     fontSize: 10,
-    fontWeight: "900",
+    fontWeight: "800",
     maxWidth: "100%",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
@@ -6154,7 +6958,7 @@ const styles = StyleSheet.create({
     color: colors.paper,
     flexShrink: 1,
     fontSize: 14,
-    fontWeight: "900",
+    fontWeight: "800",
     minWidth: 0
   },
   mobileSecondaryCta: {
@@ -6172,7 +6976,7 @@ const styles = StyleSheet.create({
     color: colors.teal,
     flexShrink: 1,
     fontSize: 13,
-    fontWeight: "900",
+    fontWeight: "800",
     minWidth: 0
   },
   mobileTrustStrip: {
@@ -6191,7 +6995,7 @@ const styles = StyleSheet.create({
     color: colors.teal,
     flexGrow: 1,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
@@ -6219,7 +7023,7 @@ const styles = StyleSheet.create({
   camogliFieldBadge: {
     color: colors.gold,
     fontSize: 10,
-    fontWeight: "900",
+    fontWeight: "800",
     letterSpacing: 0.8,
     lineHeight: 14,
     textTransform: "uppercase"
@@ -6236,7 +7040,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -6265,14 +7069,14 @@ const styles = StyleSheet.create({
   camogliFieldStatLabel: {
     color: colors.gold,
     fontSize: 10,
-    fontWeight: "900",
+    fontWeight: "800",
     letterSpacing: 0.5,
     textTransform: "uppercase"
   },
   camogliFieldStatValue: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 17
   },
   camogliFieldModeRow: {
@@ -6295,7 +7099,7 @@ const styles = StyleSheet.create({
   camogliFieldModeText: {
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   selectedCamogliFieldModeText: {
     color: colors.paper
@@ -6312,7 +7116,7 @@ const styles = StyleSheet.create({
   camogliStopPrimary: {
     color: colors.teal,
     fontSize: 12,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   camogliStopSecondary: {
     color: colors.mutedInk,
@@ -6323,7 +7127,7 @@ const styles = StyleSheet.create({
   camogliStopWarning: {
     color: colors.coral,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 16
   },
   mobileFeaturedShow: {
@@ -6344,14 +7148,14 @@ const styles = StyleSheet.create({
   mobileFeedLabel: {
     color: colors.gold,
     fontSize: 10,
-    fontWeight: "900",
+    fontWeight: "800",
     textTransform: "uppercase"
   },
   mobileFeaturedShowTitle: {
     color: colors.ink,
     fontFamily: walkerType.displayFamily,
     fontSize: 16,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 21,
     marginTop: spacing.xs
   },
@@ -6366,7 +7170,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     color: colors.paper,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -6394,7 +7198,7 @@ const styles = StyleSheet.create({
   mobileSectionMeta: {
     color: colors.mutedInk,
     fontSize: 11,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   mobileFeedRow: {
     alignItems: "center",
@@ -6412,7 +7216,7 @@ const styles = StyleSheet.create({
   mobileFeedTitle: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 19,
     marginTop: spacing.xs
   },
@@ -6426,7 +7230,7 @@ const styles = StyleSheet.create({
   mobileFeedMeta: {
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 15,
     marginTop: 2
   },
@@ -6437,7 +7241,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.teal,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -6462,7 +7266,7 @@ const styles = StyleSheet.create({
   mobileNeighborhoodName: {
     color: colors.teal,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   mobileNeighborhoodMeta: {
     color: colors.mutedInk,
@@ -6517,7 +7321,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.paper,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -6646,7 +7450,7 @@ const styles = StyleSheet.create({
   heroEyebrow: {
     color: colors.paper,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     letterSpacing: 0,
     textTransform: "uppercase"
   },
@@ -6722,14 +7526,14 @@ const styles = StyleSheet.create({
   heroRouteLabel: {
     color: "#D9D2C6",
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     textTransform: "uppercase"
   },
   heroRouteTitle: {
     color: colors.paper,
     flexShrink: 1,
     fontSize: 16,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 21,
     marginTop: spacing.sm,
     maxWidth: "100%"
@@ -6838,12 +7642,12 @@ const styles = StyleSheet.create({
   tonightStatValue: {
     color: colors.ink,
     fontSize: 22,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   tonightStatLabel: {
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     marginTop: 2,
     textTransform: "uppercase"
   },
@@ -6882,7 +7686,7 @@ const styles = StyleSheet.create({
   trustBriefStatus: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 18
   },
   trustBriefText: {
@@ -6913,7 +7717,7 @@ const styles = StyleSheet.create({
   freshnessQueueMeta: {
     color: colors.mutedInk,
     fontSize: 11,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   freshnessQueueRow: {
     alignItems: "center",
@@ -6958,13 +7762,13 @@ const styles = StyleSheet.create({
   tonightPickLabel: {
     color: "#E9E2D7",
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     textTransform: "uppercase"
   },
   tonightPickTitle: {
     color: colors.paper,
     fontSize: 22,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 27,
     marginTop: spacing.xs
   },
@@ -6990,7 +7794,7 @@ const styles = StyleSheet.create({
   heroLinkButtonText: {
     color: colors.paper,
     fontSize: 12,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   passportBand: {
     gap: spacing.md,
@@ -7030,7 +7834,7 @@ const styles = StyleSheet.create({
   quizArtworkTitle: {
     color: colors.paper,
     fontSize: 20,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 25
   },
   quizArtworkBody: {
@@ -7064,7 +7868,7 @@ const styles = StyleSheet.create({
   quizAnswerButtonText: {
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 30
   },
   activeQuizAnswerButtonText: {
@@ -7100,7 +7904,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.paper,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -7115,7 +7919,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     color: colors.teal,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -7125,7 +7929,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     color: colors.teal,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -7137,7 +7941,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.paper,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -7192,7 +7996,7 @@ const styles = StyleSheet.create({
   personalPickScoreText: {
     color: colors.paper,
     fontSize: 12,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   personalPickCopy: {
     flex: 1,
@@ -7201,7 +8005,7 @@ const styles = StyleSheet.create({
   personalPickTitle: {
     color: colors.ink,
     fontSize: 15,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 20
   },
   personalPickMeta: {
@@ -7244,13 +8048,13 @@ const styles = StyleSheet.create({
     color: colors.ink,
     flex: 1,
     fontSize: 14,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 19
   },
   questProgress: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   questDescription: {
     color: colors.mutedInk,
@@ -7272,7 +8076,7 @@ const styles = StyleSheet.create({
   questReason: {
     color: colors.mutedInk,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     textTransform: "uppercase"
   },
   conciergePanel: {
@@ -7308,7 +8112,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
@@ -7318,13 +8122,13 @@ const styles = StyleSheet.create({
     color: "#DAD8D0",
     flexShrink: 1,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     textTransform: "uppercase"
   },
   conciergeTitle: {
     color: colors.paper,
     fontSize: 24,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 29,
     marginTop: spacing.sm
   },
@@ -7352,7 +8156,7 @@ const styles = StyleSheet.create({
   conciergeSuggestionTitle: {
     color: colors.paper,
     fontSize: 14,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 19
   },
   conciergeSuggestionBody: {
@@ -7364,7 +8168,7 @@ const styles = StyleSheet.create({
   conciergeSuggestionCta: {
     color: colors.paper,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     marginTop: "auto",
     textTransform: "uppercase"
   },
@@ -7407,7 +8211,7 @@ const styles = StyleSheet.create({
   firstRunTitle: {
     color: colors.ink,
     fontSize: 20,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 25,
     marginTop: spacing.xs
   },
@@ -7446,7 +8250,7 @@ const styles = StyleSheet.create({
   firstRunPrimaryActionText: {
     color: colors.paper,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   firstRunSecondaryAction: {
     alignItems: "center",
@@ -7463,7 +8267,7 @@ const styles = StyleSheet.create({
   firstRunSecondaryActionText: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   firstRunTrustRow: {
     flexDirection: "row",
@@ -7477,7 +8281,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.mutedInk,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -7502,7 +8306,7 @@ const styles = StyleSheet.create({
   betaTaskText: {
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   completedBetaTaskText: {
     color: colors.paper
@@ -7521,7 +8325,7 @@ const styles = StyleSheet.create({
   resetDemoButtonText: {
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   betaPreviewPanel: {
     backgroundColor: colors.paper,
@@ -7543,7 +8347,7 @@ const styles = StyleSheet.create({
   betaPreviewTitle: {
     color: colors.ink,
     fontSize: 18,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 23,
     marginTop: spacing.xs
   },
@@ -7559,7 +8363,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     color: colors.paper,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -7576,7 +8380,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -7607,7 +8411,7 @@ const styles = StyleSheet.create({
   betaFeedbackTitle: {
     color: colors.ink,
     fontSize: 18,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 23,
     marginTop: spacing.xs
   },
@@ -7661,7 +8465,7 @@ const styles = StyleSheet.create({
   mobileCommandText: {
     color: colors.teal,
     fontSize: 10,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   activeMobileCommandText: {
     color: colors.paper
@@ -7701,7 +8505,7 @@ const styles = StyleSheet.create({
   activeWalkNoticeTitle: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   activeWalkNoticeText: {
     color: colors.mutedInk,
@@ -7724,7 +8528,7 @@ const styles = StyleSheet.create({
   routeFirstKicker: {
     color: colors.gold,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     textTransform: "uppercase"
   },
   activeWalkKicker: {
@@ -7790,12 +8594,12 @@ const styles = StyleSheet.create({
   activeWalkProgressValue: {
     color: colors.teal,
     fontSize: 20,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   activeWalkProgressLabel: {
     color: colors.mutedInk,
     fontSize: 10,
-    fontWeight: "900",
+    fontWeight: "800",
     textTransform: "uppercase"
   },
   activeWalkNextCard: {
@@ -7808,14 +8612,14 @@ const styles = StyleSheet.create({
   activeWalkNextLabel: {
     color: "#DAD8D0",
     fontSize: 10,
-    fontWeight: "900",
+    fontWeight: "800",
     textTransform: "uppercase"
   },
   activeWalkNextTitle: {
     color: colors.paper,
     fontFamily: walkerType.displayFamily,
     fontSize: 16,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 21,
     marginTop: spacing.xs
   },
@@ -7831,7 +8635,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.paper,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -7860,7 +8664,7 @@ const styles = StyleSheet.create({
   activeWalkMapButtonText: {
     color: colors.paper,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   activeWalkVisitButton: {
     alignItems: "center",
@@ -7875,7 +8679,7 @@ const styles = StyleSheet.create({
   activeWalkVisitButtonText: {
     color: colors.teal,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   walkRecapCard: {
     backgroundColor: colors.fog,
@@ -7895,7 +8699,7 @@ const styles = StyleSheet.create({
   walkRecapTitle: {
     color: colors.ink,
     fontSize: 22,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 27,
     marginTop: spacing.xs
   },
@@ -7906,7 +8710,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -7920,13 +8724,40 @@ const styles = StyleSheet.create({
   walkRecapRewardCopy: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 18
   },
   walkRecapPill: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
     color: colors.ink
+  },
+  completedStatsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm
+  },
+  completedStatTile: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexGrow: 1,
+    minWidth: 100,
+    padding: spacing.sm
+  },
+  completedStatValue: {
+    color: colors.teal,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 22,
+    fontWeight: "700",
+    lineHeight: 27
+  },
+  completedStatLabel: {
+    color: colors.mutedInk,
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase"
   },
   routeFirstMapButton: {
     alignItems: "center",
@@ -7940,7 +8771,7 @@ const styles = StyleSheet.create({
   routeFirstMapButtonText: {
     color: colors.paper,
     fontSize: 12,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   routeFirstActionStack: {
     alignItems: "flex-end",
@@ -7996,7 +8827,7 @@ const styles = StyleSheet.create({
   metricValue: {
     color: colors.ink,
     fontSize: 21,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   metricLabel: {
     color: colors.mutedInk,
@@ -8069,7 +8900,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     color: colors.ink,
     fontSize: 10,
-    fontWeight: "900",
+    fontWeight: "800",
     marginBottom: spacing.sm,
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
@@ -8079,7 +8910,7 @@ const styles = StyleSheet.create({
   neighborhoodName: {
     color: colors.ink,
     fontSize: 16,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   selectedNeighborhoodText: {
     color: colors.paper
@@ -8121,7 +8952,7 @@ const styles = StyleSheet.create({
   neighborhoodFooterText: {
     color: colors.mutedInk,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     textTransform: "uppercase"
   },
   filterBlock: {
@@ -8182,13 +9013,13 @@ const styles = StyleSheet.create({
   routeCommandKicker: {
     color: "#DAD8D0",
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     textTransform: "uppercase"
   },
   routeCommandTitle: {
     color: colors.paper,
     fontSize: 24,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 27,
     marginTop: spacing.sm
   },
@@ -8211,7 +9042,7 @@ const styles = StyleSheet.create({
   routeQualityLabel: {
     color: colors.ink,
     fontSize: 15,
-    fontWeight: "900",
+    fontWeight: "800",
     textTransform: "capitalize"
   },
   routeQualityMeta: {
@@ -8233,7 +9064,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -8273,7 +9104,7 @@ const styles = StyleSheet.create({
   routeModeLabel: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   activeRouteModeLabel: {
     color: colors.paper
@@ -8309,7 +9140,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -8328,7 +9159,7 @@ const styles = StyleSheet.create({
   guidanceTitle: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 19
   },
   guidanceCopy: {
@@ -8340,7 +9171,7 @@ const styles = StyleSheet.create({
   routeConfidenceText: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 18
   },
   routeMapButton: {
@@ -8356,7 +9187,7 @@ const styles = StyleSheet.create({
   routeMapButtonText: {
     color: colors.paper,
     fontSize: 12,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   routePreview: {
     backgroundColor: colors.paper,
@@ -8377,7 +9208,7 @@ const styles = StyleSheet.create({
   routePreviewTitle: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   routePreviewMeta: {
     color: colors.mutedInk,
@@ -8431,7 +9262,7 @@ const styles = StyleSheet.create({
   routePreviewNodeText: {
     color: colors.paper,
     fontSize: 12,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   routePreviewLine: {
     backgroundColor: colors.line,
@@ -8442,13 +9273,13 @@ const styles = StyleSheet.create({
   routePreviewGallery: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: "800",
     marginTop: spacing.sm
   },
   routePreviewStatus: {
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     marginTop: spacing.xs
   },
   routePreviewLeg: {
@@ -8471,7 +9302,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -8495,7 +9326,7 @@ const styles = StyleSheet.create({
   routeMapPrimaryActionText: {
     color: colors.paper,
     fontSize: 12,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   routeMapSecondaryAction: {
     alignItems: "center",
@@ -8511,7 +9342,7 @@ const styles = StyleSheet.create({
   routeMapSecondaryActionText: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   routePreviewSwapPanel: {
     backgroundColor: colors.fog,
@@ -8539,7 +9370,7 @@ const styles = StyleSheet.create({
   routeConfidenceScore: {
     color: colors.paper,
     fontSize: 30,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 34
   },
   routeConfidenceCopyBlock: {
@@ -8549,7 +9380,7 @@ const styles = StyleSheet.create({
   routeConfidenceLabel: {
     color: colors.paper,
     fontSize: 14,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   routeConfidenceMeta: {
     color: "#DAD8D0",
@@ -8623,7 +9454,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.ink,
     fontSize: 10,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.xs,
     paddingVertical: 2,
@@ -8676,7 +9507,7 @@ const styles = StyleSheet.create({
   routeMapPinText: {
     color: colors.paper,
     fontSize: 12,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   routeMapCanvasLegend: {
     backgroundColor: "rgba(255, 253, 248, 0.92)",
@@ -8693,7 +9524,7 @@ const styles = StyleSheet.create({
   routeMapCanvasTitle: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   routeMapCanvasMeta: {
     color: colors.mutedInk,
@@ -8779,7 +9610,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     color: colors.ink,
     fontSize: 10,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
@@ -8812,7 +9643,7 @@ const styles = StyleSheet.create({
   stopNumberText: {
     color: colors.paper,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   walkStopCopy: {
     flex: 1,
@@ -8821,7 +9652,7 @@ const styles = StyleSheet.create({
   walkStopTitle: {
     color: colors.ink,
     fontSize: 15,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   walkStopMeta: {
     color: colors.mutedInk,
@@ -8832,7 +9663,7 @@ const styles = StyleSheet.create({
   walkStopShowCount: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: "800",
     marginTop: spacing.sm
   },
   groupedShowList: {
@@ -8879,7 +9710,7 @@ const styles = StyleSheet.create({
   walkStopAdvisoryTitle: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   walkStopAdvisoryCopy: {
     color: colors.mutedInk,
@@ -8899,7 +9730,7 @@ const styles = StyleSheet.create({
   swapOptionsTitle: {
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     textTransform: "uppercase"
   },
   swapCandidateRow: {
@@ -8915,7 +9746,7 @@ const styles = StyleSheet.create({
   swapCandidateTitle: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 17
   },
   swapCandidateMeta: {
@@ -8936,7 +9767,7 @@ const styles = StyleSheet.create({
   swapCandidateButtonText: {
     color: colors.paper,
     fontSize: 11,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   routeReasonRow: {
     flexDirection: "row",
@@ -8970,7 +9801,7 @@ const styles = StyleSheet.create({
   mapIconButtonText: {
     color: colors.ink,
     fontSize: 10,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   savedPill: {
     alignItems: "center",
@@ -8984,7 +9815,7 @@ const styles = StyleSheet.create({
   savedPillText: {
     color: colors.coralDark,
     fontSize: 11,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   splitSection: {
     flexDirection: "row",
@@ -9027,7 +9858,7 @@ const styles = StyleSheet.create({
   radarTitle: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   radarMeta: {
     color: colors.mutedInk,
@@ -9043,7 +9874,7 @@ const styles = StyleSheet.create({
   alertTitle: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   alertMeta: {
     color: colors.mutedInk,
@@ -9103,7 +9934,7 @@ const styles = StyleSheet.create({
     color: colors.paper,
     flexShrink: 1,
     fontSize: 26,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 31,
     maxWidth: "100%"
   },
@@ -9125,7 +9956,7 @@ const styles = StyleSheet.create({
   detailEyebrow: {
     color: colors.mutedInk,
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: "800",
     textTransform: "uppercase"
   },
   detailArtists: {
@@ -9169,7 +10000,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -9180,13 +10011,13 @@ const styles = StyleSheet.create({
   cardVisualGallery: {
     color: "#F0ECE4",
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: "800",
     textTransform: "uppercase"
   },
   cardVisualTitle: {
     color: colors.paper,
     fontSize: 24,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 29
   },
   cardBody: {
@@ -9208,13 +10039,13 @@ const styles = StyleSheet.create({
   cardGalleryName: {
     color: colors.mutedInk,
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: "800",
     textTransform: "uppercase"
   },
   cardTitle: {
     color: colors.ink,
     fontSize: 20,
-    fontWeight: "900",
+    fontWeight: "800",
     marginTop: spacing.xs
   },
   cardMeta: {
@@ -9236,7 +10067,7 @@ const styles = StyleSheet.create({
   statusBadgeText: {
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   cardDescription: {
     color: colors.ink,
@@ -9274,7 +10105,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     color: colors.paper,
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -9284,7 +10115,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     color: colors.teal,
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -9319,7 +10150,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     color: colors.ink,
     fontSize: 10,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
@@ -9329,7 +10160,7 @@ const styles = StyleSheet.create({
     color: colors.paper,
     flex: 1,
     fontSize: 13,
-    fontWeight: "900",
+    fontWeight: "800",
     minWidth: 120
   },
   detailRouteFitText: {
@@ -9362,7 +10193,7 @@ const styles = StyleSheet.create({
   detailSwapIntoRouteButtonText: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   currentActiveRouteDetail: {
     backgroundColor: colors.paper,
@@ -9381,7 +10212,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.ink,
     fontSize: 10,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
@@ -9393,7 +10224,7 @@ const styles = StyleSheet.create({
   activeRouteDetailTitle: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   activeRouteDetailText: {
     color: colors.mutedInk,
@@ -9408,7 +10239,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -9431,7 +10262,7 @@ const styles = StyleSheet.create({
   reasonText: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   sourceRow: {
     flexDirection: "row",
@@ -9463,7 +10294,7 @@ const styles = StyleSheet.create({
     color: colors.ink,
     flex: 1,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   sourceReceiptCopy: {
     color: colors.mutedInk,
@@ -9478,7 +10309,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -9504,7 +10335,7 @@ const styles = StyleSheet.create({
   feedbackButtonText: {
     color: colors.ink,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 30
   },
   feedbackTagButton: {
@@ -9518,7 +10349,7 @@ const styles = StyleSheet.create({
   feedbackTagText: {
     color: colors.teal,
     fontSize: 11,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   activeFeedbackButtonText: {
     color: colors.paper
@@ -9545,13 +10376,13 @@ const styles = StyleSheet.create({
   learningKicker: {
     color: "#DAD8D0",
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     textTransform: "uppercase"
   },
   learningTitle: {
     color: colors.paper,
     fontSize: 18,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 23,
     marginTop: spacing.xs
   },
@@ -9568,7 +10399,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.paper,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
@@ -9576,7 +10407,7 @@ const styles = StyleSheet.create({
   preferenceLabel: {
     color: "#DAD8D0",
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     textTransform: "uppercase"
   },
   preferenceRow: {
@@ -9599,7 +10430,7 @@ const styles = StyleSheet.create({
   preferenceChipText: {
     color: colors.paper,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 28
   },
   activePreferenceChipText: {
@@ -9629,7 +10460,7 @@ const styles = StyleSheet.create({
   shareStatusText: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   savedWalksPanel: {
     backgroundColor: colors.paper,
@@ -9658,7 +10489,7 @@ const styles = StyleSheet.create({
   savedWalkTitle: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   savedWalkMeta: {
     color: colors.mutedInk,
@@ -9668,29 +10499,42 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs
   },
   walkShareCard: {
-    backgroundColor: colors.fog,
-    borderColor: colors.line,
+    backgroundColor: colors.teal,
+    borderColor: "rgba(200, 161, 90, 0.42)",
     borderRadius: radii.md,
     borderWidth: 1,
-    gap: spacing.xs,
+    gap: spacing.sm,
     marginTop: spacing.sm,
     padding: spacing.md
   },
+  walkShareCardBrandRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.xs
+  },
+  walkShareCardBrand: {
+    color: colors.paper,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 18,
+    fontWeight: "700",
+    textTransform: "uppercase"
+  },
   walkShareCardTitle: {
-    color: colors.ink,
-    fontSize: 13,
-    fontWeight: "900",
-    lineHeight: 18
+    color: colors.paper,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 22,
+    fontWeight: "700",
+    lineHeight: 27
   },
   walkShareCardMeta: {
-    color: colors.mutedInk,
+    color: "rgba(250, 246, 239, 0.78)",
     fontSize: 12,
-    fontWeight: "800"
+    fontWeight: "600"
   },
   walkShareCardHighlight: {
-    color: colors.ink,
+    color: colors.paper,
     fontSize: 12,
-    fontWeight: "800"
+    fontWeight: "700"
   },
   passportMemoryCard: {
     backgroundColor: colors.fog,
@@ -9724,7 +10568,7 @@ const styles = StyleSheet.create({
   eventPlanTitle: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "900",
+    fontWeight: "800",
     lineHeight: 19
   },
   eventPlanMeta: {
@@ -9755,7 +10599,7 @@ const styles = StyleSheet.create({
   primaryLightButtonText: {
     color: colors.paper,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   secondaryRouteButton: {
     alignItems: "center",
@@ -9770,7 +10614,7 @@ const styles = StyleSheet.create({
   secondaryRouteButtonText: {
     color: colors.teal,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   linkButton: {
     alignItems: "center",
@@ -9785,7 +10629,7 @@ const styles = StyleSheet.create({
   linkButtonText: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "800"
   },
   noteRow: {
     alignItems: "center",
