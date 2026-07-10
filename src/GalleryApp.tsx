@@ -166,6 +166,15 @@ import type {
 type GalleryLens = GalleryPersistedLens;
 type GalleryWalkPlan = ReturnType<typeof createGalleryWalkPlan>;
 type GalleryWalkStop = GalleryWalkPlan["stops"][number];
+type TonightFeedItem = {
+  id: string;
+  label: string;
+  title: string;
+  detail: string;
+  meta: string;
+  actionLabel: string;
+  onPress: () => void;
+};
 
 const referenceNow = "2026-07-09T15:30:00-04:00";
 
@@ -614,6 +623,246 @@ function TonightStat({
   );
 }
 
+function ProfessionalMobileHome({
+  areaLabel,
+  dateLabel,
+  routeScopeLabel,
+  walkPlan,
+  featuredExhibition,
+  featuredVisual,
+  personalizedPick,
+  openingSignal,
+  lastChanceAlert,
+  neighborhoods,
+  sourceTrust,
+  freshnessLabel,
+  openNowCount,
+  closingSoonCount,
+  activeWalk,
+  onFindWalk,
+  onStartWalk,
+  onOpenRoute,
+  onForYou,
+  onResumeWalk,
+  onOpenFeatured,
+  onSelectNeighborhood
+}: {
+  areaLabel: string;
+  dateLabel: string;
+  routeScopeLabel: string;
+  walkPlan: GalleryWalkPlan;
+  featuredExhibition?: GalleryExhibition;
+  featuredVisual: ReturnType<typeof getGalleryVisual>;
+  personalizedPick?: GalleryPersonalizedPick;
+  openingSignal?: GalleryEventSignal;
+  lastChanceAlert?: ReturnType<typeof getLastChanceGalleryAlerts>[number];
+  neighborhoods: ReturnType<typeof createNeighborhoodIntelligence>;
+  sourceTrust: ReturnType<typeof createGallerySourceTrustSummary>;
+  freshnessLabel: string;
+  openNowCount: number;
+  closingSoonCount: number;
+  activeWalk: boolean;
+  onFindWalk: () => void;
+  onStartWalk: () => void;
+  onOpenRoute: () => void;
+  onForYou: () => void;
+  onResumeWalk: () => void;
+  onOpenFeatured: () => void;
+  onSelectNeighborhood: (neighborhood?: string) => void;
+}) {
+  const bestStart = walkPlan.stops.find((stop) => stop.exhibition.id === walkPlan.startStopId);
+  const feedItems: TonightFeedItem[] = [
+    {
+      id: "verified-walk",
+      label: "Best verified walk",
+      title: walkPlan.summary,
+      detail: `${walkPlan.stops.length} stops in ${walkPlan.neighborhood}`,
+      meta: `Best start: ${bestStart?.exhibition.galleryName ?? "where open"}`,
+      actionLabel: "Start",
+      onPress: onStartWalk
+    },
+    personalizedPick
+      ? {
+          id: "for-you",
+          label: "For You pick",
+          title: personalizedPick.exhibition.title,
+          detail: `${personalizedPick.exhibition.galleryName} - ${personalizedPick.exhibition.neighborhood}`,
+          meta: personalizedPick.reasons.slice(0, 2).join(" - ") || "Taste-ranked",
+          actionLabel: "Tune",
+          onPress: onForYou
+        }
+      : undefined,
+    openingSignal
+      ? {
+          id: "opening",
+          label: "Opening tonight",
+          title: openingSignal.exhibition.title,
+          detail: `${openingSignal.exhibition.galleryName} - ${openingSignal.timingLabel}`,
+          meta: openingSignal.sourceLabel,
+          actionLabel: "View",
+          onPress: () => onSelectNeighborhood(openingSignal.exhibition.neighborhood)
+        }
+      : undefined,
+    lastChanceAlert
+      ? {
+          id: "last-chance",
+          label: "Last chance",
+          title: lastChanceAlert.exhibition.title,
+          detail: `${lastChanceAlert.daysUntilClose} days left - ${lastChanceAlert.exhibition.neighborhood}`,
+          meta: lastChanceAlert.matchedSignals.slice(0, 2).join(" - ") || "Closing soon",
+          actionLabel: "Route",
+          onPress: () => onSelectNeighborhood(lastChanceAlert.exhibition.neighborhood)
+        }
+      : undefined
+  ].filter((item): item is TonightFeedItem => Boolean(item));
+
+  return (
+    <View style={styles.mobileHomeShell}>
+      <View style={styles.mobileTopBar}>
+        <View>
+          <Text style={styles.mobileLocationLabel}>{areaLabel}</Text>
+          <Text style={styles.mobileDateLabel}>{dateLabel}</Text>
+        </View>
+        <View style={styles.mobileVerifiedBadge}>
+          <Check size={13} color={colors.paper} />
+          <Text style={styles.mobileVerifiedBadgeText}>{sourceTrust.verifiedExhibitionCount} verified</Text>
+        </View>
+      </View>
+
+      <ImageBackground
+        source={galleryVisualSources[featuredVisual.assetKey]}
+        accessibilityLabel={featuredVisual.alt}
+        imageStyle={styles.mobileFeatureImage}
+        style={styles.mobileFeatureCard}
+      >
+        <View style={styles.mobileFeatureShade} />
+        <View style={styles.mobileFeatureContent}>
+          <View style={styles.mobileFeatureTopRow}>
+            <Text style={styles.mobileFeaturePill}>Tonight</Text>
+            <Text style={styles.mobileFeaturePill}>{routeScopeLabel}</Text>
+          </View>
+          <View>
+            <Text style={styles.mobileFeatureTitle}>Find tonight's best walk</Text>
+            <Text style={styles.mobileFeatureSubtitle}>
+              {featuredExhibition
+                ? `${featuredExhibition.galleryName} anchors a ${walkPlan.totalMinutes} minute route.`
+                : `${walkPlan.summary} with source-labeled stops.`}
+            </Text>
+            <View style={styles.mobileFeatureActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Find tonight's best walk"
+                onPress={onFindWalk}
+                style={styles.mobilePrimaryCta}
+              >
+                <Route size={15} color={colors.ink} />
+                <Text style={styles.mobilePrimaryCtaText}>Find best walk</Text>
+              </Pressable>
+              {activeWalk ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Resume active walk"
+                  onPress={onResumeWalk}
+                  style={styles.mobileSecondaryCta}
+                >
+                  <Text style={styles.mobileSecondaryCtaText}>Resume</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  accessibilityRole="link"
+                  accessibilityLabel="Open current route map"
+                  onPress={onOpenRoute}
+                  style={styles.mobileSecondaryCta}
+                >
+                  <Text style={styles.mobileSecondaryCtaText}>Open map</Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+        </View>
+      </ImageBackground>
+
+      <View style={styles.mobileTrustStrip}>
+        <Text style={styles.mobileTrustItem}>{openNowCount} open now</Text>
+        <Text style={styles.mobileTrustItem}>{closingSoonCount} closing soon</Text>
+        <Text style={styles.mobileTrustItem}>{freshnessLabel}</Text>
+      </View>
+
+      {featuredExhibition ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Open featured exhibition ${featuredExhibition.title}`}
+          onPress={onOpenFeatured}
+          style={styles.mobileFeaturedShow}
+        >
+          <View style={styles.mobileFeaturedShowCopy}>
+            <Text style={styles.mobileFeedLabel}>Featured verified show</Text>
+            <Text style={styles.mobileFeaturedShowTitle} numberOfLines={2}>
+              {featuredExhibition.title}
+            </Text>
+            <Text style={styles.mobileFeaturedShowMeta} numberOfLines={1}>
+              {featuredExhibition.galleryName} - {galleryVisitStatusLabels[getGalleryVisitStatus(featuredExhibition, referenceNow)]}
+            </Text>
+          </View>
+          <Text style={styles.mobileFeaturedShowAction}>Details</Text>
+        </Pressable>
+      ) : null}
+
+      <View style={styles.mobileTonightFeed}>
+        <View style={styles.mobileSectionHeading}>
+          <Text style={styles.mobileSectionTitle}>Useful tonight</Text>
+          <Text style={styles.mobileSectionMeta}>{sourceTrust.exhibitionCount} listings</Text>
+        </View>
+        {feedItems.map((item) => (
+          <Pressable
+            key={item.id}
+            accessibilityRole="button"
+            accessibilityLabel={item.title}
+            onPress={item.onPress}
+            style={styles.mobileFeedRow}
+          >
+            <View style={styles.mobileFeedCopy}>
+              <Text style={styles.mobileFeedLabel}>{item.label}</Text>
+              <Text style={styles.mobileFeedTitle} numberOfLines={2}>{item.title}</Text>
+              <Text style={styles.mobileFeedDetail} numberOfLines={1}>{item.detail}</Text>
+              <Text style={styles.mobileFeedMeta} numberOfLines={1}>{item.meta}</Text>
+            </View>
+            <Text style={styles.mobileFeedAction}>{item.actionLabel}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.mobileNeighborhoodRail}
+      >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Show all neighborhoods"
+          onPress={() => onSelectNeighborhood(undefined)}
+          style={styles.mobileNeighborhoodChip}
+        >
+          <Text style={styles.mobileNeighborhoodName}>All</Text>
+          <Text style={styles.mobileNeighborhoodMeta}>{sourceTrust.verifiedExhibitionCount} verified</Text>
+        </Pressable>
+        {neighborhoods.slice(0, 6).map((item) => (
+          <Pressable
+            key={item.neighborhood}
+            accessibilityRole="button"
+            accessibilityLabel={`Plan ${item.neighborhood}`}
+            onPress={() => onSelectNeighborhood(item.neighborhood)}
+            style={styles.mobileNeighborhoodChip}
+          >
+            <Text style={styles.mobileNeighborhoodName} numberOfLines={1}>{item.neighborhood}</Text>
+            <Text style={styles.mobileNeighborhoodMeta}>{item.verifiedCount} verified - {item.openNowCount} open</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
 function GalleryConciergePanel({
   suggestions,
   onSuggestion
@@ -963,7 +1212,7 @@ function MobileCommandBar({
       </Pressable>
       <Pressable accessibilityRole="button" onPress={onLog} style={styles.mobileCommandButton}>
         <ListChecks size={17} color={colors.paper} />
-        <Text style={styles.mobileCommandText}>{betaProgress.completedCount}/{betaProgress.totalCount}</Text>
+        <Text style={styles.mobileCommandText}>Passport</Text>
       </Pressable>
     </View>
   );
@@ -3142,7 +3391,7 @@ export function GalleryApp() {
   const routeFixtureStopCount = displayWalkPlan.stops.filter((stop) =>
     getGalleryInventoryTrust(stop.exhibition).isFixture
   ).length;
-  const routeScopeLabel = selectedNeighborhood ?? walkPlan.neighborhood;
+  const routeScopeLabel = selectedNeighborhood ?? walkPlan.neighborhood ?? "All neighborhoods";
   const compactAreaName =
     selectedAreaId === "nyc" ? "NYC" : selectedAreaId === "la" ? "LA" : "Hudson";
   const heroTitle = isCompactLayout
@@ -3947,39 +4196,80 @@ export function GalleryApp() {
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.headerBand}>
-          <ImageBackground
-            source={galleryVisualSources[heroVisual.assetKey]}
-            accessibilityLabel={heroVisual.alt}
-            imageStyle={styles.heroImage}
-            style={styles.heroImageCard}
-          >
-            <View style={styles.heroImageShade} />
-            <View style={styles.heroContent}>
-              <View style={[styles.headerTopline, isCompactLayout ? styles.compactHeaderTopline : null]}>
-                <Text style={styles.heroEyebrow}>{getAreaRoleCopy(selectedAreaId)}</Text>
-                <Text style={[styles.marketClock, isCompactLayout ? styles.compactMarketClock : null]}>
-                  Demo clock {formatShortDate(referenceNow)}, {formatShortTime(referenceNow)}
-                </Text>
-              </View>
-              <View style={styles.heroTitleBlock}>
-                <Text style={[styles.title, isCompactLayout ? styles.compactTitle : null]}>
-                  {heroTitle}
-                </Text>
-                <Text style={styles.subtitle}>
-                  {heroSubtitle}
-                </Text>
-              </View>
-              <View style={[styles.heroRouteCard, isCompactLayout ? styles.compactHeroRouteCard : null]}>
-                <View>
-                  <Text style={styles.heroRouteLabel}>Suggested route</Text>
-                  <Text style={[styles.heroRouteTitle, isCompactLayout ? styles.compactHeroRouteTitle : null]}>{heroRouteSummary}</Text>
+          {isCompactLayout ? (
+            <ProfessionalMobileHome
+              areaLabel={selectedArea?.name ?? compactAreaName}
+              dateLabel={`${formatShortDate(referenceNow)} - ${formatShortTime(referenceNow)}`}
+              routeScopeLabel={routeScopeLabel}
+              walkPlan={walkPlan}
+              featuredExhibition={tonightPick}
+              featuredVisual={tonightPickVisual}
+              personalizedPick={personalizedPicks[0]}
+              openingSignal={eventSignals[0]}
+              lastChanceAlert={lastChanceAlerts[0]}
+              neighborhoods={neighborhoodIntelligence}
+              sourceTrust={sourceTrust}
+              freshnessLabel={freshnessAudit.summaryLabel}
+              openNowCount={openNowCount}
+              closingSoonCount={closingSoonCount}
+              activeWalk={activeWalkSession?.status === "active"}
+              onFindWalk={chooseFindWalkFirstRun}
+              onStartWalk={startWalk}
+              onOpenRoute={() => {
+                if (displayWalkPlan.routeMapUrl) {
+                  void Linking.openURL(displayWalkPlan.routeMapUrl);
+                }
+              }}
+              onForYou={() => {
+                setWalkMode("for-you");
+                completeBetaTask("taste-quiz");
+              }}
+              onResumeWalk={resumeWalk}
+              onOpenFeatured={() => {
+                if (tonightPick) {
+                  setSelectedExhibitionId(tonightPick.id);
+                }
+              }}
+              onSelectNeighborhood={(neighborhood) => {
+                setSelectedNeighborhood(neighborhood);
+                setSelectedExhibitionId(undefined);
+              }}
+            />
+          ) : (
+            <ImageBackground
+              source={galleryVisualSources[heroVisual.assetKey]}
+              accessibilityLabel={heroVisual.alt}
+              imageStyle={styles.heroImage}
+              style={styles.heroImageCard}
+            >
+              <View style={styles.heroImageShade} />
+              <View style={styles.heroContent}>
+                <View style={styles.headerTopline}>
+                  <Text style={styles.heroEyebrow}>{getAreaRoleCopy(selectedAreaId)}</Text>
+                  <Text style={styles.marketClock}>
+                    Demo clock {formatShortDate(referenceNow)}, {formatShortTime(referenceNow)}
+                  </Text>
                 </View>
-                <Text style={[styles.heroRouteMeta, isCompactLayout ? styles.compactHeroRouteMeta : null]}>{walkPlan.totalMinutes} min - {walkPlan.totalDistanceMiles.toFixed(1)} mi</Text>
+                <View style={styles.heroTitleBlock}>
+                  <Text style={styles.title}>
+                    {heroTitle}
+                  </Text>
+                  <Text style={styles.subtitle}>
+                    {heroSubtitle}
+                  </Text>
+                </View>
+                <View style={styles.heroRouteCard}>
+                  <View>
+                    <Text style={styles.heroRouteLabel}>Suggested route</Text>
+                    <Text style={styles.heroRouteTitle}>{heroRouteSummary}</Text>
+                  </View>
+                  <Text style={styles.heroRouteMeta}>{walkPlan.totalMinutes} min - {walkPlan.totalDistanceMiles.toFixed(1)} mi</Text>
+                </View>
               </View>
-            </View>
-          </ImageBackground>
+            </ImageBackground>
+          )}
 
-          {showFirstRunPanel ? (
+          {showFirstRunPanel && !isCompactLayout ? (
             <FirstRunChoicePanel
               hasActiveWalk={activeWalkSession?.status === "active"}
               verifiedCount={sourceTrust.verifiedExhibitionCount}
@@ -3995,10 +4285,12 @@ export function GalleryApp() {
             />
           ) : null}
 
-          <GalleryConciergePanel
-            suggestions={conciergeSuggestions}
-            onSuggestion={handleConciergeSuggestion}
-          />
+          {!isCompactLayout ? (
+            <GalleryConciergePanel
+              suggestions={conciergeSuggestions}
+              onSuggestion={handleConciergeSuggestion}
+            />
+          ) : null}
 
           <RouteCommandPanel
             walkPlan={walkPlan}
@@ -4045,7 +4337,7 @@ export function GalleryApp() {
             </View>
           ) : null}
 
-          <View style={styles.discoveryControls}>
+          <View style={[styles.discoveryControls, isCompactLayout ? styles.compactDiscoveryControls : null]}>
             <View style={styles.areaRow}>
               {galleryAreas.map((area) => (
                 <ChipButton
@@ -4087,6 +4379,7 @@ export function GalleryApp() {
             </View>
           </View>
 
+          {!isCompactLayout ? (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -4096,8 +4389,9 @@ export function GalleryApp() {
             <TonightStat label="Verified" value={sourceTrust.verifiedExhibitionCount} detail="Official-page checked" />
             <TonightStat label="Closing soon" value={closingSoonCount} detail="Within 7 days" />
           </ScrollView>
+          ) : null}
 
-          <View style={styles.trustBrief}>
+          <View style={[styles.trustBrief, isCompactLayout ? styles.compactTrustBrief : null]}>
             <Check size={16} color={colors.ink} />
             <Text style={styles.trustBriefStatus}>{freshnessAudit.summaryLabel}</Text>
             <Text style={styles.trustBriefText}>
@@ -4105,6 +4399,7 @@ export function GalleryApp() {
             </Text>
           </View>
 
+          {!isCompactLayout ? (
           <View style={styles.freshnessQueuePanel}>
             <View style={styles.freshnessQueueHeader}>
               <Text style={styles.guidanceTitle}>Freshness queue</Text>
@@ -4128,8 +4423,9 @@ export function GalleryApp() {
               <Text style={styles.savedWalkMeta}>No immediate review items for this market.</Text>
             ) : null}
           </View>
+          ) : null}
 
-          {tonightPick ? (
+          {tonightPick && !isCompactLayout ? (
             <ImageBackground
               source={galleryVisualSources[tonightPickVisual.assetKey]}
               accessibilityLabel={tonightPickVisual.alt}
@@ -4158,6 +4454,7 @@ export function GalleryApp() {
             </ImageBackground>
           ) : null}
 
+          {!isCompactLayout ? (
           <GalleryPassportPanel
             quizAnswers={quizAnswers}
             passport={tastePassport}
@@ -4183,6 +4480,13 @@ export function GalleryApp() {
             onTogglePreferredTag={togglePreferredTag}
             onUseForYouRoute={() => setWalkMode("for-you")}
           />
+          ) : null}
+          {isCompactLayout ? (
+            <GalleryConciergePanel
+              suggestions={conciergeSuggestions}
+              onSuggestion={handleConciergeSuggestion}
+            />
+          ) : null}
           <BetaFeedbackPanel
             selectedKind={betaFeedbackKind}
             note={betaFeedbackNote}
@@ -4605,12 +4909,300 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fog
   },
   content: {
-    paddingBottom: 104
+    paddingBottom: 112
   },
   headerBand: {
     backgroundColor: colors.fog,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.lg,
     gap: spacing.md
+  },
+  mobileHomeShell: {
+    backgroundColor: colors.fog,
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm
+  },
+  mobileTopBar: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    minHeight: 44
+  },
+  mobileLocationLabel: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "900",
+    lineHeight: 20
+  },
+  mobileDateLabel: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17,
+    marginTop: 1
+  },
+  mobileVerifiedBadge: {
+    alignItems: "center",
+    backgroundColor: colors.ink,
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    gap: spacing.xs,
+    minHeight: 32,
+    paddingHorizontal: spacing.sm
+  },
+  mobileVerifiedBadgeText: {
+    color: colors.paper,
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  mobileFeatureCard: {
+    borderRadius: radii.md,
+    minHeight: 318,
+    overflow: "hidden"
+  },
+  mobileFeatureImage: {
+    height: "100%",
+    resizeMode: "cover",
+    width: "100%"
+  },
+  mobileFeatureShade: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(0, 0, 0, 0.34)"
+  },
+  mobileFeatureContent: {
+    flex: 1,
+    justifyContent: "space-between",
+    padding: spacing.md
+  },
+  mobileFeatureTopRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  mobileFeaturePill: {
+    backgroundColor: "rgba(255, 253, 248, 0.92)",
+    borderRadius: radii.pill,
+    color: colors.ink,
+    fontSize: 10,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    textTransform: "uppercase"
+  },
+  mobileFeatureTitle: {
+    color: colors.paper,
+    fontSize: 33,
+    fontWeight: "900",
+    lineHeight: 37,
+    maxWidth: "100%"
+  },
+  mobileFeatureSubtitle: {
+    color: "#F2EDE4",
+    fontSize: 14,
+    fontWeight: "800",
+    lineHeight: 20,
+    marginTop: spacing.sm
+  },
+  mobileFeatureActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    marginTop: spacing.md
+  },
+  mobilePrimaryCta: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    flexGrow: 1,
+    gap: spacing.xs,
+    justifyContent: "center",
+    minHeight: 44,
+    minWidth: 168,
+    paddingHorizontal: spacing.md
+  },
+  mobilePrimaryCtaText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  mobileSecondaryCta: {
+    alignItems: "center",
+    backgroundColor: "rgba(17, 17, 17, 0.72)",
+    borderColor: "rgba(255, 253, 248, 0.28)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: spacing.md
+  },
+  mobileSecondaryCtaText: {
+    color: colors.paper,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  mobileTrustStrip: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    padding: spacing.sm
+  },
+  mobileTrustItem: {
+    backgroundColor: colors.fog,
+    borderRadius: radii.pill,
+    color: colors.ink,
+    flexGrow: 1,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    textAlign: "center"
+  },
+  mobileFeaturedShow: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.md,
+    justifyContent: "space-between",
+    padding: spacing.md
+  },
+  mobileFeaturedShowCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  mobileFeedLabel: {
+    color: colors.mutedInk,
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  mobileFeaturedShowTitle: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "900",
+    lineHeight: 21,
+    marginTop: spacing.xs
+  },
+  mobileFeaturedShowMeta: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: spacing.xs
+  },
+  mobileFeaturedShowAction: {
+    backgroundColor: colors.ink,
+    borderRadius: radii.pill,
+    color: colors.paper,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  mobileTonightFeed: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md
+  },
+  mobileSectionHeading: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.sm
+  },
+  mobileSectionTitle: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  mobileSectionMeta: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  mobileFeedRow: {
+    alignItems: "center",
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: spacing.md,
+    justifyContent: "space-between",
+    paddingTop: spacing.sm
+  },
+  mobileFeedCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  mobileFeedTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "900",
+    lineHeight: 19,
+    marginTop: spacing.xs
+  },
+  mobileFeedDetail: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17,
+    marginTop: 2
+  },
+  mobileFeedMeta: {
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    lineHeight: 15,
+    marginTop: 2
+  },
+  mobileFeedAction: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  mobileNeighborhoodRail: {
+    gap: spacing.sm,
+    paddingBottom: spacing.xs
+  },
+  mobileNeighborhoodChip: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    minHeight: 66,
+    padding: spacing.sm,
+    width: 148
+  },
+  mobileNeighborhoodName: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  mobileNeighborhoodMeta: {
+    color: colors.mutedInk,
+    fontSize: 11,
+    fontWeight: "800",
+    lineHeight: 15,
+    marginTop: spacing.xs
   },
   heroImageCard: {
     minHeight: 372,
@@ -4807,6 +5399,14 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingHorizontal: spacing.lg
   },
+  compactDiscoveryControls: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    marginHorizontal: spacing.md,
+    padding: spacing.md
+  },
   tonightStatsRail: {
     gap: spacing.sm,
     paddingHorizontal: spacing.lg
@@ -4857,6 +5457,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: spacing.sm,
     paddingHorizontal: spacing.lg
+  },
+  compactTrustBrief: {
+    alignItems: "flex-start",
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: "column",
+    marginHorizontal: spacing.md,
+    padding: spacing.md
   },
   trustBriefStatus: {
     color: colors.ink,
@@ -5547,7 +6157,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 253, 248, 0.16)",
     borderRadius: radii.md,
     borderWidth: 1,
-    bottom: spacing.md,
+    bottom: spacing.sm,
     flexDirection: "row",
     gap: spacing.xs,
     justifyContent: "space-between",
@@ -5573,7 +6183,7 @@ const styles = StyleSheet.create({
   },
   routeFirstPanel: {
     backgroundColor: colors.paper,
-    borderColor: "rgba(17, 17, 17, 0.08)",
+    borderColor: colors.line,
     borderRadius: radii.md,
     borderWidth: 1,
     gap: spacing.md,
@@ -5583,7 +6193,9 @@ const styles = StyleSheet.create({
     ...shadows.card
   },
   compactRouteFirstPanel: {
-    marginTop: 0
+    marginHorizontal: spacing.md,
+    marginTop: 0,
+    paddingHorizontal: spacing.md
   },
   activeWalkNotice: {
     alignItems: "center",
@@ -5635,9 +6247,9 @@ const styles = StyleSheet.create({
   },
   routeFirstTitle: {
     color: colors.ink,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "900",
-    lineHeight: 23,
+    lineHeight: 25,
     marginTop: spacing.xs
   },
   routeFirstMeta: {
@@ -6051,17 +6663,17 @@ const styles = StyleSheet.create({
   },
   walkBand: {
     backgroundColor: colors.paper,
-    borderColor: "rgba(17, 17, 17, 0.08)",
+    borderColor: colors.line,
     borderRadius: radii.md,
     borderWidth: 1,
-    marginHorizontal: spacing.lg,
+    marginHorizontal: spacing.md,
     marginTop: spacing.xl,
     paddingBottom: spacing.lg
   },
   routeCommand: {
     alignItems: "stretch",
-    backgroundColor: colors.fog,
-    borderColor: colors.line,
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
     borderRadius: radii.md,
     borderWidth: 1,
     flexDirection: "row",
@@ -6077,28 +6689,28 @@ const styles = StyleSheet.create({
     minWidth: 240
   },
   routeCommandKicker: {
-    color: colors.mutedInk,
+    color: "#DAD8D0",
     fontSize: 11,
     fontWeight: "900",
     textTransform: "uppercase"
   },
   routeCommandTitle: {
-    color: colors.ink,
-    fontSize: 22,
+    color: colors.paper,
+    fontSize: 24,
     fontWeight: "900",
     lineHeight: 27,
     marginTop: spacing.sm
   },
   routeCommandMeta: {
-    color: colors.mutedInk,
+    color: "#E8E1D7",
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 19,
     marginTop: spacing.sm
   },
   routeQualityStack: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
+    backgroundColor: colors.paper,
+    borderColor: colors.paper,
     borderRadius: radii.md,
     borderWidth: 1,
     justifyContent: "center",
@@ -6106,13 +6718,13 @@ const styles = StyleSheet.create({
     padding: spacing.md
   },
   routeQualityLabel: {
-    color: colors.paper,
+    color: colors.ink,
     fontSize: 15,
     fontWeight: "900",
     textTransform: "capitalize"
   },
   routeQualityMeta: {
-    color: "#DAD8D0",
+    color: colors.mutedInk,
     fontSize: 12,
     fontWeight: "800",
     marginTop: spacing.xs
@@ -6158,10 +6770,10 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: radii.md,
     borderWidth: 1,
-    minHeight: 48,
+    minHeight: 52,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    width: 146
+    width: 154
   },
   activeRouteModeButton: {
     backgroundColor: colors.ink,
@@ -6256,8 +6868,10 @@ const styles = StyleSheet.create({
     fontWeight: "900"
   },
   routePreview: {
-    borderTopColor: colors.line,
-    borderTopWidth: 1,
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
     marginHorizontal: spacing.lg,
     marginTop: spacing.md,
     paddingVertical: spacing.md
@@ -6459,11 +7073,11 @@ const styles = StyleSheet.create({
     lineHeight: 17
   },
   routeMapCanvas: {
-    backgroundColor: colors.fog,
+    backgroundColor: "#EEEAE2",
     borderColor: colors.line,
     borderRadius: radii.md,
     borderWidth: 1,
-    height: 252,
+    height: 238,
     marginHorizontal: spacing.md,
     marginTop: spacing.md,
     overflow: "hidden",
@@ -6583,7 +7197,7 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   walkStops: {
-    gap: spacing.sm,
+    gap: 0,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md
   },
@@ -6602,11 +7216,15 @@ const styles = StyleSheet.create({
   },
   walkStop: {
     alignItems: "flex-start",
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
     flexDirection: "row",
     gap: spacing.md,
     minHeight: 72,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.md
   },
   currentWalkStop: {

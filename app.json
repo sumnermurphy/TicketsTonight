@@ -8,7 +8,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "icon": "./assets/gallery/gallery-painting.png",
+    "icon": "./assets/icons/gallery-icon-512.png",
     "backgroundColor": "#F4F2ED",
     "primaryColor": "#111111",
     "assetBundlePatterns": [
@@ -30,7 +30,7 @@
       "shortName": "Gallery Walk",
       "themeColor": "#111111",
       "backgroundColor": "#F4F2ED",
-      "favicon": "./assets/gallery/gallery-painting.png"
+      "favicon": "./assets/icons/gallery-icon-192.png"
     }
   }
 }

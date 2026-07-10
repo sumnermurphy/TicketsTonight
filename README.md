@@ -19,12 +19,14 @@ This branch intentionally replaces the legacy iOS-era TicketsTonight app tree wi
 - Map-like route planner with ordered stops, walking distance/time, route reasons, grouped same-gallery stops, stop swapping, and external Google Maps links.
 - Active-walk companion state with start/resume, current/next stop progress, visited/skipped actions, completed recap, and local persistence.
 - First-run choice surface for finding a walk, taking the taste quiz, or resuming an active walk.
+- Professional mobile web shell with a location/date bar, visual featured recommendation, useful-tonight feed, compact trust strip, and bottom tabs for Tonight, Walk, For You, and Passport.
 - Taste Passport personalization with quiz responses, behavior signals, personalized picks, quests, badges, and stamps.
 - Opening-night routing that prefers upcoming or active receptions and explains timing.
 - Last-chance and closing-soon signals.
 - Neighborhood Intelligence for walkable clusters.
 - Why Go cards, personal art-log controls, saved/visited/skipped states, and private notes.
 - Trust labels for `Verified as of`, `Official gallery link`, `Fixture/demo`, `Needs review`, and submitted/partner inventory.
+- PWA-readiness metadata with square web icon assets while keeping the app local-first and offline-friendly through checked-in images/data.
 - Verified NYC gallery inventory depth above the initial fixture count, currently audited at 62 NYC exhibitions with 50 imported/manual official-page records.
 - Hudson Warren Street coverage kept honest as a smaller market, currently audited at 10 exhibitions with 2 imported/manual records.
 
@@ -45,7 +47,7 @@ Review screenshots are checked in here:
 - Desktop: `docs/pr/gallery-walk-desktop.png`
 - Mobile: `docs/pr/gallery-walk-mobile.png`
 
-The screenshots should show the "Tonight in New York" discovery surface, the first-run/resume choices, trust signals, and the route-first planning surface.
+The screenshots should show the mobile-first Tonight shell, trust signals, useful route actions, personalization, and the route-first planning surface.
 
 ## Local Setup
 
