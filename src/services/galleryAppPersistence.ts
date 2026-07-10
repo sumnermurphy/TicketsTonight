@@ -4,6 +4,7 @@ import type {
   GalleryMedium
 } from "../types";
 import type { GalleryWalkMode } from "./galleryDiscovery";
+import type { GalleryBetaFeedback, GalleryBetaTaskId } from "./galleryBetaReadiness";
 import type {
   GalleryPassportBadge,
   GalleryEditableTastePreference,
@@ -42,6 +43,9 @@ export type GalleryAppPersistedState = {
   savedWalks: GallerySavedWalk[];
   firstRunChoice?: GalleryFirstRunChoice;
   firstRunCompleted: boolean;
+  betaCompletedTaskIds: GalleryBetaTaskId[];
+  betaFeedback: GalleryBetaFeedback[];
+  betaChecklistDismissed: boolean;
 };
 
 export type GalleryStorageAdapter = {
@@ -151,7 +155,14 @@ function sanitizeState(value: unknown): GalleryAppPersistedState | undefined {
       : undefined,
     savedWalks: Array.isArray(value.savedWalks) ? (value.savedWalks as GallerySavedWalk[]) : [],
     firstRunChoice: sanitizeFirstRunChoice(value.firstRunChoice),
-    firstRunCompleted: value.firstRunCompleted === true
+    firstRunCompleted: value.firstRunCompleted === true,
+    betaCompletedTaskIds: isStringArray(value.betaCompletedTaskIds)
+      ? (value.betaCompletedTaskIds as GalleryBetaTaskId[])
+      : [],
+    betaFeedback: Array.isArray(value.betaFeedback)
+      ? (value.betaFeedback as GalleryBetaFeedback[])
+      : [],
+    betaChecklistDismissed: value.betaChecklistDismissed === true
   };
 }
 

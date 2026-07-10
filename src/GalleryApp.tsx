@@ -6,9 +6,13 @@ import {
   Copy,
   ExternalLink,
   Heart,
+  Home,
+  ListChecks,
   MapPin,
+  MessageSquare,
   NotebookPen,
   Route,
+  RotateCcw,
   Search,
   Share2,
   SlidersHorizontal,
@@ -60,11 +64,22 @@ import {
   type GalleryWalkMode
 } from "./services/galleryDiscovery";
 import {
+  clearGalleryAppPersistedState,
   readGalleryAppPersistedState,
   writeGalleryAppPersistedState,
   type GalleryFirstRunChoice,
   type GalleryPersistedLens
 } from "./services/galleryAppPersistence";
+import {
+  completeGalleryBetaTask,
+  createGalleryBetaFeedback,
+  createGalleryBetaFeedbackReport,
+  getGalleryBetaTasks,
+  type GalleryBetaFeedback,
+  type GalleryBetaFeedbackKind,
+  type GalleryBetaTaskId,
+  type GalleryBetaTaskProgress
+} from "./services/galleryBetaReadiness";
 import { createGalleryMarketDataAudit } from "./services/galleryDataFoundation";
 import {
   getGalleryHeroVisual,
@@ -190,6 +205,13 @@ const logStatusLabels: Record<GalleryLogStatus, string> = {
 };
 
 const logStatusOptions: GalleryLogStatus[] = ["saved", "want-to-see", "visited", "skipped"];
+const betaFeedbackKinds: GalleryBetaFeedbackKind[] = ["useful", "confusing", "broken", "wish"];
+const betaFeedbackLabels: Record<GalleryBetaFeedbackKind, string> = {
+  useful: "Useful",
+  confusing: "Confusing",
+  broken: "Broken",
+  wish: "Wish"
+};
 const alertWindowOptions: Array<3 | 7 | 14> = [3, 7, 14];
 const eventRouteIntentOptions: GalleryEventRouteIntent[] = [
   "social-opening",
@@ -703,18 +725,24 @@ function FirstRunChoicePanel({
   verifiedCount,
   reviewCount,
   freshnessLabel,
+  betaProgress = getGalleryBetaTasks([]),
   onFindWalk,
   onTasteQuiz,
   onResumeWalk,
+  onBetaTask,
+  onResetDemo,
   onDismiss
 }: {
   hasActiveWalk: boolean;
   verifiedCount: number;
   reviewCount: number;
   freshnessLabel: string;
+  betaProgress?: GalleryBetaTaskProgress;
   onFindWalk: () => void;
   onTasteQuiz: () => void;
   onResumeWalk: () => void;
+  onBetaTask: (taskId: GalleryBetaTaskId) => void;
+  onResetDemo: () => void;
   onDismiss: () => void;
 }) {
   return (
@@ -722,7 +750,10 @@ function FirstRunChoicePanel({
       <View style={styles.firstRunHeader}>
         <View>
           <Text style={styles.routeFirstKicker}>Start tonight</Text>
-          <Text style={styles.firstRunTitle}>What do you want to do first?</Text>
+          <Text style={styles.firstRunTitle}>What should I do tonight?</Text>
+          <Text style={styles.firstRunSubtitle}>
+            {betaProgress.summaryLabel} - beta preview path
+          </Text>
         </View>
         <Pressable
           accessibilityRole="button"
@@ -764,11 +795,176 @@ function FirstRunChoicePanel({
           </Pressable>
         ) : null}
       </View>
+      <View style={styles.betaTaskGrid}>
+        {betaProgress.tasks.map((task) => (
+          <Pressable
+            key={task.id}
+            accessibilityRole="button"
+            accessibilityLabel={`${task.completed ? "Completed" : "Complete"} beta task ${task.label}`}
+            onPress={() => onBetaTask(task.id)}
+            style={[styles.betaTaskPill, task.completed ? styles.completedBetaTaskPill : null]}
+          >
+            <Text style={[styles.betaTaskText, task.completed ? styles.completedBetaTaskText : null]}>
+              {task.completed ? "Done " : ""}{task.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
       <View style={styles.firstRunTrustRow}>
         <Text style={styles.firstRunTrustPill}>{verifiedCount} verified</Text>
         <Text style={styles.firstRunTrustPill}>{reviewCount} demo/review</Text>
         <Text style={styles.firstRunTrustPill}>{freshnessLabel}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Reset gallery demo state"
+          onPress={onResetDemo}
+          style={styles.resetDemoButton}
+        >
+          <RotateCcw size={12} color={colors.ink} />
+          <Text style={styles.resetDemoButtonText}>Reset demo</Text>
+        </Pressable>
       </View>
+    </View>
+  );
+}
+
+function BetaFeedbackPanel({
+  selectedKind,
+  note,
+  feedbackCount,
+  onKind,
+  onNote,
+  onSubmit,
+  onCopy,
+  onEmail,
+  onResetDemo
+}: {
+  selectedKind: GalleryBetaFeedbackKind;
+  note: string;
+  feedbackCount: number;
+  onKind: (kind: GalleryBetaFeedbackKind) => void;
+  onNote: (note: string) => void;
+  onSubmit: () => void;
+  onCopy: () => void;
+  onEmail: () => void;
+  onResetDemo: () => void;
+}) {
+  return (
+    <View style={styles.betaFeedbackPanel}>
+      <View style={styles.betaFeedbackHeader}>
+        <View style={styles.routeFirstTitleBlock}>
+          <Text style={styles.routeFirstKicker}>Beta feedback</Text>
+          <Text style={styles.betaFeedbackTitle}>Tell us what felt useful or rough.</Text>
+        </View>
+        <Text style={styles.firstRunTrustPill}>{feedbackCount} notes</Text>
+      </View>
+      <View style={styles.feedbackRow}>
+        {betaFeedbackKinds.map((kind) => (
+          <Pressable
+            key={kind}
+            accessibilityRole="button"
+            accessibilityLabel={`Set feedback kind ${betaFeedbackLabels[kind]}`}
+            onPress={() => onKind(kind)}
+            style={[
+              styles.feedbackButton,
+              selectedKind === kind ? styles.activeFeedbackButton : null
+            ]}
+          >
+            <Text
+              style={[
+                styles.feedbackButtonText,
+                selectedKind === kind ? styles.activeFeedbackButtonText : null
+              ]}
+            >
+              {betaFeedbackLabels[kind]}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      <View style={styles.betaFeedbackInputRow}>
+        <MessageSquare size={15} color={colors.mutedInk} />
+        <TextInput
+          value={note}
+          onChangeText={onNote}
+          placeholder="What should change before beta?"
+          placeholderTextColor={colors.mutedInk}
+          style={styles.betaFeedbackInput}
+        />
+      </View>
+      <View style={styles.firstRunActionRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Save beta feedback"
+          onPress={onSubmit}
+          style={styles.firstRunPrimaryAction}
+        >
+          <Text style={styles.firstRunPrimaryActionText}>Save feedback</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Copy beta feedback report"
+          onPress={onCopy}
+          style={styles.firstRunSecondaryAction}
+        >
+          <Copy size={14} color={colors.ink} />
+          <Text style={styles.firstRunSecondaryActionText}>Copy report</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel="Email beta feedback report"
+          onPress={onEmail}
+          style={styles.firstRunSecondaryAction}
+        >
+          <ExternalLink size={14} color={colors.ink} />
+          <Text style={styles.firstRunSecondaryActionText}>Email</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Reset gallery demo state"
+          onPress={onResetDemo}
+          style={styles.resetDemoButton}
+        >
+          <RotateCcw size={12} color={colors.ink} />
+          <Text style={styles.resetDemoButtonText}>Reset demo</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function MobileCommandBar({
+  activeWalk,
+  betaProgress,
+  onTonight,
+  onWalk,
+  onForYou,
+  onLog
+}: {
+  activeWalk: boolean;
+  betaProgress: GalleryBetaTaskProgress;
+  onTonight: () => void;
+  onWalk: () => void;
+  onForYou: () => void;
+  onLog: () => void;
+}) {
+  return (
+    <View style={styles.mobileCommandBar}>
+      <Pressable accessibilityRole="button" onPress={onTonight} style={styles.mobileCommandButton}>
+        <Home size={17} color={colors.paper} />
+        <Text style={styles.mobileCommandText}>Tonight</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" onPress={onWalk} style={styles.mobileCommandButton}>
+        <Route size={17} color={colors.paper} />
+        <Text style={styles.mobileCommandText}>{activeWalk ? "Walking" : "Walk"}</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" onPress={onForYou} style={styles.mobileCommandButton}>
+        <Sparkles size={17} color={colors.paper} />
+        <Text style={styles.mobileCommandText}>For You</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" onPress={onLog} style={styles.mobileCommandButton}>
+        <ListChecks size={17} color={colors.paper} />
+        <Text style={styles.mobileCommandText}>{betaProgress.completedCount}/{betaProgress.totalCount}</Text>
+      </Pressable>
     </View>
   );
 }
@@ -2616,6 +2812,17 @@ export function GalleryApp() {
   const [firstRunCompleted, setFirstRunCompleted] = useState(
     persistedState?.firstRunCompleted ?? false
   );
+  const [betaCompletedTaskIds, setBetaCompletedTaskIds] = useState<GalleryBetaTaskId[]>(
+    persistedState?.betaCompletedTaskIds ?? []
+  );
+  const [betaFeedback, setBetaFeedback] = useState<GalleryBetaFeedback[]>(
+    persistedState?.betaFeedback ?? []
+  );
+  const [betaChecklistDismissed, setBetaChecklistDismissed] = useState(
+    persistedState?.betaChecklistDismissed ?? false
+  );
+  const [betaFeedbackKind, setBetaFeedbackKind] = useState<GalleryBetaFeedbackKind>("useful");
+  const [betaFeedbackNote, setBetaFeedbackNote] = useState("");
   const [draftWalkStopIds, setDraftWalkStopIds] = useState<string[] | undefined>();
   const [eventRouteIntent, setEventRouteIntent] = useState<GalleryEventRouteIntent>("social-opening");
   const [shareStatus, setShareStatus] = useState<string | undefined>();
@@ -3191,10 +3398,23 @@ export function GalleryApp() {
       passportStamps
     ]
   );
+  const betaProgress = useMemo(
+    () => getGalleryBetaTasks(betaCompletedTaskIds),
+    [betaCompletedTaskIds]
+  );
+  const betaFeedbackReport = useMemo(
+    () => createGalleryBetaFeedbackReport(betaFeedback),
+    [betaFeedback]
+  );
   const showFirstRunPanel =
     firstRunChoice !== "dismissed" &&
+    !betaChecklistDismissed &&
     (!firstRunCompleted ||
       (activeWalkSession?.status === "active" && firstRunChoice !== "resume-walk"));
+
+  function completeBetaTask(taskId: GalleryBetaTaskId) {
+    setBetaCompletedTaskIds((taskIds) => completeGalleryBetaTask(taskIds, taskId));
+  }
 
   function resetMarket(areaId: GalleryAreaId) {
     setSelectedAreaId(areaId);
@@ -3204,6 +3424,9 @@ export function GalleryApp() {
     setVerifiedOnly(false);
     setWalkMode("quick-loop");
     setSelectedExhibitionId(undefined);
+    if (areaId === "hudson") {
+      completeBetaTask("check-hudson");
+    }
   }
 
   function completeFirstRun(choice: GalleryFirstRunChoice) {
@@ -3213,12 +3436,14 @@ export function GalleryApp() {
 
   function chooseFindWalkFirstRun() {
     completeFirstRun("find-walk");
+    completeBetaTask("find-walk");
     setActiveLens("open-now");
     setShareStatus("Showing walk-ready open galleries first.");
   }
 
   function chooseTasteQuizFirstRun() {
     completeFirstRun("taste-quiz");
+    completeBetaTask("taste-quiz");
     setWalkMode("for-you");
     setShareStatus("Taste quiz and For You route are ready below.");
   }
@@ -3231,6 +3456,110 @@ export function GalleryApp() {
 
   function dismissFirstRun() {
     completeFirstRun("dismissed");
+    setBetaChecklistDismissed(true);
+  }
+
+  function handleBetaTask(taskId: GalleryBetaTaskId) {
+    completeBetaTask(taskId);
+
+    if (taskId === "find-walk") {
+      chooseFindWalkFirstRun();
+      return;
+    }
+
+    if (taskId === "taste-quiz") {
+      chooseTasteQuizFirstRun();
+      return;
+    }
+
+    if (taskId === "start-route") {
+      startWalk();
+      return;
+    }
+
+    if (taskId === "check-hudson") {
+      resetMarket("hudson");
+      return;
+    }
+
+    if (taskId === "send-feedback") {
+      setShareStatus("Feedback composer is ready below.");
+      return;
+    }
+
+    setShareStatus("Beta task marked locally.");
+  }
+
+  function resetGalleryDemoState() {
+    clearGalleryAppPersistedState();
+    setSelectedAreaId("nyc");
+    setSelectedNeighborhood(undefined);
+    setSelectedMedium(undefined);
+    setActiveLens("all");
+    setVerifiedOnly(false);
+    setWalkMode("quick-loop");
+    setAlertWindowDays(14);
+    setQuery("");
+    setSelectedExhibitionId(undefined);
+    setHighlightedRouteStopId(undefined);
+    setActiveWalkSession(undefined);
+    setLogEntries([]);
+    setSavedAlertArtists([]);
+    setSavedAlertGalleries([]);
+    setSavedAlertNeighborhoods([]);
+    setSavedAlertMediums([]);
+    setQuizAnswers([]);
+    setEarnedBadges([]);
+    setCompletedQuestIds([]);
+    setCompletedWalkSessions([]);
+    setTasteFeedback([]);
+    setTastePreferences(defaultTastePreferences);
+    setSavedWalks([]);
+    setFirstRunChoice(undefined);
+    setFirstRunCompleted(false);
+    setBetaCompletedTaskIds([]);
+    setBetaFeedback([]);
+    setBetaChecklistDismissed(false);
+    setBetaFeedbackKind("useful");
+    setBetaFeedbackNote("");
+    setDraftWalkStopIds(undefined);
+    setShareStatus("Demo state reset.");
+  }
+
+  function saveBetaFeedback() {
+    const feedback = createGalleryBetaFeedback(
+      {
+        kind: betaFeedbackKind,
+        note: betaFeedbackNote,
+        areaId: selectedAreaId,
+        routeMode: walkMode,
+        neighborhood: selectedNeighborhood,
+        activeWalkStatus: activeWalkSession?.status,
+        verifiedCount: sourceTrust.verifiedExhibitionCount,
+        demoReviewCount: sourceTrust.fixtureExhibitionCount + sourceTrust.needsReviewExhibitionCount
+      },
+      referenceNow
+    );
+
+    setBetaFeedback((entries) => [feedback, ...entries].slice(0, 12));
+    setBetaFeedbackNote("");
+    completeBetaTask("send-feedback");
+    setShareStatus("Beta feedback saved locally.");
+  }
+
+  async function copyBetaFeedbackReport() {
+    const copied = await writeTextToClipboard(betaFeedbackReport);
+
+    completeBetaTask("send-feedback");
+    setShareStatus(copied ? "Feedback report copied." : "Feedback report is ready to copy.");
+  }
+
+  function emailBetaFeedbackReport() {
+    const subject = encodeURIComponent("TicketsTonight gallery beta feedback");
+    const body = encodeURIComponent(betaFeedbackReport);
+
+    completeBetaTask("send-feedback");
+    void Linking.openURL(`mailto:?subject=${subject}&body=${body}`);
   }
 
   function setLogStatus(exhibitionId: string, status: GalleryLogStatus) {
@@ -3377,6 +3706,7 @@ export function GalleryApp() {
       );
     }
 
+    completeBetaTask("swap-stop");
     setHighlightedRouteStopId(replacementId);
   }
 
@@ -3465,6 +3795,7 @@ export function GalleryApp() {
     setActiveWalkSession(createGalleryWalkSession(walkPlan, referenceNow));
     setDraftWalkStopIds(undefined);
     completeFirstRun("find-walk");
+    completeBetaTask("start-route");
   }
 
   function resumeWalk() {
@@ -3490,6 +3821,8 @@ export function GalleryApp() {
     if (exhibitionId) {
       setLogStatus(exhibitionId, "visited");
     }
+
+    completeBetaTask("mark-visited");
   }
 
   function skipRouteStop(stopId?: string, exhibitionId?: string) {
@@ -3575,12 +3908,18 @@ export function GalleryApp() {
       tastePreferences,
       savedWalks,
       firstRunChoice,
-      firstRunCompleted
+      firstRunCompleted,
+      betaCompletedTaskIds,
+      betaFeedback,
+      betaChecklistDismissed
     });
   }, [
     activeLens,
     activeWalkSession,
     alertWindowDays,
+    betaChecklistDismissed,
+    betaCompletedTaskIds,
+    betaFeedback,
     completedQuestIds,
     completedWalkSessions,
     earnedBadges,
@@ -3646,9 +3985,12 @@ export function GalleryApp() {
               verifiedCount={sourceTrust.verifiedExhibitionCount}
               reviewCount={sourceTrust.fixtureExhibitionCount + sourceTrust.needsReviewExhibitionCount}
               freshnessLabel={freshnessAudit.summaryLabel}
+              betaProgress={betaProgress}
               onFindWalk={chooseFindWalkFirstRun}
               onTasteQuiz={chooseTasteQuizFirstRun}
               onResumeWalk={chooseResumeWalkFirstRun}
+              onBetaTask={handleBetaTask}
+              onResetDemo={resetGalleryDemoState}
               onDismiss={dismissFirstRun}
             />
           ) : null}
@@ -3840,6 +4182,17 @@ export function GalleryApp() {
             onTogglePreferredNeighborhood={togglePreferredNeighborhood}
             onTogglePreferredTag={togglePreferredTag}
             onUseForYouRoute={() => setWalkMode("for-you")}
+          />
+          <BetaFeedbackPanel
+            selectedKind={betaFeedbackKind}
+            note={betaFeedbackNote}
+            feedbackCount={betaFeedback.length}
+            onKind={setBetaFeedbackKind}
+            onNote={setBetaFeedbackNote}
+            onSubmit={saveBetaFeedback}
+            onCopy={copyBetaFeedbackReport}
+            onEmail={emailBetaFeedbackReport}
+            onResetDemo={resetGalleryDemoState}
           />
         </View>
 
@@ -4218,6 +4571,30 @@ export function GalleryApp() {
           ))}
         </View>
       </ScrollView>
+      {isCompactLayout ? (
+        <MobileCommandBar
+          activeWalk={activeWalkSession?.status === "active"}
+          betaProgress={betaProgress}
+          onTonight={() => {
+            setActiveLens("open-now");
+            setSelectedExhibitionId(undefined);
+            completeBetaTask("find-walk");
+            setShareStatus("Tonight view is focused on open galleries.");
+          }}
+          onWalk={() => {
+            setSelectedExhibitionId(undefined);
+            setShareStatus(displayWalkPlan.guidance);
+          }}
+          onForYou={() => {
+            setWalkMode("for-you");
+            completeBetaTask("taste-quiz");
+            setShareStatus("For You route mode is active.");
+          }}
+          onLog={() => {
+            setShareStatus(betaProgress.summaryLabel);
+          }}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -4228,7 +4605,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fog
   },
   content: {
-    paddingBottom: spacing.xxl
+    paddingBottom: 104
   },
   headerBand: {
     backgroundColor: colors.fog,
@@ -5009,6 +5386,13 @@ const styles = StyleSheet.create({
     lineHeight: 25,
     marginTop: spacing.xs
   },
+  firstRunSubtitle: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17,
+    marginTop: spacing.xs
+  },
   firstRunDismissButton: {
     alignItems: "center",
     backgroundColor: colors.fog,
@@ -5072,6 +5456,120 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
+  },
+  betaTaskGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  betaTaskPill: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  completedBetaTaskPill: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink
+  },
+  betaTaskText: {
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  completedBetaTaskText: {
+    color: colors.paper
+  },
+  resetDemoButton: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.xs,
+    minHeight: 30,
+    paddingHorizontal: spacing.sm
+  },
+  resetDemoButtonText: {
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  betaFeedbackPanel: {
+    backgroundColor: colors.paper,
+    borderColor: "rgba(17, 17, 17, 0.08)",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.md,
+    marginHorizontal: spacing.lg,
+    padding: spacing.md,
+    ...shadows.card
+  },
+  betaFeedbackHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+    justifyContent: "space-between"
+  },
+  betaFeedbackTitle: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "900",
+    lineHeight: 23,
+    marginTop: spacing.xs
+  },
+  betaFeedbackInputRow: {
+    alignItems: "center",
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.sm,
+    minHeight: 42,
+    paddingHorizontal: spacing.md
+  },
+  betaFeedbackInput: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "700",
+    minWidth: 0
+  },
+  mobileCommandBar: {
+    alignItems: "center",
+    alignSelf: "center",
+    backgroundColor: colors.ink,
+    borderColor: "rgba(255, 253, 248, 0.16)",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    bottom: spacing.md,
+    flexDirection: "row",
+    gap: spacing.xs,
+    justifyContent: "space-between",
+    left: spacing.md,
+    padding: spacing.xs,
+    position: "absolute",
+    right: spacing.md,
+    ...shadows.card
+  },
+  mobileCommandButton: {
+    alignItems: "center",
+    borderRadius: radii.md,
+    flex: 1,
+    gap: 2,
+    justifyContent: "center",
+    minHeight: 48,
+    paddingHorizontal: spacing.xs
+  },
+  mobileCommandText: {
+    color: colors.paper,
+    fontSize: 10,
+    fontWeight: "900"
   },
   routeFirstPanel: {
     backgroundColor: colors.paper,

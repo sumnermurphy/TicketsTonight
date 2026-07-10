@@ -4,9 +4,13 @@
     "slug": "tickets-tonight",
     "scheme": "ticketstonight",
     "version": "0.1.0",
+    "description": "A mobile-first gallery walk discovery preview for verified exhibitions, personalized routes, and active walk planning.",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "icon": "./assets/gallery/gallery-painting.png",
+    "backgroundColor": "#F4F2ED",
+    "primaryColor": "#111111",
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -21,7 +25,12 @@
       }
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "name": "TicketsTonight Gallery Walk",
+      "shortName": "Gallery Walk",
+      "themeColor": "#111111",
+      "backgroundColor": "#F4F2ED",
+      "favicon": "./assets/gallery/gallery-painting.png"
     }
   }
 }

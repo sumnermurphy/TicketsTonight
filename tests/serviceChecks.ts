@@ -76,6 +76,13 @@ import {
   writeGalleryAppPersistedState,
   type GalleryStorageAdapter
 } from "../src/services/galleryAppPersistence";
+import {
+  completeGalleryBetaTask,
+  createGalleryBetaFeedback,
+  createGalleryBetaFeedbackReport,
+  createGalleryPreviewReadinessSummary,
+  getGalleryBetaTasks
+} from "../src/services/galleryBetaReadiness";
 import { getGalleryHeroVisual, getGalleryVisual } from "../src/services/galleryVisuals";
 import {
   advanceGalleryWalk,
@@ -840,6 +847,37 @@ async function main() {
     galleryQuizArtworks,
     galleryReferenceNow
   );
+  const betaTaskProgress = getGalleryBetaTasks(
+    completeGalleryBetaTask(
+      completeGalleryBetaTask([], "find-walk"),
+      "swap-stop"
+    )
+  );
+  const betaFeedbackEntry = createGalleryBetaFeedback(
+    {
+      kind: "useful",
+      note: "Route swap made the Chelsea walk feel practical.",
+      areaId: "nyc",
+      routeMode: "two-hour",
+      neighborhood: "Chelsea",
+      activeWalkStatus: "active",
+      verifiedCount: nycTrust.verifiedExhibitionCount,
+      demoReviewCount: nycTrust.fixtureExhibitionCount + nycTrust.needsReviewExhibitionCount
+    },
+    galleryReferenceNow
+  );
+  const betaFeedbackReport = createGalleryBetaFeedbackReport([betaFeedbackEntry]);
+  const previewReadiness = createGalleryPreviewReadinessSummary({
+    nycVerifiedCount: nycTrust.verifiedExhibitionCount,
+    hudsonVerifiedCount: hudsonTrust.verifiedExhibitionCount,
+    hasDesktopScreenshot: true,
+    hasMobileScreenshot: true,
+    validationCommands: [
+      "npm run typecheck",
+      "npm run test:services",
+      "npm run audit:galleries"
+    ]
+  });
   const persistedSavedWalk = createSavedGalleryWalk(
     chelseaTwoHourWalk,
     completedWalkSession,
@@ -879,7 +917,10 @@ async function main() {
     },
     savedWalks: [persistedSavedWalk],
     firstRunChoice: "find-walk" as const,
-    firstRunCompleted: true
+    firstRunCompleted: true,
+    betaCompletedTaskIds: betaTaskProgress.completedTaskIds,
+    betaFeedback: [betaFeedbackEntry],
+    betaChecklistDismissed: true
   };
   const serializedGalleryState = serializeGalleryAppPersistedState(persistedState);
 
@@ -900,8 +941,30 @@ async function main() {
       persistedRoundTrip.tastePreferences?.preferredNeighborhoods.includes("Chelsea") &&
       persistedRoundTrip.savedWalks[0]?.itineraryText.includes("Full route") &&
       persistedRoundTrip.firstRunChoice === "find-walk" &&
-      persistedRoundTrip.firstRunCompleted === true,
-    "Gallery app persistence should round-trip completed walk, filters, alerts, art log, taste passport, feedback, preferences, saved walks, and first-run state."
+      persistedRoundTrip.firstRunCompleted === true &&
+      persistedRoundTrip.betaCompletedTaskIds.includes("swap-stop") &&
+      persistedRoundTrip.betaFeedback[0]?.kind === "useful" &&
+      persistedRoundTrip.betaChecklistDismissed === true,
+    "Gallery app persistence should round-trip completed walk, filters, alerts, art log, taste passport, feedback, preferences, saved walks, first-run state, and beta state."
+  );
+  assert(
+    betaTaskProgress.completedCount === 2 &&
+      betaTaskProgress.totalCount >= 6 &&
+      betaTaskProgress.nextTask?.id === "taste-quiz",
+    "Gallery beta task progress should persist completed tasks and expose the next incomplete tester task."
+  );
+  assert(
+    betaFeedbackEntry.id.includes("gallery-beta-feedback") &&
+      betaFeedbackEntry.note.includes("Chelsea") &&
+      betaFeedbackReport.includes("Route swap") &&
+      betaFeedbackReport.includes(`${nycTrust.verifiedExhibitionCount} verified`),
+    "Gallery beta feedback should serialize route, note, and trust context into a copyable report."
+  );
+  assert(
+    previewReadiness.ready &&
+      previewReadiness.score === 100 &&
+      previewReadiness.checks.some((check) => check.includes("NYC verified")),
+    "Gallery preview readiness should pass only when inventory thresholds, screenshots, and validation commands are present."
   );
 
   const quizTasteAnswers: GalleryQuizAnswer[] = [
