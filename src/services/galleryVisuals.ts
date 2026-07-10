@@ -29,7 +29,23 @@ export const galleryVisualKeys = [
   "camogli-performance",
   "camogli-design",
   "camogli-photo",
-  "camogli-quiet"
+  "camogli-quiet",
+  "camogli-harbor-editorial",
+  "camogli-maritime-museum",
+  "camogli-stone-lanes",
+  "camogli-theatre-evening",
+  "camogli-hill-sea-view",
+  "camogli-civic-library",
+  "camogli-waterfront-heritage",
+  "camogli-quiet-interior",
+  "walker-gallery-interior",
+  "walker-opening-night",
+  "walker-sculpture-room",
+  "walker-photo-video",
+  "walker-quiet-painting",
+  "walker-street-approach",
+  "walker-design-detail",
+  "walker-waterfront-cultural"
 ] as const;
 
 export type GalleryVisualKey = (typeof galleryVisualKeys)[number];
@@ -42,15 +58,44 @@ export type GalleryVisual = {
 };
 
 const marketVisuals: Record<GalleryAreaId, GalleryVisualKey[]> = {
-  nyc: ["nyc-painting", "nyc-photo", "nyc-sculpture", "nyc-installation", "nyc-opening", "nyc-quiet"],
-  la: ["la-painting", "la-photo", "la-sculpture", "la-installation", "la-design", "la-opening"],
+  nyc: [
+    "nyc-painting",
+    "nyc-photo",
+    "nyc-sculpture",
+    "nyc-installation",
+    "nyc-opening",
+    "nyc-quiet",
+    "walker-gallery-interior",
+    "walker-opening-night",
+    "walker-sculpture-room",
+    "walker-photo-video",
+    "walker-quiet-painting",
+    "walker-street-approach",
+    "walker-design-detail"
+  ],
+  la: [
+    "la-painting",
+    "la-photo",
+    "la-sculpture",
+    "la-installation",
+    "la-design",
+    "la-opening",
+    "walker-gallery-interior",
+    "walker-opening-night",
+    "walker-sculpture-room",
+    "walker-photo-video",
+    "walker-design-detail"
+  ],
   hudson: [
     "hudson-painting",
     "hudson-sculpture",
     "hudson-historic",
     "hudson-quiet",
     "hudson-opening",
-    "hudson-mixed"
+    "hudson-mixed",
+    "walker-street-approach",
+    "walker-quiet-painting",
+    "walker-waterfront-cultural"
   ],
   camogli: [
     "camogli-coastal",
@@ -58,65 +103,79 @@ const marketVisuals: Record<GalleryAreaId, GalleryVisualKey[]> = {
     "camogli-performance",
     "camogli-design",
     "camogli-photo",
-    "camogli-quiet"
+    "camogli-quiet",
+    "camogli-harbor-editorial",
+    "camogli-maritime-museum",
+    "camogli-stone-lanes",
+    "camogli-theatre-evening",
+    "camogli-hill-sea-view",
+    "camogli-civic-library",
+    "camogli-waterfront-heritage",
+    "camogli-quiet-interior"
   ]
 };
 
 const mediumVisuals: Partial<Record<GalleryMedium, Record<GalleryAreaId, GalleryVisualKey>>> = {
   painting: {
-    nyc: "nyc-painting",
-    la: "la-painting",
+    nyc: "walker-quiet-painting",
+    la: "walker-quiet-painting",
     hudson: "hudson-painting",
     camogli: "camogli-design"
   },
   prints: {
-    nyc: "nyc-painting",
+    nyc: "walker-quiet-painting",
     la: "la-painting",
     hudson: "hudson-painting",
     camogli: "camogli-photo"
   },
   sculpture: {
-    nyc: "nyc-sculpture",
-    la: "la-sculpture",
+    nyc: "walker-sculpture-room",
+    la: "walker-sculpture-room",
     hudson: "hudson-sculpture",
     camogli: "camogli-historic"
   },
   installation: {
-    nyc: "nyc-installation",
+    nyc: "walker-gallery-interior",
     la: "la-installation",
     hudson: "hudson-mixed",
     camogli: "camogli-historic"
   },
   photography: {
-    nyc: "nyc-photo",
-    la: "la-photo",
+    nyc: "walker-photo-video",
+    la: "walker-photo-video",
     hudson: "hudson-quiet",
     camogli: "camogli-photo"
   },
   video: {
-    nyc: "nyc-photo",
-    la: "la-photo",
+    nyc: "walker-photo-video",
+    la: "walker-photo-video",
     hudson: "hudson-mixed",
     camogli: "camogli-photo"
   },
   performance: {
-    nyc: "nyc-opening",
-    la: "la-opening",
+    nyc: "walker-opening-night",
+    la: "walker-opening-night",
     hudson: "hudson-opening",
-    camogli: "camogli-performance"
+    camogli: "camogli-theatre-evening"
   },
   design: {
-    nyc: "nyc-sculpture",
-    la: "la-design",
+    nyc: "walker-design-detail",
+    la: "walker-design-detail",
     hudson: "hudson-historic",
-    camogli: "camogli-design"
+    camogli: "camogli-maritime-museum"
   },
   "mixed-media": {
-    nyc: "nyc-installation",
+    nyc: "walker-gallery-interior",
     la: "la-installation",
     hudson: "hudson-mixed",
-    camogli: "camogli-coastal"
+    camogli: "camogli-harbor-editorial"
   }
+};
+
+const camogliVenueVisuals: Record<string, GalleryVisualKey> = {
+  museum: "camogli-maritime-museum",
+  "cultural-venue": "camogli-theatre-evening",
+  "heritage-site": "camogli-waterfront-heritage"
 };
 
 const visualTones: Record<GalleryVisualKey, GalleryVisual["tone"]> = {
@@ -147,7 +206,23 @@ const visualTones: Record<GalleryVisualKey, GalleryVisual["tone"]> = {
   "camogli-performance": "editorial",
   "camogli-design": "warm",
   "camogli-photo": "cool",
-  "camogli-quiet": "quiet"
+  "camogli-quiet": "quiet",
+  "camogli-harbor-editorial": "coastal",
+  "camogli-maritime-museum": "historic",
+  "camogli-stone-lanes": "historic",
+  "camogli-theatre-evening": "editorial",
+  "camogli-hill-sea-view": "coastal",
+  "camogli-civic-library": "quiet",
+  "camogli-waterfront-heritage": "coastal",
+  "camogli-quiet-interior": "quiet",
+  "walker-gallery-interior": "editorial",
+  "walker-opening-night": "editorial",
+  "walker-sculpture-room": "quiet",
+  "walker-photo-video": "cool",
+  "walker-quiet-painting": "quiet",
+  "walker-street-approach": "historic",
+  "walker-design-detail": "warm",
+  "walker-waterfront-cultural": "coastal"
 };
 
 function hashText(value: string): number {
@@ -182,7 +257,8 @@ export function getGalleryVisual(
     | "verifiedAsOf"
     | "sourceCheckedAt"
     | "externalUrl"
-  >
+  > &
+    Partial<Pick<GalleryExhibition, "galleryKind" | "neighborhood" | "whyGoSignals">>
 ): GalleryVisual {
   const preferredMedium = exhibition.mediums.find((medium) => mediumVisuals[medium]);
   const mediumAsset =
@@ -190,9 +266,17 @@ export function getGalleryVisual(
       ? mediumVisuals[preferredMedium]?.[exhibition.areaId]
       : undefined;
   const trust = getGalleryInventoryTrust(exhibition as GalleryExhibition);
+  const camogliRouteAsset =
+    exhibition.areaId === "camogli" && exhibition.whyGoSignals?.includes("hill-walk")
+      ? "camogli-hill-sea-view"
+      : exhibition.areaId === "camogli" && exhibition.neighborhood === "Camogli Centro" && exhibition.galleryKind === "museum"
+        ? "camogli-maritime-museum"
+        : exhibition.areaId === "camogli" && exhibition.galleryKind
+          ? camogliVenueVisuals[exhibition.galleryKind]
+          : undefined;
   const assetKey =
     exhibition.areaId === "camogli"
-      ? mediumAsset ?? getStableFallbackVisual(exhibition)
+      ? camogliRouteAsset ?? mediumAsset ?? getStableFallbackVisual(exhibition)
       : trust.isFixture
         ? getStableFallbackVisual(exhibition)
         : mediumAsset ?? getStableFallbackVisual(exhibition);
@@ -208,12 +292,12 @@ export function getGalleryVisual(
 export function getGalleryHeroVisual(areaId: GalleryAreaId): GalleryVisual {
   const assetKey: GalleryVisualKey =
     areaId === "camogli"
-      ? "camogli-coastal"
+      ? "camogli-harbor-editorial"
       : areaId === "hudson"
         ? "hudson-historic"
         : areaId === "la"
-          ? "la-opening"
-          : "nyc-opening";
+          ? "walker-opening-night"
+          : "walker-gallery-interior";
 
   return {
     assetKey,

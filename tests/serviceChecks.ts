@@ -93,6 +93,10 @@ import {
   getGalleryVisual
 } from "../src/services/galleryVisuals";
 import {
+  createCamogliFieldGuide,
+  getCamogliRouteMode
+} from "../src/services/galleryCamogliFieldMode";
+import {
   advanceGalleryWalk,
   completeGalleryWalk,
   createGalleryWalkSession,
@@ -610,13 +614,24 @@ async function main() {
     "Gallery visual helper should return stable, meaningful editorial assets for fixture and verified records."
   );
   assert(
-    getGalleryHeroVisual("nyc").assetKey === "nyc-opening" &&
+    getGalleryHeroVisual("nyc").assetKey === "walker-gallery-interior" &&
       getGalleryHeroVisual("hudson").assetKey === "hudson-historic" &&
-      getGalleryHeroVisual("camogli").assetKey === "camogli-coastal" &&
+      getGalleryHeroVisual("camogli").assetKey === "camogli-harbor-editorial" &&
+      galleryVisualKeys.includes("walker-gallery-interior") &&
+      galleryVisualKeys.includes("camogli-maritime-museum") &&
       galleryVisualKeys.includes(sampleVerifiedVisual.assetKey) &&
       uniqueVisualKeysForInventory.size >= 12 &&
-      camogliMuseumVisual?.assetKey === "camogli-design",
+      camogliMuseumVisual?.assetKey === "camogli-maritime-museum",
     "Gallery visual helper should expose stable, more varied editorial image keys for cards and market heroes."
+  );
+  const uniqueCamogliVisualKeys = new Set(
+    camogliVerifiedInventory.map((exhibition) => getGalleryVisual(exhibition).assetKey)
+  );
+  assert(
+    uniqueCamogliVisualKeys.size >= 3 &&
+      uniqueCamogliVisualKeys.has("camogli-maritime-museum") &&
+      uniqueCamogliVisualKeys.has("camogli-theatre-evening"),
+    "Camogli verified cultural anchors should receive distinct stable editorial imagery."
   );
   assert(
     verifiedInventory.every(
@@ -817,6 +832,22 @@ async function main() {
       ["thin", "needs-review"].includes(camogliRouteReport.confidence) &&
       camogliRouteReport.summary.includes("verified"),
     "Camogli route usability should honestly flag limited verified cultural-walk supply."
+  );
+  const camogliFieldGuide = createCamogliFieldGuide({
+    areaId: "camogli",
+    walkPlan: camogliWalk,
+    exhibitions: camogliVerifiedInventory,
+    referenceNow: "2026-07-10T17:30:00+02:00"
+  });
+  assert(
+    camogliFieldGuide?.badge === "Travel test" &&
+      camogliFieldGuide.localTimeLabel.length > 0 &&
+      camogliFieldGuide.verifyBeforeYouGoCopy.includes("Verify hours") &&
+      camogliFieldGuide.officialLinkCopy.includes("official") &&
+      camogliFieldGuide.stopLabels.some((label) => label.primary.includes("Cultural") || label.primary.includes("anchor")) &&
+      getCamogliRouteMode("Porto / Waterfront") === "waterfront" &&
+      getCamogliRouteMode("San Rocco / Ruta") === "hill-walk",
+    "Camogli field mode should expose travel-test copy, local time, official-link guidance, and route mode mapping."
   );
   const personalizationLearningSummary = getPersonalizationLearningSummary({
     logEntries: [

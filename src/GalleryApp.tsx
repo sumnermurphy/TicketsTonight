@@ -150,6 +150,11 @@ import {
   getGalleryFreshnessState
 } from "./services/galleryFreshness";
 import {
+  createCamogliFieldGuide,
+  type CamogliFieldGuide,
+  type CamogliRouteMode
+} from "./services/galleryCamogliFieldMode";
+import {
   createGalleryRouteMapModel,
   type GalleryRouteMapModel
 } from "./services/galleryRouteMap";
@@ -215,7 +220,23 @@ const galleryVisualSources: Record<GalleryVisualKey, ImageSourcePropType> = {
   "camogli-performance": require("../assets/gallery/editorial/camogli-performance.png"),
   "camogli-design": require("../assets/gallery/editorial/camogli-design.png"),
   "camogli-photo": require("../assets/gallery/editorial/camogli-photo.png"),
-  "camogli-quiet": require("../assets/gallery/editorial/camogli-quiet.png")
+  "camogli-quiet": require("../assets/gallery/editorial/camogli-quiet.png"),
+  "camogli-harbor-editorial": require("../assets/gallery/editorial/camogli-harbor-editorial.png"),
+  "camogli-maritime-museum": require("../assets/gallery/editorial/camogli-maritime-museum.png"),
+  "camogli-stone-lanes": require("../assets/gallery/editorial/camogli-stone-lanes.png"),
+  "camogli-theatre-evening": require("../assets/gallery/editorial/camogli-theatre-evening.png"),
+  "camogli-hill-sea-view": require("../assets/gallery/editorial/camogli-hill-sea-view.png"),
+  "camogli-civic-library": require("../assets/gallery/editorial/camogli-civic-library.png"),
+  "camogli-waterfront-heritage": require("../assets/gallery/editorial/camogli-waterfront-heritage.png"),
+  "camogli-quiet-interior": require("../assets/gallery/editorial/camogli-quiet-interior.png"),
+  "walker-gallery-interior": require("../assets/gallery/editorial/walker-gallery-interior.png"),
+  "walker-opening-night": require("../assets/gallery/editorial/walker-opening-night.png"),
+  "walker-sculpture-room": require("../assets/gallery/editorial/walker-sculpture-room.png"),
+  "walker-photo-video": require("../assets/gallery/editorial/walker-photo-video.png"),
+  "walker-quiet-painting": require("../assets/gallery/editorial/walker-quiet-painting.png"),
+  "walker-street-approach": require("../assets/gallery/editorial/walker-street-approach.png"),
+  "walker-design-detail": require("../assets/gallery/editorial/walker-design-detail.png"),
+  "walker-waterfront-cultural": require("../assets/gallery/editorial/walker-waterfront-cultural.png")
 };
 
 const lensLabels: Record<GalleryLens, string> = {
@@ -705,6 +726,7 @@ function ProfessionalMobileHome({
   openNowCount,
   closingSoonCount,
   activeWalk,
+  camogliFieldGuide,
   onFindWalk,
   onStartWalk,
   onOpenRoute,
@@ -728,6 +750,7 @@ function ProfessionalMobileHome({
   openNowCount: number;
   closingSoonCount: number;
   activeWalk: boolean;
+  camogliFieldGuide?: CamogliFieldGuide;
   onFindWalk: () => void;
   onStartWalk: () => void;
   onOpenRoute: () => void;
@@ -858,6 +881,10 @@ function ProfessionalMobileHome({
         <Text style={styles.mobileTrustItem}>{freshnessLabel}</Text>
       </View>
 
+      {camogliFieldGuide ? (
+        <CamogliFieldModeCard guide={camogliFieldGuide} compact />
+      ) : null}
+
       {featuredExhibition ? (
         <Pressable
           accessibilityRole="button"
@@ -929,6 +956,83 @@ function ProfessionalMobileHome({
           </Pressable>
         ))}
       </ScrollView>
+    </View>
+  );
+}
+
+function CamogliFieldModeCard({
+  guide,
+  compact = false,
+  onMode
+}: {
+  guide: CamogliFieldGuide;
+  compact?: boolean;
+  onMode?: (mode: CamogliRouteMode) => void;
+}) {
+  const modes: Array<{ mode: CamogliRouteMode; label: string }> = [
+    { mode: "best-easy-walk", label: "Easy" },
+    { mode: "centro", label: "Centro" },
+    { mode: "waterfront", label: "Waterfront" },
+    { mode: "hill-walk", label: "Hill" }
+  ];
+
+  return (
+    <View style={[styles.camogliFieldCard, compact ? styles.compactCamogliFieldCard : null]}>
+      <View style={styles.camogliFieldHeader}>
+        <View>
+          <Text style={styles.camogliFieldBadge}>{guide.badge}</Text>
+          <Text style={styles.camogliFieldTitle}>{guide.title}</Text>
+        </View>
+        <Text style={styles.camogliFieldTime}>{guide.localTimeLabel}</Text>
+      </View>
+      <Text style={styles.camogliFieldCopy}>{guide.verifyBeforeYouGoCopy}</Text>
+      <View style={styles.camogliFieldStats}>
+        <View style={styles.camogliFieldStat}>
+          <Text style={styles.camogliFieldStatLabel}>{guide.routeModeLabel}</Text>
+          <Text style={styles.camogliFieldStatValue}>{guide.routeEffortLabel}</Text>
+        </View>
+        <View style={styles.camogliFieldStat}>
+          <Text style={styles.camogliFieldStatLabel}>Official links</Text>
+          <Text style={styles.camogliFieldStatValue}>{guide.officialLinkCopy}</Text>
+        </View>
+      </View>
+      <Text style={styles.camogliFieldCopy}>{guide.routeEffortDetail}</Text>
+      {onMode ? (
+        <View style={styles.camogliFieldModeRow}>
+          {modes.map((item) => (
+            <Pressable
+              key={item.mode}
+              accessibilityRole="button"
+              accessibilityLabel={`Use ${item.label} Camogli mode`}
+              onPress={() => onMode(item.mode)}
+              style={[
+                styles.camogliFieldModeChip,
+                guide.routeMode === item.mode ? styles.selectedCamogliFieldModeChip : null
+              ]}
+            >
+              <Text
+                style={[
+                  styles.camogliFieldModeText,
+                  guide.routeMode === item.mode ? styles.selectedCamogliFieldModeText : null
+                ]}
+              >
+                {item.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+      {!compact ? (
+        <View style={styles.camogliStopList}>
+          {guide.stopLabels.slice(0, 3).map((label) => (
+            <View key={label.exhibitionId} style={styles.camogliStopLabel}>
+              <Text style={styles.camogliStopPrimary}>{label.primary}</Text>
+              <Text style={styles.camogliStopSecondary}>{label.secondary}</Text>
+              {label.warning ? <Text style={styles.camogliStopWarning}>{label.warning}</Text> : null}
+            </View>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -3713,6 +3817,16 @@ export function GalleryApp() {
       ),
     [displayRouteMapModel]
   );
+  const camogliFieldGuide = useMemo(
+    () =>
+      createCamogliFieldGuide({
+        areaId: selectedAreaId,
+        walkPlan: displayWalkPlan,
+        exhibitions: areaInventory,
+        referenceNow
+      }),
+    [areaInventory, displayWalkPlan, selectedAreaId]
+  );
   useEffect(() => {
     if (
       highlightedRouteStopId &&
@@ -4127,6 +4241,24 @@ export function GalleryApp() {
     if (areaId === "hudson") {
       completeBetaTask("check-hudson");
     }
+  }
+
+  function chooseCamogliFieldMode(mode: CamogliRouteMode) {
+    setSelectedAreaId("camogli");
+    setActiveLens("all");
+    setVerifiedOnly(false);
+    setSelectedMedium(undefined);
+    setHighlightedRouteStopId(undefined);
+    setSelectedExhibitionId(undefined);
+    if (mode === "waterfront") {
+      setSelectedNeighborhood("Porto / Waterfront");
+    } else if (mode === "hill-walk") {
+      setSelectedNeighborhood("San Rocco / Ruta");
+    } else {
+      setSelectedNeighborhood("Camogli Centro");
+    }
+    setMobileTab("walks");
+    setShareStatus("Camogli field mode uses sparse cultural anchors. Check official links before walking.");
   }
 
   function chooseCamogliTestFirstRun() {
@@ -4874,6 +5006,10 @@ export function GalleryApp() {
 
   const mobileWalkContent = (
     <View style={styles.mobileTabShell}>
+      {camogliFieldGuide ? (
+        <CamogliFieldModeCard guide={camogliFieldGuide} onMode={chooseCamogliFieldMode} />
+      ) : null}
+
       <RouteCommandPanel
         walkPlan={walkPlan}
         walkMode={walkMode}
@@ -5019,6 +5155,7 @@ export function GalleryApp() {
                 openNowCount={openNowCount}
                 closingSoonCount={closingSoonCount}
                 activeWalk={activeWalkSession?.status === "active"}
+                camogliFieldGuide={camogliFieldGuide}
                 onFindWalk={() => {
                   chooseFindWalkFirstRun();
                   setMobileTab("walks");
@@ -5079,6 +5216,7 @@ export function GalleryApp() {
               openNowCount={openNowCount}
               closingSoonCount={closingSoonCount}
               activeWalk={activeWalkSession?.status === "active"}
+              camogliFieldGuide={camogliFieldGuide}
               onFindWalk={chooseFindWalkFirstRun}
               onStartWalk={startWalk}
               onOpenRoute={() => {
@@ -6058,6 +6196,135 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     textAlign: "center"
+  },
+  camogliFieldCard: {
+    backgroundColor: colors.paper,
+    borderColor: "rgba(200, 161, 90, 0.36)",
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.md,
+    ...shadows.card
+  },
+  compactCamogliFieldCard: {
+    gap: spacing.sm,
+    padding: spacing.sm
+  },
+  camogliFieldHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: spacing.md,
+    justifyContent: "space-between"
+  },
+  camogliFieldBadge: {
+    color: colors.gold,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    lineHeight: 14,
+    textTransform: "uppercase"
+  },
+  camogliFieldTitle: {
+    color: colors.teal,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 21,
+    fontWeight: "700",
+    lineHeight: 26
+  },
+  camogliFieldTime: {
+    backgroundColor: colors.fog,
+    borderRadius: radii.pill,
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  camogliFieldCopy: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 18
+  },
+  camogliFieldStats: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm
+  },
+  camogliFieldStat: {
+    backgroundColor: colors.fog,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexGrow: 1,
+    gap: 2,
+    minWidth: 130,
+    padding: spacing.sm
+  },
+  camogliFieldStatLabel: {
+    color: colors.gold,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    textTransform: "uppercase"
+  },
+  camogliFieldStatValue: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "900",
+    lineHeight: 17
+  },
+  camogliFieldModeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  camogliFieldModeChip: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  selectedCamogliFieldModeChip: {
+    backgroundColor: colors.teal,
+    borderColor: colors.teal
+  },
+  camogliFieldModeText: {
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  selectedCamogliFieldModeText: {
+    color: colors.paper
+  },
+  camogliStopList: {
+    gap: spacing.sm
+  },
+  camogliStopLabel: {
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    gap: 2,
+    paddingTop: spacing.sm
+  },
+  camogliStopPrimary: {
+    color: colors.teal,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  camogliStopSecondary: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17
+  },
+  camogliStopWarning: {
+    color: colors.coral,
+    fontSize: 11,
+    fontWeight: "900",
+    lineHeight: 16
   },
   mobileFeaturedShow: {
     alignItems: "center",
