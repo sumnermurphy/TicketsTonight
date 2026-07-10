@@ -30,16 +30,17 @@
 - Pin taps focus a stop in the planner. Focused stops and stop rows expose ranked swap candidates with reasons such as closer, open now, verified source, better taste match, and avoids repeat gallery.
 - Draft route swaps do not overwrite an active walk. Active-walk swaps update ordered stops while preserving visited/skipped progress when possible.
 - The explicit map buttons remain the external navigation handoff.
-- External Google Maps links remain the navigation handoff for the full route and each stop.
+- Full-route Google Maps links can now include the selected start point: first route stop, market center, neighborhood anchor, custom address, or browser coordinates when available.
+- Browser location is optional and falls back to the first route stop if coordinates are unavailable or permission is not granted.
 - This branch does not add a map SDK, live geolocation, backend routing, auth, checkout, Spotify, concerts/ticketing, native packaging, or the ops console.
 
 ## Beta Preview + Mobile Web
 - The first-run and beta preview surfaces now behave like a guided beta path instead of a feature wall: users can find a walk, take the taste quiz, resume an active walk, try NYC/Hudson/For You paths, or step through seven focused beta tasks.
 - Beta tasks are local-only and persist with the rest of gallery app state: find a walk, take quiz, start route, swap stop, mark visited, check Hudson, and send feedback.
-- The beta feedback panel stores notes locally and can generate a Walker review report with route mode, market, active-walk state, verified/demo counts, route warnings, and tester notes, without introducing analytics, auth, or backend sync.
+- The beta feedback panel stores notes locally and can generate a Walker review report with route mode, market, selected start point, current/next stop, active-walk state, verified/demo counts, route warnings, quick field tags, and tester notes, without introducing analytics, auth, or backend sync.
 - Mobile web now has a fixed bottom command surface for the highest-frequency actions. It is a PWA-readiness step, not native packaging.
 - `app.json` and `public/manifest.json` now use Walker web name, short name, display mode, theme/background colors, and square icon metadata so the project is closer to an installable mobile-web shell later.
-- Checked-in gallery images and inventory continue to support an offline-friendly preview stance without adding a service worker.
+- Checked-in gallery images and inventory continue to support an offline-friendly preview stance. Static web export now registers a lightweight Walker service worker for the app shell/local assets after first load.
 
 ## Known Limitations
 - Route confidence does not use live location, transit disruptions, weather, or real-time gallery capacity.
@@ -47,7 +48,7 @@
 - The map preview is intentionally schematic; Google Maps remains the source of truth for turn-by-turn walking.
 - Route editing is a practical swap flow, not drag-and-drop route editing or full optimization.
 - Beta feedback is stored only in local browser state; there is no team inbox or remote issue pipeline yet.
-- PWA readiness is metadata, square icons, checked-in image/data assumptions, and mobile shell polish only; no service worker, offline cache, push notifications, or install prompt has been added.
+- PWA readiness is metadata, square icons, checked-in image/data assumptions, mobile shell polish, and a lightweight exported-web service worker. Official links, Google Maps, live hours verification, push notifications, and install prompts are still outside this branch.
 - Static export is available with `npm run export:web`; preview deployment should use the checked-in source state and generated web export.
 
 ## Validation Checklist

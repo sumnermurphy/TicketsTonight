@@ -47,13 +47,16 @@ export type GalleryBetaFeedback = {
   activeWalkStatus?: GalleryWalkSession["status"];
   currentStopLabel?: string;
   nextStopLabel?: string;
+  startPointLabel?: string;
+  fieldTags: string[];
   verifiedCount: number;
   demoReviewCount: number;
   createdAt: string;
 };
 
-export type GalleryBetaFeedbackInput = Omit<GalleryBetaFeedback, "id" | "createdAt"> & {
+export type GalleryBetaFeedbackInput = Omit<GalleryBetaFeedback, "id" | "createdAt" | "fieldTags"> & {
   createdAt?: string;
+  fieldTags?: string[];
 };
 
 export type GalleryPreviewReadinessSummary = {
@@ -114,6 +117,9 @@ export type GalleryBetaReviewReportInput = {
   activeWalkStatus?: GalleryWalkSession["status"];
   currentStopLabel?: string;
   nextStopLabel?: string;
+  startPointLabel?: string;
+  fieldTags?: string[];
+  routeWarningLabels?: string[];
   verifiedCount: number;
   demoReviewCount: number;
   previewUrl?: string;
@@ -226,6 +232,7 @@ export function createGalleryBetaFeedback(
     ...input,
     id: `gallery-beta-feedback-${now}-${input.kind}`,
     note: input.note.trim(),
+    fieldTags: Array.from(new Set(input.fieldTags ?? [])),
     createdAt: now
   };
 }
@@ -243,7 +250,10 @@ export function createGalleryBetaFeedbackReport(feedback: GalleryBetaFeedback[])
         `${index + 1}. ${entry.kind.toUpperCase()} - ${entry.areaId} - ${entry.routeMode}`,
         `   Neighborhood: ${entry.neighborhood ?? "All"}`,
         `   Active walk: ${entry.activeWalkStatus ?? "none"}`,
+        `   Start point: ${entry.startPointLabel ?? "default route start"}`,
+        `   Current/next: ${entry.currentStopLabel ?? "none"} -> ${entry.nextStopLabel ?? "none"}`,
         `   Trust: ${entry.verifiedCount} verified, ${entry.demoReviewCount} demo/review`,
+        `   Field tags: ${(entry.fieldTags ?? []).length > 0 ? (entry.fieldTags ?? []).join(", ") : "none"}`,
         `   Note: ${entry.note || "No note"}`,
         `   At: ${entry.createdAt}`
       ].join("\n")
@@ -396,6 +406,15 @@ export function createGalleryRouteUsabilityReport(
 export function createGalleryBetaReviewReport(input: GalleryBetaReviewReportInput): string {
   const generatedAt = input.generatedAt ?? new Date().toISOString();
   const routeModeLabel = galleryWalkModeLabels[input.routeMode];
+  const routeWarningLabels =
+    input.routeWarningLabels ??
+    input.routeReport.warnings.map((warning) => warning.label);
+  const fieldTags = Array.from(
+    new Set([
+      ...(input.fieldTags ?? []),
+      ...input.feedback.flatMap((entry) => entry.fieldTags ?? [])
+    ])
+  );
   const feedbackLines =
     input.feedback.length === 0
       ? ["No tester notes captured yet."]
@@ -412,6 +431,7 @@ export function createGalleryBetaReviewReport(input: GalleryBetaReviewReportInpu
     `Market: ${input.areaId.toUpperCase()}${input.neighborhood ? ` - ${input.neighborhood}` : ""}`,
     `Route mode: ${routeModeLabel}`,
     `Active walk: ${input.activeWalkStatus ?? "none"}`,
+    `Start point: ${input.startPointLabel ?? "default route start"}`,
     `Current stop: ${input.currentStopLabel ?? "none"}`,
     `Next stop: ${input.nextStopLabel ?? "none"}`,
     `Trust: ${input.verifiedCount} verified, ${input.demoReviewCount} demo/review`,
@@ -419,9 +439,10 @@ export function createGalleryBetaReviewReport(input: GalleryBetaReviewReportInpu
     "Route usability",
     `${input.routeReport.label}: ${input.routeReport.summary}`,
     `Best start: ${input.routeReport.bestStartReason}`,
-    input.routeReport.warnings.length > 0
-      ? `Warnings: ${input.routeReport.warnings.map((warning) => warning.label).join(", ")}`
+    routeWarningLabels.length > 0
+      ? `Warnings: ${routeWarningLabels.join(", ")}`
       : "Warnings: none",
+    `Field tags: ${fieldTags.length > 0 ? fieldTags.join(", ") : "none"}`,
     "",
     "Tester notes",
     ...feedbackLines

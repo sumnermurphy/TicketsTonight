@@ -106,6 +106,7 @@ import {
 import {
   createWalkerFieldTestGuide,
   createWalkerOfflineReadinessSummary,
+  createWalkerRouteMapHandoff,
   createWalkerWalkReadinessReport,
   getWalkerStartPointOptions
 } from "../src/services/walkerFieldReadiness";
@@ -948,6 +949,33 @@ async function main() {
     startPointPreference: { mode: "custom-address", address: "Piazza Colombo, Camogli" },
     referenceNow: "2026-07-10T17:30:00+02:00"
   });
+  const camogliHillWalk = createGalleryWalkPlan({
+    areaId: "camogli",
+    mode: "quick-loop",
+    neighborhood: "San Rocco / Ruta",
+    referenceNow: "2026-07-10T17:30:00+02:00"
+  });
+  const camogliHillReadiness = createWalkerWalkReadinessReport({
+    area: camogliArea,
+    walkPlan: camogliHillWalk,
+    routeUsabilityReport: createGalleryRouteUsabilityReport({
+      walkPlan: camogliHillWalk,
+      referenceNow: "2026-07-10T17:30:00+02:00"
+    }),
+    referenceNow: "2026-07-10T17:30:00+02:00"
+  });
+  const camogliCustomMap = createWalkerRouteMapHandoff({
+    area: camogliArea,
+    neighborhoods: galleryNeighborhoods,
+    walkPlan: camogliWalk,
+    preference: { mode: "custom-address", address: "Piazza Colombo, Camogli" }
+  });
+  const camogliBrowserFallbackMap = createWalkerRouteMapHandoff({
+    area: camogliArea,
+    neighborhoods: galleryNeighborhoods,
+    walkPlan: camogliWalk,
+    preference: { mode: "browser-location" }
+  });
   const camogliShortcutGuide = createWalkerFieldTestGuide({ areaId: "camogli" });
   assert(
     camogliStartOptions.some(
@@ -958,9 +986,13 @@ async function main() {
     ) &&
       camogliWalkerReadiness.localTimeLabel.length > 0 &&
       camogliWalkerReadiness.startPointLabel === "Piazza Colombo, Camogli" &&
-      camogliWalkerReadiness.warnings.includes("Camogli is a cultural-walk test market") &&
+      camogliWalkerReadiness.warnings.includes("Camogli is a cultural-walk test, not a dense gallery market") &&
+      camogliHillReadiness.warnings.includes("Hill-view route: use daylight and check effort") &&
+      camogliCustomMap.routeMapUrl?.includes("origin=Piazza+Colombo%2C+Camogli") &&
+      camogliCustomMap.routeMapUrl.includes("waypoints=") &&
+      camogliBrowserFallbackMap.routeMapUrl?.includes("origin=Museo+Marinaro") &&
       camogliShortcutGuide?.shortcuts.some((shortcut) => shortcut.id === "camogli-hill" && shortcut.warning),
-    "Walker field readiness should support manual start points, local market time, Camogli thin-market warnings, and field-test shortcuts."
+    "Walker field readiness should support manual start points, start-aware map URLs, browser-location fallback, local market time, Camogli warnings, and field-test shortcuts."
   );
   const personalizationLearningSummary = getPersonalizationLearningSummary({
     logEntries: [
@@ -980,6 +1012,10 @@ async function main() {
           note: "Route was easy to follow.",
           areaId: "nyc",
           routeMode: "quick-loop",
+          currentStopLabel: chelseaTwoHourWalk.stops[0]?.exhibition.galleryName,
+          nextStopLabel: chelseaTwoHourWalk.stops[1]?.exhibition.galleryName,
+          startPointLabel: "Chelsea anchor",
+          fieldTags: ["good stop", "map issue"],
           verifiedCount: nycTrust.verifiedExhibitionCount,
           demoReviewCount: nycTrust.fixtureExhibitionCount + nycTrust.needsReviewExhibitionCount
         },
@@ -991,6 +1027,9 @@ async function main() {
     routeMode: "quick-loop",
     currentStopLabel: chelseaTwoHourWalk.stops[0]?.exhibition.galleryName,
     nextStopLabel: chelseaTwoHourWalk.stops[1]?.exhibition.galleryName,
+    startPointLabel: "Chelsea anchor",
+    fieldTags: ["good stop"],
+    routeWarningLabels: chelseaRouteReport.warnings.map((warning) => warning.label),
     verifiedCount: nycTrust.verifiedExhibitionCount,
     demoReviewCount: nycTrust.fixtureExhibitionCount + nycTrust.needsReviewExhibitionCount,
     previewUrl: "http://localhost:19006",
@@ -1007,6 +1046,8 @@ async function main() {
     betaReviewReport.includes("Walker beta review") &&
       betaReviewReport.includes("Route usability") &&
       betaReviewReport.includes("Route was easy to follow.") &&
+      betaReviewReport.includes("Start point: Chelsea anchor") &&
+      betaReviewReport.includes("Field tags: good stop, map issue") &&
       betaReviewReport.includes("Current stop:") &&
       betaReviewReport.includes("Next stop:"),
     "Beta review report should serialize route, trust, current/next stop, active walk, and tester note context."

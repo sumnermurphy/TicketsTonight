@@ -49,6 +49,13 @@ export type WalkerWalkReadinessReport = {
   primaryActionCopy: string;
 };
 
+export type WalkerRouteMapHandoff = {
+  routeMapUrl?: string;
+  startPointLabel: string;
+  startPointDetail: string;
+  usedCustomStart: boolean;
+};
+
 export type WalkerFieldTestGuide = {
   title: string;
   subtitle: string;
@@ -91,6 +98,114 @@ function canUseBrowserLocation(): boolean {
   };
 
   return Boolean(maybeNavigator.navigator?.geolocation);
+}
+
+function getMapQuery(value: string): string {
+  return encodeURIComponent(value).replace(/%20/g, "+");
+}
+
+function getCoordinateQuery(latitude?: number, longitude?: number): string | undefined {
+  return typeof latitude === "number" && typeof longitude === "number"
+    ? `${latitude},${longitude}`
+    : undefined;
+}
+
+function getStopQuery(stop: GalleryWalkPlan["stops"][number]): string {
+  return `${stop.exhibition.galleryName}, ${stop.exhibition.address}`;
+}
+
+function getStartPointQuery(input: {
+  area?: GalleryArea;
+  neighborhoods: GalleryNeighborhood[];
+  walkPlan: GalleryWalkPlan;
+  preference?: WalkerStartPointPreference;
+}): { query?: string; label: string; detail: string; usedCustomStart: boolean } {
+  const mode = input.preference?.mode ?? "route-first-stop";
+  const firstStop = input.walkPlan.stops[0];
+  const neighborhoodAnchor = input.neighborhoods.find(
+    (neighborhood) =>
+      neighborhood.areaId === input.walkPlan.areaId &&
+      neighborhood.name === input.walkPlan.neighborhood
+  );
+
+  if (mode === "custom-address" && input.preference?.address) {
+    return {
+      query: input.preference.address,
+      label: input.preference.address,
+      detail: "Custom start included in the full-route map handoff.",
+      usedCustomStart: true
+    };
+  }
+
+  if (mode === "browser-location") {
+    const coordinateQuery = getCoordinateQuery(input.preference?.latitude, input.preference?.longitude);
+
+    return {
+      query: coordinateQuery,
+      label: coordinateQuery ? "Your browser location" : "Browser location pending",
+      detail: coordinateQuery
+        ? "Browser coordinates are included in the full-route map handoff."
+        : "Location permission or coordinates are unavailable; Walker falls back to the first route stop.",
+      usedCustomStart: Boolean(coordinateQuery)
+    };
+  }
+
+  if (mode === "neighborhood-anchor" && neighborhoodAnchor) {
+    return {
+      query: getCoordinateQuery(neighborhoodAnchor.anchor.latitude, neighborhoodAnchor.anchor.longitude),
+      label: `${neighborhoodAnchor.name} anchor`,
+      detail: `${neighborhoodAnchor.walkLabel} is included as the route origin.`,
+      usedCustomStart: true
+    };
+  }
+
+  if (mode === "market-center") {
+    return {
+      query: `${input.area?.name ?? input.walkPlan.areaId.toUpperCase()}, ${input.area?.region ?? ""}`.trim(),
+      label: `${input.area?.name ?? input.walkPlan.areaId.toUpperCase()} center`,
+      detail: "The market center is included as the route origin.",
+      usedCustomStart: true
+    };
+  }
+
+  return {
+    query: firstStop ? getStopQuery(firstStop) : undefined,
+    label: firstStop?.exhibition.galleryName ?? "First route stop",
+    detail: "The route starts at the first planned stop.",
+    usedCustomStart: false
+  };
+}
+
+export function createWalkerRouteMapHandoff(input: {
+  area?: GalleryArea;
+  neighborhoods: GalleryNeighborhood[];
+  walkPlan: GalleryWalkPlan;
+  preference?: WalkerStartPointPreference;
+}): WalkerRouteMapHandoff {
+  if (input.walkPlan.stops.length === 0) {
+    return {
+      startPointLabel: "No route start",
+      startPointDetail: "No route stops are ready for a map handoff yet.",
+      usedCustomStart: false
+    };
+  }
+
+  const start = getStartPointQuery(input);
+  const routeStops = input.walkPlan.stops.map(getStopQuery);
+  const origin = start.query ?? routeStops[0];
+  const destination = routeStops[routeStops.length - 1] ?? origin;
+  const waypointStops = start.usedCustomStart ? routeStops.slice(0, -1) : routeStops.slice(1, -1);
+  const waypointQuery =
+    waypointStops.length > 0 ? `&waypoints=${getMapQuery(waypointStops.join("|"))}` : "";
+
+  return {
+    routeMapUrl: `https://www.google.com/maps/dir/?api=1&travelmode=walking&origin=${getMapQuery(
+      origin ?? ""
+    )}&destination=${getMapQuery(destination ?? origin ?? "")}${waypointQuery}`,
+    startPointLabel: start.label,
+    startPointDetail: start.detail,
+    usedCustomStart: start.usedCustomStart
+  };
 }
 
 export function getWalkerStartPointOptions(input: {
@@ -166,7 +281,11 @@ export function createWalkerWalkReadinessReport(input: {
     (stop) => stop.status === "open-now" || stop.status === "opens-later"
   ).length;
   const closedStopCount = input.walkPlan.stops.length - openUsableCount;
+  const opensLaterCount = input.walkPlan.stops.filter((stop) => stop.status === "opens-later").length;
   const longLegCount = input.walkPlan.legs.filter((leg) => leg.walkingMinutes >= 18).length;
+  const officialCheckMissingCount = input.walkPlan.stops.filter(
+    (stop) => !stop.exhibition.sourceCheckedAt && !stop.exhibition.verifiedAsOf
+  ).length;
   const needsNetwork = input.walkPlan.stops.some(
     (stop) => getGalleryVisitStatus(stop.exhibition, input.referenceNow) !== "open-now"
   );
@@ -225,8 +344,15 @@ export function createWalkerWalkReadinessReport(input: {
     tone === "ready" ? "Ready to start" : tone === "watch" ? "Ready with checks" : "Thin field route";
   const warnings = [
     ...input.routeUsabilityReport.warnings.slice(0, 2).map((warning) => warning.label),
+    closedStopCount > 0 ? "Swap closed stops before walking" : undefined,
+    opensLaterCount > 0 ? "Some stops open later" : undefined,
+    longLegCount > 0 ? "Long walking leg; check effort" : undefined,
+    officialCheckMissingCount > 0 ? "Some stops need official re-check" : undefined,
     needsNetwork ? "Verify live hours before walking" : undefined,
-    input.walkPlan.areaId === "camogli" ? "Camogli is a cultural-walk test market" : undefined
+    input.walkPlan.areaId === "camogli" ? "Camogli is a cultural-walk test, not a dense gallery market" : undefined,
+    input.walkPlan.areaId === "camogli" && input.walkPlan.neighborhood === "San Rocco / Ruta"
+      ? "Hill-view route: use daylight and check effort"
+      : undefined
   ].filter((item): item is string => Boolean(item));
 
   return {

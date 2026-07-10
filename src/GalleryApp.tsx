@@ -181,6 +181,7 @@ import {
 import {
   createWalkerFieldTestGuide,
   createWalkerOfflineReadinessSummary,
+  createWalkerRouteMapHandoff,
   createWalkerWalkReadinessReport,
   getWalkerStartPointOptions,
   type WalkerFieldTestGuide,
@@ -300,7 +301,21 @@ const betaFeedbackLabels: Record<GalleryBetaFeedbackKind, string> = {
   broken: "Broken",
   wish: "Wish"
 };
-const betaFeedbackQuickTags = ["wrong hours", "bad route", "missing place", "image feels wrong"];
+const betaFeedbackQuickTags = [
+  "wrong hours",
+  "bad route",
+  "missing place",
+  "map issue",
+  "closed when listed open",
+  "good stop",
+  "image feels wrong"
+];
+
+function getBetaFeedbackFieldTags(note: string): string[] {
+  const normalizedNote = note.toLowerCase();
+
+  return betaFeedbackQuickTags.filter((tag) => normalizedNote.includes(tag));
+}
 
 function WalkerMark({
   size = 24,
@@ -2054,6 +2069,7 @@ function RouteCommandPanel({
   onDismissReadinessWarning,
   walkRecapRewardCopy,
   routeMapModel,
+  routeMapUrl,
   shareCard,
   walkerShareCard,
   compact = false
@@ -2089,6 +2105,7 @@ function RouteCommandPanel({
   onDismissReadinessWarning: (warning: string) => void;
   walkRecapRewardCopy?: string;
   routeMapModel: GalleryRouteMapModel;
+  routeMapUrl?: string;
   shareCard?: GalleryWalkShareCard;
   walkerShareCard?: WalkerCompletedWalkShareCard;
   compact?: boolean;
@@ -2195,13 +2212,13 @@ function RouteCommandPanel({
               <Check size={14} color={colors.teal} />
               <Text style={styles.activeWalkVisitButtonText}>Mark visited</Text>
             </Pressable>
-            {displayPlan.routeMapUrl ? (
+            {routeMapUrl ? (
               <Pressable
                 accessibilityRole="link"
                 accessibilityLabel={`Open full ${displayPlan.neighborhood} walking route in maps`}
                 onPress={() => {
-                  if (displayPlan.routeMapUrl) {
-                    void Linking.openURL(displayPlan.routeMapUrl);
+                  if (routeMapUrl) {
+                    void Linking.openURL(routeMapUrl);
                   }
                 }}
                 style={styles.secondaryRouteButton}
@@ -2324,13 +2341,13 @@ function RouteCommandPanel({
               <Text style={styles.routeFirstTitle}>{displayPlan.summary}</Text>
               <Text style={styles.routeFirstMeta}>{progressCopy}</Text>
             </View>
-            {displayPlan.routeMapUrl ? (
+            {routeMapUrl ? (
               <Pressable
                 accessibilityRole="link"
                 accessibilityLabel={`Open full ${displayPlan.neighborhood} walking route in maps`}
                 onPress={() => {
-                  if (displayPlan.routeMapUrl) {
-                    void Linking.openURL(displayPlan.routeMapUrl);
+                  if (routeMapUrl) {
+                    void Linking.openURL(routeMapUrl);
                   }
                 }}
                 style={styles.routeFirstMapButton}
@@ -2438,6 +2455,7 @@ function RouteCommandPanel({
 function ActiveWalkJourneyScreen({
   walkPlan,
   routeMapModel,
+  routeMapUrl,
   currentStop,
   nextStop,
   nextLeg,
@@ -2461,6 +2479,7 @@ function ActiveWalkJourneyScreen({
 }: {
   walkPlan: GalleryWalkPlan;
   routeMapModel: GalleryRouteMapModel;
+  routeMapUrl?: string;
   currentStop?: GalleryWalkStop;
   nextStop?: GalleryWalkStop;
   nextLeg?: GalleryWalkPlan["legs"][number];
@@ -2652,6 +2671,7 @@ function ActiveWalkJourneyScreen({
 
       <RoutePreview
         routeMapModel={routeMapModel}
+        routeMapUrl={routeMapUrl}
         highlightedStopId={highlightedStopId}
         focusedSwapCandidates={focusedSwapCandidates}
         onHighlightStop={onHighlightStop}
@@ -2891,12 +2911,14 @@ function WalkStopRow({
 
 function RoutePreview({
   routeMapModel,
+  routeMapUrl,
   highlightedStopId,
   focusedSwapCandidates = [],
   onHighlightStop,
   onSwapFocusedStop
 }: {
   routeMapModel: GalleryRouteMapModel;
+  routeMapUrl?: string;
   highlightedStopId?: string;
   focusedSwapCandidates?: GalleryRouteSwapCandidate[];
   onHighlightStop: (stopId: string) => void;
@@ -2967,13 +2989,13 @@ function RoutePreview({
             <Text style={styles.routeMapPrimaryActionText}>Open selected stop</Text>
           </Pressable>
         ) : null}
-        {routeMapModel.routeMapUrl ? (
+        {routeMapUrl ? (
           <Pressable
             accessibilityRole="link"
             accessibilityLabel="Open full route map"
             onPress={() => {
-              if (routeMapModel.routeMapUrl) {
-                void Linking.openURL(routeMapModel.routeMapUrl);
+              if (routeMapUrl) {
+                void Linking.openURL(routeMapUrl);
               }
             }}
             style={styles.routeMapSecondaryAction}
@@ -4583,6 +4605,16 @@ export function GalleryApp() {
       }),
     [displayWalkPlan, selectedArea, walkerStartPointPreference]
   );
+  const walkerRouteMapHandoff = useMemo(
+    () =>
+      createWalkerRouteMapHandoff({
+        area: selectedArea,
+        neighborhoods: galleryNeighborhoods,
+        walkPlan: displayWalkPlan,
+        preference: walkerStartPointPreference
+      }),
+    [displayWalkPlan, selectedArea, walkerStartPointPreference]
+  );
   const displayRouteAdvisoryById = useMemo(
     () =>
       new Map(
@@ -5001,6 +5033,7 @@ export function GalleryApp() {
         routeMode: walkMode,
         neighborhood: selectedNeighborhood,
         activeWalkStatus: activeWalkSession?.status,
+        startPointLabel: walkerRouteMapHandoff.startPointLabel,
         currentStopLabel:
           activeWalkCurrentStop?.exhibition.galleryName ??
           displayStartStop?.exhibition.galleryName,
@@ -5009,6 +5042,8 @@ export function GalleryApp() {
           plannerNextStop?.exhibition.galleryName,
         verifiedCount: sourceTrust.verifiedExhibitionCount,
         demoReviewCount: sourceTrust.fixtureExhibitionCount + sourceTrust.needsReviewExhibitionCount,
+        fieldTags: betaFeedback.flatMap((entry) => entry.fieldTags ?? []),
+        routeWarningLabels: walkReadinessReport.warnings,
         previewUrl: "http://localhost:19006",
         generatedAt: referenceNow
       }),
@@ -5023,6 +5058,8 @@ export function GalleryApp() {
       selectedAreaId,
       selectedNeighborhood,
       sourceTrust,
+      walkerRouteMapHandoff,
+      walkReadinessReport,
       walkMode
     ]
   );
@@ -5254,6 +5291,14 @@ export function GalleryApp() {
         routeMode: walkMode,
         neighborhood: selectedNeighborhood,
         activeWalkStatus: activeWalkSession?.status,
+        currentStopLabel:
+          activeWalkCurrentStop?.exhibition.galleryName ??
+          displayStartStop?.exhibition.galleryName,
+        nextStopLabel:
+          activeWalkNextStop?.exhibition.galleryName ??
+          plannerNextStop?.exhibition.galleryName,
+        startPointLabel: walkerRouteMapHandoff.startPointLabel,
+        fieldTags: getBetaFeedbackFieldTags(betaFeedbackNote),
         verifiedCount: sourceTrust.verifiedExhibitionCount,
         demoReviewCount: sourceTrust.fixtureExhibitionCount + sourceTrust.needsReviewExhibitionCount
       },
@@ -5361,14 +5406,14 @@ export function GalleryApp() {
         ? {
             title: walkerCompletedShareCard.heading,
             text: walkerCompletedShareCard.shareText,
-            url: displayWalkPlan.routeMapUrl
+            url: walkerRouteMapHandoff.routeMapUrl
           }
         : createGalleryWalkShareSummary(displayWalkPlan, activeWalkRecap);
     const payload = activeWalkShareCard
       ? {
           title: activeWalkShareCard.title,
           text: activeWalkShareCard.shareText,
-          url: activeWalkShareCard.routeMapUrl
+          url: walkerRouteMapHandoff.routeMapUrl ?? activeWalkShareCard.routeMapUrl
         }
       : fallbackPayload;
     const shared = await shareWalkPayload(payload);
@@ -5926,6 +5971,7 @@ export function GalleryApp() {
         <ActiveWalkJourneyScreen
           walkPlan={activeWalkPlan ?? displayWalkPlan}
           routeMapModel={displayRouteMapModel}
+          routeMapUrl={walkerRouteMapHandoff.routeMapUrl}
           currentStop={activeWalkCurrentStop}
           nextStop={activeWalkNextStop}
           nextLeg={activeWalkNextLeg}
@@ -6003,6 +6049,7 @@ export function GalleryApp() {
         onDismissReadinessWarning={dismissReadinessWarning}
         walkRecapRewardCopy={walkRecapRewardCopy}
         routeMapModel={displayRouteMapModel}
+        routeMapUrl={walkerRouteMapHandoff.routeMapUrl}
         shareCard={activeWalkShareCard}
         walkerShareCard={walkerCompletedShareCard}
         compact
@@ -6010,6 +6057,7 @@ export function GalleryApp() {
 
       <RoutePreview
         routeMapModel={displayRouteMapModel}
+        routeMapUrl={walkerRouteMapHandoff.routeMapUrl}
         highlightedStopId={highlightedRouteStopId}
         focusedSwapCandidates={focusedRouteSwapCandidates}
         onHighlightStop={setHighlightedRouteStopId}
@@ -6123,8 +6171,8 @@ export function GalleryApp() {
                 }}
                 onStartWalk={startWalk}
                 onOpenRoute={() => {
-                  if (displayWalkPlan.routeMapUrl) {
-                    void Linking.openURL(displayWalkPlan.routeMapUrl);
+                  if (walkerRouteMapHandoff.routeMapUrl) {
+                    void Linking.openURL(walkerRouteMapHandoff.routeMapUrl);
                   }
                 }}
                 onForYou={() => {
@@ -6181,8 +6229,8 @@ export function GalleryApp() {
               onFindWalk={chooseFindWalkFirstRun}
               onStartWalk={startWalk}
               onOpenRoute={() => {
-                if (displayWalkPlan.routeMapUrl) {
-                  void Linking.openURL(displayWalkPlan.routeMapUrl);
+                if (walkerRouteMapHandoff.routeMapUrl) {
+                  void Linking.openURL(walkerRouteMapHandoff.routeMapUrl);
                 }
               }}
               onForYou={() => {
@@ -6324,6 +6372,7 @@ export function GalleryApp() {
             onDismissReadinessWarning={dismissReadinessWarning}
             walkRecapRewardCopy={walkRecapRewardCopy}
             routeMapModel={displayRouteMapModel}
+            routeMapUrl={walkerRouteMapHandoff.routeMapUrl}
             shareCard={activeWalkShareCard}
             walkerShareCard={walkerCompletedShareCard}
             compact={isCompactLayout}
@@ -6664,13 +6713,13 @@ export function GalleryApp() {
                 <Text key={reason} style={styles.routeReasonPill}>{reason}</Text>
               ))}
             </View>
-            {displayWalkPlan.routeMapUrl ? (
+            {walkerRouteMapHandoff.routeMapUrl ? (
               <Pressable
                 accessibilityRole="link"
                 accessibilityLabel={`Open full ${displayWalkPlan.neighborhood} walking route in maps`}
                 onPress={() => {
-                  if (displayWalkPlan.routeMapUrl) {
-                    void Linking.openURL(displayWalkPlan.routeMapUrl);
+                  if (walkerRouteMapHandoff.routeMapUrl) {
+                    void Linking.openURL(walkerRouteMapHandoff.routeMapUrl);
                   }
                 }}
                 style={styles.routeMapButton}
@@ -6708,6 +6757,7 @@ export function GalleryApp() {
           ) : null}
           <RoutePreview
             routeMapModel={displayRouteMapModel}
+            routeMapUrl={walkerRouteMapHandoff.routeMapUrl}
             highlightedStopId={highlightedRouteStopId}
             focusedSwapCandidates={focusedRouteSwapCandidates}
             onHighlightStop={setHighlightedRouteStopId}

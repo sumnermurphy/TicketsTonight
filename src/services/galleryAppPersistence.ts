@@ -175,7 +175,10 @@ function sanitizeState(value: unknown): GalleryAppPersistedState | undefined {
       ? (value.betaCompletedTaskIds as GalleryBetaTaskId[])
       : [],
     betaFeedback: Array.isArray(value.betaFeedback)
-      ? (value.betaFeedback as GalleryBetaFeedback[])
+      ? (value.betaFeedback as GalleryBetaFeedback[]).map((entry) => ({
+          ...entry,
+          fieldTags: Array.isArray(entry.fieldTags) ? entry.fieldTags : []
+        }))
       : [],
     betaChecklistDismissed: value.betaChecklistDismissed === true,
     stopReactions: Array.isArray(value.stopReactions)

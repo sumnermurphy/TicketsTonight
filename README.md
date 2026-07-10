@@ -26,7 +26,7 @@ This branch intentionally replaces the legacy iOS-era TicketsTonight product sur
 - Neighborhood Intelligence for walkable clusters.
 - Why Go cards, personal art-log controls, saved/visited/skipped states, and private notes.
 - Trust labels for `Verified as of`, `Official gallery link`, `Fixture/demo`, `Needs review`, and submitted/partner inventory.
-- PWA-readiness metadata with manifest/static icon assets while keeping the app local-first and offline-friendly through checked-in images/data.
+- PWA-readiness metadata, static icon assets, and an exported-web service worker that caches the app shell/local assets after first load while keeping official links/maps live-check only.
 - Compact beta preview path with "Try a NYC walk", "Try For You", "Check Hudson", feedback capture, and copyable Walker beta review report.
 - Route usability signals for open-now confidence, timing risk, best-start reasoning, closed/closing-soon warnings, and thin verified-route fallback copy.
 - Verified NYC gallery inventory depth above the initial fixture count, currently targeted at 72+ NYC exhibitions with 60+ imported/manual official-page records.
@@ -109,7 +109,7 @@ npm run audit:source-directory
 - Grouped same-gallery stops still render compactly with show titles preserved.
 - Trust labels and official links are visible on cards and stops.
 - Hudson Warren Street renders as a smaller, honest market.
-- The beta preview surface can copy a Walker report with market, route mode, active-walk status, verified/demo counts, route warnings, and tester notes.
+- The beta preview surface can copy a Walker report with market, route mode, active-walk status, selected start point, current/next stop, verified/demo counts, route warnings, field tags, and tester notes.
 - Desktop and mobile layouts have no obvious overlap or cramped controls.
 - Browser console has no errors.
 
@@ -121,7 +121,7 @@ npm run audit:source-directory
 4. Tap "Check Hudson" and confirm Warren Street remains labeled as a smaller/thinner walk.
 5. Add a tester note, copy the beta review report, and attach it to PR feedback.
 
-Known limitations: no service worker/offline cache yet, no auth/backend sync, no push notifications, no native packaging, no map SDK, and no automated scraping. The preview relies on checked-in inventory, quiz metadata, and generated image assets.
+Known limitations: the exported web preview has a lightweight app-shell/local-asset service worker after first load, but official gallery links, external maps, and live hours verification still need network access. There is no auth/backend sync, push notification system, native packaging, map SDK, or automated scraping.
 
 ## Architecture Guide
 
@@ -129,7 +129,8 @@ Known limitations: no service worker/offline cache yet, no auth/backend sync, no
 - `src/data/galleryCatalog.ts`: gallery areas, neighborhoods, fixture/demo inventory, and imported verified inventory composition.
 - `src/data/verifiedGalleryInventory.ts`: manually verified official-page gallery exhibition records.
 - `src/data/gallerySources.ts`: official gallery source directory and review/freshness status.
-- `src/services/galleryDiscovery.ts`: filtering, trust labels, walk planning, route grouping, opening timing, last-chance alerts, and route map URLs.
+- `src/services/galleryDiscovery.ts`: filtering, trust labels, walk planning, route grouping, opening timing, last-chance alerts, and base route map URLs.
+- `src/services/walkerFieldReadiness.ts`: start-point-aware map handoff, real-world readiness warnings, Camogli field-test shortcuts, and offline/PWA summary copy.
 - `src/services/galleryWalkSession.ts`: active walk sessions, progress, replacement-safe stop swaps, and recaps.
 - `src/services/galleryAppPersistence.ts`: local persistence for walk state, art log, filters, alerts, personalization, saved walks, and first-run state.
 - `src/services/galleryTastePassport.ts`: quiz/behavior taste signals, personalized ranking, For you routes, Walker quests, badges, and stamps.
