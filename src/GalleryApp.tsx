@@ -25,6 +25,7 @@ import {
   type DimensionValue,
   type ImageSourcePropType,
   Linking,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -155,10 +156,11 @@ import {
 import {
   createGalleryPassportMemory,
   createGalleryWalkShareCard,
+  getWalkerMemorySummary,
   type GalleryPassportMemory,
   type GalleryWalkShareCard
 } from "./services/galleryPassportMemory";
-import { colors, radii, shadows, spacing } from "./theme";
+import { colors, radii, shadows, spacing, walkerType } from "./theme";
 import type {
   GalleryAreaId,
   GalleryExhibition,
@@ -250,6 +252,36 @@ const betaFeedbackLabels: Record<GalleryBetaFeedbackKind, string> = {
   wish: "Wish"
 };
 const betaFeedbackQuickTags = ["wrong hours", "bad route", "missing place", "image feels wrong"];
+
+function WalkerMark({
+  size = 24,
+  color = colors.gold
+}: {
+  size?: number;
+  color?: string;
+}) {
+  const center = size / 2;
+  const outer = size - 2;
+
+  return (
+    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} accessibilityLabel="Walker compass mark">
+      <Polyline
+        points={`${center},1 ${center + 4},${center - 4} ${outer},${center} ${center + 4},${center + 4} ${center},${outer} ${center - 4},${center + 4} 1,${center} ${center - 4},${center - 4} ${center},1`}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinejoin="round"
+      />
+      <Polyline
+        points={`${center},${center - 7} ${center + 2},${center - 2} ${center + 7},${center} ${center + 2},${center + 2} ${center},${center + 7} ${center - 2},${center + 2} ${center - 7},${center} ${center - 2},${center - 2} ${center},${center - 7}`}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.2}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 const alertWindowOptions: Array<3 | 7 | 14> = [3, 7, 14];
 const eventRouteIntentOptions: GalleryEventRouteIntent[] = [
   "social-opening",
@@ -752,9 +784,12 @@ function ProfessionalMobileHome({
   return (
     <View style={styles.mobileHomeShell}>
       <View style={styles.mobileTopBar}>
-        <View>
-          <Text style={styles.mobileLocationLabel}>{areaLabel}</Text>
-          <Text style={styles.mobileDateLabel}>{dateLabel}</Text>
+        <View style={styles.walkerTopBrand}>
+          <WalkerMark size={24} />
+          <View>
+            <Text style={styles.walkerWordmark}>Walker</Text>
+            <Text style={styles.mobileDateLabel}>{areaLabel} - {dateLabel}</Text>
+          </View>
         </View>
         <View style={styles.mobileVerifiedBadge}>
           <Check size={13} color={colors.paper} />
@@ -771,12 +806,12 @@ function ProfessionalMobileHome({
         <View style={styles.mobileFeatureShade} />
         <View style={styles.mobileFeatureContent}>
           <View style={styles.mobileFeatureTopRow}>
-            <Text style={styles.mobileFeaturePill} numberOfLines={1}>Tonight</Text>
+            <Text style={styles.mobileFeaturePill} numberOfLines={1}>Featured walk</Text>
             <Text style={styles.mobileFeaturePill} numberOfLines={1}>{routeScopeLabel}</Text>
             <Text style={styles.mobileFeaturePill} numberOfLines={1}>{featuredVisual.creditLabel}</Text>
           </View>
           <View style={styles.mobileFeatureCopy}>
-            <Text style={styles.mobileFeatureTitle}>Tonight's{"\n"}best walk</Text>
+            <Text style={styles.mobileFeatureTitle}>Explore art.{"\n"}Build meaning.</Text>
             <Text style={styles.mobileFeatureSubtitle}>
               {featuredExhibition
                 ? `${walkPlan.totalMinutes} minute route in ${walkPlan.neighborhood}.`
@@ -789,7 +824,7 @@ function ProfessionalMobileHome({
                 onPress={onFindWalk}
                 style={styles.mobilePrimaryCta}
               >
-                <Route size={15} color={colors.ink} />
+                <Route size={15} color={colors.paper} />
                 <Text style={styles.mobilePrimaryCtaText} numberOfLines={1}>Start</Text>
               </Pressable>
               {activeWalk ? (
@@ -844,7 +879,7 @@ function ProfessionalMobileHome({
 
       <View style={styles.mobileTonightFeed}>
         <View style={styles.mobileSectionHeading}>
-          <Text style={styles.mobileSectionTitle}>Useful tonight</Text>
+          <Text style={styles.mobileSectionTitle}>Open Now</Text>
           <Text style={styles.mobileSectionMeta}>{sourceTrust.exhibitionCount} listings</Text>
         </View>
         {feedItems.map((item) => (
@@ -1223,7 +1258,7 @@ function PersonalizationLearningPanel({
     <View style={styles.learningPanel}>
       <View style={styles.learningPanelHeader}>
         <View>
-          <Text style={styles.learningKicker}>For You + Passport</Text>
+          <Text style={styles.learningKicker}>For You + Journal</Text>
           <Text style={styles.learningTitle}>{summary.label}</Text>
         </View>
         <Sparkles size={18} color={colors.paper} />
@@ -1373,20 +1408,20 @@ function MobileCommandBar({
   return (
     <View style={styles.mobileCommandBar}>
       <Pressable accessibilityRole="button" onPress={onTonight} style={styles.mobileCommandButton}>
-        <Home size={17} color={colors.paper} />
+        <Home size={17} color={colors.teal} />
         <Text style={styles.mobileCommandText}>Tonight</Text>
       </Pressable>
       <Pressable accessibilityRole="button" onPress={onWalk} style={styles.mobileCommandButton}>
-        <Route size={17} color={colors.paper} />
+        <Route size={17} color={colors.teal} />
         <Text style={styles.mobileCommandText}>{activeWalk ? "Walking" : "Walk"}</Text>
       </Pressable>
       <Pressable accessibilityRole="button" onPress={onForYou} style={styles.mobileCommandButton}>
-        <Sparkles size={17} color={colors.paper} />
+        <Sparkles size={17} color={colors.teal} />
         <Text style={styles.mobileCommandText}>For You</Text>
       </Pressable>
       <Pressable accessibilityRole="button" onPress={onLog} style={styles.mobileCommandButton}>
-        <ListChecks size={17} color={colors.paper} />
-        <Text style={styles.mobileCommandText}>Passport</Text>
+        <ListChecks size={17} color={colors.teal} />
+        <Text style={styles.mobileCommandText}>Journal</Text>
       </Pressable>
     </View>
   );
@@ -1552,7 +1587,7 @@ function RouteCommandPanel({
               onPress={onMarkCurrentVisited}
               style={styles.activeWalkVisitButton}
             >
-              <Check size={14} color={colors.ink} />
+              <Check size={14} color={colors.teal} />
               <Text style={styles.activeWalkVisitButtonText}>Mark visited</Text>
             </Pressable>
             {displayPlan.routeMapUrl ? (
@@ -2409,9 +2444,9 @@ function GalleryPassportPanel({
     <View style={styles.passportBand}>
       <View style={styles.sectionHeader}>
         <View>
-          <Text style={styles.sectionTitle}>Art Taste Passport</Text>
+          <Text style={styles.sectionTitle}>Saved, Journal & Memory</Text>
           <Text style={styles.sectionSubtitle}>
-            {quizAnswers.length}/{galleryQuizArtworks.length} quiz cards answered - {passport.summary}
+            {quizAnswers.length}/{galleryQuizArtworks.length} taste cards answered - {passport.summary}
           </Text>
         </View>
         <Sparkles size={20} color={colors.ink} />
@@ -2457,8 +2492,8 @@ function GalleryPassportPanel({
             {stamps.length === 0 ? <Text style={styles.passportStamp}>No stamps yet</Text> : null}
           </View>
           <View style={styles.passportMemoryCard}>
-            <Text style={styles.passportMemoryTitle}>Passport memory</Text>
-            <Text style={styles.passportMemoryCopy}>{memory.summary}</Text>
+            <Text style={styles.passportMemoryTitle}>Walker memory</Text>
+            <Text style={styles.passportMemoryCopy}>{getWalkerMemorySummary(memory)}</Text>
             <View style={styles.routeReasonRow}>
               <Text style={styles.passportSignalPill}>{memory.visitedStopCount} visited</Text>
               <Text style={styles.passportSignalPill}>{memory.notedStopCount} notes</Text>
@@ -2601,7 +2636,7 @@ function GalleryPassportPanel({
 
       <View style={styles.questPanel}>
         <View style={styles.questPanelHeader}>
-          <Text style={styles.sectionTitle}>Gallery Quests</Text>
+          <Text style={styles.sectionTitle}>Walker Quests</Text>
           <Text style={styles.sectionSubtitle}>Light goals that adapt to verified supply.</Text>
         </View>
         <View style={styles.questGrid}>
@@ -3189,6 +3224,13 @@ function ExhibitionDetailSheet({
 export function GalleryApp() {
   const { width: viewportWidth } = useWindowDimensions();
   const persistedState = useMemo(() => readGalleryAppPersistedState(), []);
+
+  useEffect(() => {
+    if (Platform.OS === "web" && typeof document !== "undefined") {
+      document.title = "Walker";
+    }
+  }, []);
+
   const [selectedAreaId, setSelectedAreaId] = useState<GalleryAreaId>(
     persistedState?.selectedAreaId ?? "nyc"
   );
@@ -4093,7 +4135,7 @@ export function GalleryApp() {
   }
 
   function emailBetaFeedbackReport() {
-    const subject = encodeURIComponent("TicketsTonight gallery beta feedback");
+    const subject = encodeURIComponent("Walker beta feedback");
     const body = encodeURIComponent(betaReviewReport);
 
     completeBetaTask("send-feedback");
@@ -4535,6 +4577,10 @@ export function GalleryApp() {
               <View style={styles.heroContent}>
                 <View style={styles.headerTopline}>
                   <View style={styles.heroHeaderBadgeRow}>
+                    <View style={styles.desktopWalkerBrand}>
+                      <WalkerMark size={28} />
+                      <Text style={styles.desktopWalkerWordmark}>Walker</Text>
+                    </View>
                     <Text style={styles.heroEyebrow}>{getAreaRoleCopy(selectedAreaId)}</Text>
                     <Text style={styles.heroEyebrow}>{heroVisual.creditLabel}</Text>
                   </View>
@@ -4578,19 +4624,21 @@ export function GalleryApp() {
             />
           ) : null}
 
-          <BetaPreviewPanel
-            routeReport={routeUsabilityReport}
-            learningSummary={personalizationLearningSummary}
-            verifiedCount={sourceTrust.verifiedExhibitionCount}
-            demoReviewCount={sourceTrust.fixtureExhibitionCount + sourceTrust.needsReviewExhibitionCount}
-            routeModeLabel={galleryWalkModeLabels[walkMode]}
-            activeWalkStatus={activeWalkSession?.status}
-            onTryNyc={tryBetaNycWalk}
-            onTryForYou={tryBetaForYou}
-            onCheckHudson={checkBetaHudson}
-            onSendFeedback={openBetaFeedbackComposer}
-            onCopyReport={copyBetaFeedbackReport}
-          />
+          {!isCompactLayout ? (
+            <BetaPreviewPanel
+              routeReport={routeUsabilityReport}
+              learningSummary={personalizationLearningSummary}
+              verifiedCount={sourceTrust.verifiedExhibitionCount}
+              demoReviewCount={sourceTrust.fixtureExhibitionCount + sourceTrust.needsReviewExhibitionCount}
+              routeModeLabel={galleryWalkModeLabels[walkMode]}
+              activeWalkStatus={activeWalkSession?.status}
+              onTryNyc={tryBetaNycWalk}
+              onTryForYou={tryBetaForYou}
+              onCheckHudson={checkBetaHudson}
+              onSendFeedback={openBetaFeedbackComposer}
+              onCopyReport={copyBetaFeedbackReport}
+            />
+          ) : null}
 
           {!isCompactLayout ? (
             <GalleryConciergePanel
@@ -5228,14 +5276,14 @@ const styles = StyleSheet.create({
   },
   headerBand: {
     backgroundColor: colors.fog,
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.xl,
     gap: spacing.md
   },
   mobileHomeShell: {
     backgroundColor: colors.fog,
-    gap: spacing.md,
+    gap: spacing.lg,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm
+    paddingTop: spacing.md
   },
   mobileTopBar: {
     alignItems: "center",
@@ -5243,6 +5291,22 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: spacing.md,
     minHeight: 44
+  },
+  walkerTopBrand: {
+    alignItems: "center",
+    flexDirection: "row",
+    flex: 1,
+    gap: spacing.sm,
+    minWidth: 0
+  },
+  walkerWordmark: {
+    color: colors.teal,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 25,
+    fontWeight: "700",
+    letterSpacing: 0,
+    lineHeight: 29,
+    textTransform: "uppercase"
   },
   mobileLocationLabel: {
     color: colors.ink,
@@ -5259,7 +5323,7 @@ const styles = StyleSheet.create({
   },
   mobileVerifiedBadge: {
     alignItems: "center",
-    backgroundColor: colors.ink,
+    backgroundColor: colors.teal,
     borderRadius: radii.pill,
     flexDirection: "row",
     gap: spacing.xs,
@@ -5272,9 +5336,12 @@ const styles = StyleSheet.create({
     fontWeight: "900"
   },
   mobileFeatureCard: {
-    borderRadius: radii.md,
-    minHeight: 318,
-    overflow: "hidden"
+    borderColor: "rgba(200, 161, 90, 0.35)",
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    minHeight: 336,
+    overflow: "hidden",
+    ...shadows.card
   },
   mobileFeatureImage: {
     height: "100%",
@@ -5283,7 +5350,7 @@ const styles = StyleSheet.create({
   },
   mobileFeatureShade: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(0, 0, 0, 0.34)"
+    backgroundColor: "rgba(13, 59, 46, 0.36)"
   },
   mobileFeatureContent: {
     flex: 1,
@@ -5299,9 +5366,9 @@ const styles = StyleSheet.create({
     width: "100%"
   },
   mobileFeaturePill: {
-    backgroundColor: "rgba(255, 253, 248, 0.92)",
+    backgroundColor: "rgba(250, 246, 239, 0.94)",
     borderRadius: radii.pill,
-    color: colors.ink,
+    color: colors.teal,
     flexShrink: 1,
     fontSize: 10,
     fontWeight: "900",
@@ -5318,15 +5385,16 @@ const styles = StyleSheet.create({
   mobileFeatureTitle: {
     color: colors.paper,
     flexShrink: 1,
-    fontSize: 27,
-    fontWeight: "900",
-    lineHeight: 32,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 31,
+    fontWeight: "700",
+    lineHeight: 36,
     maxWidth: "100%",
     minWidth: 0,
     width: "100%"
   },
   mobileFeatureSubtitle: {
-    color: "#F2EDE4",
+    color: "#FAF6EF",
     flexShrink: 1,
     fontSize: 14,
     fontWeight: "800",
@@ -5347,7 +5415,7 @@ const styles = StyleSheet.create({
   mobilePrimaryCta: {
     alignItems: "center",
     alignSelf: "stretch",
-    backgroundColor: colors.paper,
+    backgroundColor: colors.teal,
     borderRadius: radii.pill,
     flexDirection: "row",
     gap: spacing.xs,
@@ -5358,7 +5426,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md
   },
   mobilePrimaryCtaText: {
-    color: colors.ink,
+    color: colors.paper,
     flexShrink: 1,
     fontSize: 14,
     fontWeight: "900",
@@ -5366,8 +5434,8 @@ const styles = StyleSheet.create({
   },
   mobileSecondaryCta: {
     alignItems: "center",
-    backgroundColor: "rgba(17, 17, 17, 0.72)",
-    borderColor: "rgba(255, 253, 248, 0.28)",
+    backgroundColor: "rgba(250, 246, 239, 0.9)",
+    borderColor: "rgba(200, 161, 90, 0.48)",
     borderRadius: radii.pill,
     borderWidth: 1,
     flexGrow: 1,
@@ -5376,7 +5444,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md
   },
   mobileSecondaryCtaText: {
-    color: colors.paper,
+    color: colors.teal,
     flexShrink: 1,
     fontSize: 13,
     fontWeight: "900",
@@ -5385,7 +5453,7 @@ const styles = StyleSheet.create({
   mobileTrustStrip: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     borderWidth: 1,
     flexDirection: "row",
     flexWrap: "wrap",
@@ -5395,7 +5463,7 @@ const styles = StyleSheet.create({
   mobileTrustItem: {
     backgroundColor: colors.fog,
     borderRadius: radii.pill,
-    color: colors.ink,
+    color: colors.teal,
     flexGrow: 1,
     fontSize: 11,
     fontWeight: "900",
@@ -5408,7 +5476,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     borderWidth: 1,
     flexDirection: "row",
     gap: spacing.md,
@@ -5420,13 +5488,14 @@ const styles = StyleSheet.create({
     minWidth: 0
   },
   mobileFeedLabel: {
-    color: colors.mutedInk,
+    color: colors.gold,
     fontSize: 10,
     fontWeight: "900",
     textTransform: "uppercase"
   },
   mobileFeaturedShowTitle: {
     color: colors.ink,
+    fontFamily: walkerType.displayFamily,
     fontSize: 16,
     fontWeight: "900",
     lineHeight: 21,
@@ -5439,7 +5508,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs
   },
   mobileFeaturedShowAction: {
-    backgroundColor: colors.ink,
+    backgroundColor: colors.teal,
     borderRadius: radii.pill,
     color: colors.paper,
     fontSize: 11,
@@ -5451,7 +5520,7 @@ const styles = StyleSheet.create({
   mobileTonightFeed: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     borderWidth: 1,
     gap: spacing.sm,
     padding: spacing.md
@@ -5463,9 +5532,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm
   },
   mobileSectionTitle: {
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: "900"
+    color: colors.teal,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 21,
+    fontWeight: "700"
   },
   mobileSectionMeta: {
     color: colors.mutedInk,
@@ -5511,7 +5581,7 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: radii.pill,
     borderWidth: 1,
-    color: colors.ink,
+    color: colors.teal,
     fontSize: 11,
     fontWeight: "900",
     overflow: "hidden",
@@ -5525,14 +5595,14 @@ const styles = StyleSheet.create({
   mobileNeighborhoodChip: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     borderWidth: 1,
     minHeight: 66,
     padding: spacing.sm,
     width: 148
   },
   mobileNeighborhoodName: {
-    color: colors.ink,
+    color: colors.teal,
     fontSize: 13,
     fontWeight: "900"
   },
@@ -5554,7 +5624,7 @@ const styles = StyleSheet.create({
   },
   heroImageShade: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(0, 0, 0, 0.34)"
+    backgroundColor: "rgba(13, 59, 46, 0.38)"
   },
   heroContent: {
     flex: 1,
@@ -5575,6 +5645,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.sm
+  },
+  desktopWalkerBrand: {
+    alignItems: "center",
+    backgroundColor: "rgba(250, 246, 239, 0.92)",
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  desktopWalkerWordmark: {
+    color: colors.teal,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: 0,
+    textTransform: "uppercase"
   },
   compactHeaderTopline: {
     alignItems: "flex-start",
@@ -5621,8 +5708,9 @@ const styles = StyleSheet.create({
   title: {
     color: colors.paper,
     flexShrink: 1,
+    fontFamily: walkerType.displayFamily,
     fontSize: 44,
-    fontWeight: "900",
+    fontWeight: "700",
     letterSpacing: 0,
     lineHeight: 48,
     maxWidth: "100%"
@@ -5641,8 +5729,10 @@ const styles = StyleSheet.create({
   },
   heroRouteCard: {
     alignItems: "flex-end",
-    backgroundColor: "rgba(17, 17, 17, 0.72)",
-    borderRadius: radii.md,
+    backgroundColor: "rgba(13, 59, 46, 0.82)",
+    borderColor: "rgba(200, 161, 90, 0.34)",
+    borderRadius: radii.lg,
+    borderWidth: 1,
     flexDirection: "row",
     justifyContent: "space-between",
     gap: spacing.md,
@@ -6011,8 +6101,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg
   },
   passportSummaryPanel: {
-    backgroundColor: colors.ink,
-    borderRadius: radii.md,
+    backgroundColor: colors.teal,
+    borderColor: "rgba(200, 161, 90, 0.28)",
+    borderRadius: radii.lg,
+    borderWidth: 1,
     flexGrow: 1,
     gap: spacing.md,
     minWidth: 280,
@@ -6020,8 +6112,9 @@ const styles = StyleSheet.create({
   },
   passportSummaryTitle: {
     color: colors.paper,
+    fontFamily: walkerType.displayFamily,
     fontSize: 24,
-    fontWeight: "900",
+    fontWeight: "700",
     lineHeight: 29
   },
   passportSignalPill: {
@@ -6044,7 +6137,7 @@ const styles = StyleSheet.create({
   passportBadge: {
     backgroundColor: colors.paper,
     borderRadius: radii.pill,
-    color: colors.ink,
+    color: colors.teal,
     fontSize: 11,
     fontWeight: "900",
     overflow: "hidden",
@@ -6054,7 +6147,7 @@ const styles = StyleSheet.create({
   newBadgePill: {
     backgroundColor: colors.gold,
     borderRadius: radii.pill,
-    color: colors.ink,
+    color: colors.teal,
     fontSize: 11,
     fontWeight: "900",
     overflow: "hidden",
@@ -6076,7 +6169,7 @@ const styles = StyleSheet.create({
   forYouPanel: {
     backgroundColor: colors.paper,
     borderColor: "rgba(17, 17, 17, 0.08)",
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     borderWidth: 1,
     flexGrow: 2,
     gap: spacing.sm,
@@ -6092,15 +6185,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between"
   },
   forYouTitle: {
-    color: colors.ink,
+    color: colors.teal,
+    fontFamily: walkerType.displayFamily,
     fontSize: 20,
-    fontWeight: "900",
+    fontWeight: "700",
     lineHeight: 25,
     marginTop: spacing.xs
   },
   activeForYouButton: {
-    backgroundColor: colors.tealSoft,
-    borderColor: colors.ink
+    backgroundColor: colors.gold,
+    borderColor: colors.gold
   },
   personalPickRow: {
     alignItems: "flex-start",
@@ -6112,8 +6206,8 @@ const styles = StyleSheet.create({
   },
   personalPickScore: {
     alignItems: "center",
-    backgroundColor: colors.ink,
-    borderRadius: radii.md,
+    backgroundColor: colors.teal,
+    borderRadius: radii.lg,
     gap: 2,
     justifyContent: "center",
     minHeight: 46,
@@ -6157,7 +6251,7 @@ const styles = StyleSheet.create({
   questRow: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     borderWidth: 1,
     flexGrow: 1,
     gap: spacing.sm,
@@ -6195,7 +6289,7 @@ const styles = StyleSheet.create({
     overflow: "hidden"
   },
   questProgressFill: {
-    backgroundColor: colors.ink,
+    backgroundColor: colors.teal,
     borderRadius: radii.pill,
     height: 6
   },
@@ -6562,9 +6656,9 @@ const styles = StyleSheet.create({
   mobileCommandBar: {
     alignItems: "center",
     alignSelf: "center",
-    backgroundColor: colors.ink,
-    borderColor: "rgba(255, 253, 248, 0.16)",
-    borderRadius: radii.md,
+    backgroundColor: colors.paper,
+    borderColor: "rgba(200, 161, 90, 0.32)",
+    borderRadius: radii.lg,
     borderWidth: 1,
     bottom: spacing.sm,
     flexDirection: "row",
@@ -6578,7 +6672,7 @@ const styles = StyleSheet.create({
   },
   mobileCommandButton: {
     alignItems: "center",
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     flex: 1,
     gap: 2,
     justifyContent: "center",
@@ -6586,14 +6680,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs
   },
   mobileCommandText: {
-    color: colors.paper,
+    color: colors.teal,
     fontSize: 10,
     fontWeight: "900"
   },
   routeFirstPanel: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     borderWidth: 1,
     gap: spacing.md,
     marginHorizontal: spacing.lg,
@@ -6646,7 +6740,7 @@ const styles = StyleSheet.create({
     minWidth: 220
   },
   routeFirstKicker: {
-    color: colors.mutedInk,
+    color: colors.gold,
     fontSize: 11,
     fontWeight: "900",
     textTransform: "uppercase"
@@ -6655,9 +6749,10 @@ const styles = StyleSheet.create({
     color: "#DAD8D0"
   },
   routeFirstTitle: {
-    color: colors.ink,
+    color: colors.teal,
+    fontFamily: walkerType.displayFamily,
     fontSize: 20,
-    fontWeight: "900",
+    fontWeight: "700",
     lineHeight: 25,
     marginTop: spacing.xs
   },
@@ -6669,8 +6764,10 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs
   },
   activeWalkCommandSurface: {
-    backgroundColor: colors.ink,
-    borderRadius: radii.md,
+    backgroundColor: colors.teal,
+    borderColor: "rgba(200, 161, 90, 0.28)",
+    borderRadius: radii.lg,
+    borderWidth: 1,
     gap: spacing.md,
     padding: spacing.md
   },
@@ -6687,8 +6784,9 @@ const styles = StyleSheet.create({
   },
   activeWalkCurrentTitle: {
     color: colors.paper,
+    fontFamily: walkerType.displayFamily,
     fontSize: 24,
-    fontWeight: "900",
+    fontWeight: "700",
     lineHeight: 29,
     marginTop: spacing.xs
   },
@@ -6702,13 +6800,13 @@ const styles = StyleSheet.create({
   activeWalkProgressMeter: {
     alignItems: "center",
     backgroundColor: colors.paper,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     minWidth: 76,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm
   },
   activeWalkProgressValue: {
-    color: colors.ink,
+    color: colors.teal,
     fontSize: 20,
     fontWeight: "900"
   },
@@ -6720,8 +6818,8 @@ const styles = StyleSheet.create({
   },
   activeWalkNextCard: {
     backgroundColor: "rgba(255, 253, 248, 0.08)",
-    borderColor: "rgba(255, 253, 248, 0.18)",
-    borderRadius: radii.md,
+    borderColor: "rgba(200, 161, 90, 0.3)",
+    borderRadius: radii.lg,
     borderWidth: 1,
     padding: spacing.md
   },
@@ -6733,6 +6831,7 @@ const styles = StyleSheet.create({
   },
   activeWalkNextTitle: {
     color: colors.paper,
+    fontFamily: walkerType.displayFamily,
     fontSize: 16,
     fontWeight: "900",
     lineHeight: 21,
@@ -6758,7 +6857,7 @@ const styles = StyleSheet.create({
   activeWalkStickyActions: {
     alignItems: "center",
     backgroundColor: colors.paper,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.sm,
@@ -6766,7 +6865,7 @@ const styles = StyleSheet.create({
   },
   activeWalkMapButton: {
     alignItems: "center",
-    backgroundColor: colors.ink,
+    backgroundColor: colors.teal,
     borderRadius: radii.pill,
     flexDirection: "row",
     flexGrow: 1,
@@ -6783,7 +6882,7 @@ const styles = StyleSheet.create({
   },
   activeWalkVisitButton: {
     alignItems: "center",
-    backgroundColor: colors.tealSoft,
+    backgroundColor: colors.gold,
     borderRadius: radii.pill,
     flexDirection: "row",
     gap: spacing.xs,
@@ -6792,14 +6891,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md
   },
   activeWalkVisitButtonText: {
-    color: colors.ink,
+    color: colors.teal,
     fontSize: 13,
     fontWeight: "900"
   },
   walkRecapCard: {
     backgroundColor: colors.fog,
     borderColor: colors.line,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     borderWidth: 1,
     gap: spacing.md,
     padding: spacing.md
@@ -6952,9 +7051,10 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xl
   },
   sectionTitle: {
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: "900"
+    color: colors.teal,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 22,
+    fontWeight: "700"
   },
   sectionSubtitle: {
     color: colors.mutedInk,
@@ -8599,16 +8699,17 @@ const styles = StyleSheet.create({
   passportMemoryCard: {
     backgroundColor: colors.fog,
     borderColor: colors.line,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     borderWidth: 1,
     gap: spacing.xs,
     marginTop: spacing.sm,
     padding: spacing.md
   },
   passportMemoryTitle: {
-    color: colors.ink,
+    color: colors.teal,
+    fontFamily: walkerType.displayFamily,
     fontSize: 13,
-    fontWeight: "900"
+    fontWeight: "700"
   },
   passportMemoryCopy: {
     color: colors.mutedInk,
@@ -8649,7 +8750,7 @@ const styles = StyleSheet.create({
   },
   primaryLightButton: {
     alignItems: "center",
-    backgroundColor: colors.ink,
+    backgroundColor: colors.teal,
     borderRadius: radii.pill,
     minHeight: 34,
     justifyContent: "center",
@@ -8671,7 +8772,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md
   },
   secondaryRouteButtonText: {
-    color: colors.ink,
+    color: colors.teal,
     fontSize: 13,
     fontWeight: "900"
   },

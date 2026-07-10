@@ -8,6 +8,7 @@ export type GalleryWalkShareCard = {
   subtitle: string;
   stats: string[];
   highlights: string[];
+  theme: WalkerShareCardTheme;
   shareText: string;
   routeMapUrl?: string;
 };
@@ -23,6 +24,28 @@ export type GalleryPassportMemory = {
   learnedSignals: string[];
   summary: string;
 };
+
+export type WalkerShareCardTheme = {
+  brandName: "Walker";
+  backgroundColor: string;
+  accentColor: string;
+  textColor: string;
+};
+
+export function getWalkerShareCardTheme(): WalkerShareCardTheme {
+  return {
+    brandName: "Walker",
+    backgroundColor: "#0D3B2E",
+    accentColor: "#C8A15A",
+    textColor: "#FAF6EF"
+  };
+}
+
+export function getWalkerMemorySummary(input: GalleryPassportMemory): string {
+  return input.completedWalkCount > 0
+    ? `Walker remembers ${input.completedWalkCount} walk${input.completedWalkCount === 1 ? "" : "s"}, ${input.visitedStopCount} visited stop${input.visitedStopCount === 1 ? "" : "s"}, and ${input.notedStopCount} note${input.notedStopCount === 1 ? "" : "s"}.`
+    : "Walker memory starts after your first completed walk.";
+}
 
 export function createGalleryWalkShareCard(input: {
   walkPlan: GalleryWalkPlan;
@@ -55,7 +78,7 @@ export function createGalleryWalkShareCard(input: {
     .filter(Boolean)
     .slice(0, 4);
   const subtitle = recap
-    ? `${recap.neighborhoods.join(", ") || input.walkPlan.neighborhood || "Gallery walk"} recap`
+    ? `${recap.neighborhoods.join(", ") || input.walkPlan.neighborhood || "Walker walk"} recap`
     : input.walkPlan.guidance;
 
   return {
@@ -63,7 +86,9 @@ export function createGalleryWalkShareCard(input: {
     subtitle,
     stats,
     highlights,
+    theme: getWalkerShareCardTheme(),
     shareText: [
+      "Walker",
       input.walkPlan.title,
       subtitle,
       stats.join(" - "),
@@ -118,6 +143,6 @@ export function createGalleryPassportMemory(input: {
     summary:
       completedWalks.length > 0
         ? `${completedWalks.length} completed walks across ${neighborhoods.length || 1} neighborhood${neighborhoods.length === 1 ? "" : "s"}.`
-        : "Complete a walk to build your passport memory."
+        : "Complete a walk to build your Walker memory."
   };
 }

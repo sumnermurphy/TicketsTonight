@@ -138,7 +138,9 @@ import {
 import { createGalleryRouteMapModel } from "../src/services/galleryRouteMap";
 import {
   createGalleryPassportMemory,
-  createGalleryWalkShareCard
+  createGalleryWalkShareCard,
+  getWalkerMemorySummary,
+  getWalkerShareCardTheme
 } from "../src/services/galleryPassportMemory";
 import { createTicketmasterProviderDiagnostics } from "../src/services/providerDiagnostics";
 import { checkoutBackend } from "../src/services/checkoutBackend";
@@ -740,7 +742,7 @@ async function main() {
     chelseaWalk.stops.length === 2 &&
       chelseaWalk.totalMinutes <= 45 &&
       chelseaWalk.savedStopCount === 2,
-    "Gallery Walk Builder should create a 45-minute route from saved exhibitions."
+    "Walker route builder should create a 45-minute route from saved exhibitions."
   );
   assert(
     chelseaTwoHourWalk.stops.length > chelseaWalk.stops.length &&
@@ -858,7 +860,7 @@ async function main() {
     "Personalization learning summary should reflect save/skip and more/less signals immediately."
   );
   assert(
-    betaReviewReport.includes("Gallery walk beta review") &&
+    betaReviewReport.includes("Walker beta review") &&
       betaReviewReport.includes("Route usability") &&
       betaReviewReport.includes("Route was easy to follow.") &&
       betaReviewReport.includes("Current stop:") &&
@@ -1168,8 +1170,9 @@ async function main() {
     betaFeedbackEntry.id.includes("gallery-beta-feedback") &&
       betaFeedbackEntry.note.includes("Chelsea") &&
       betaFeedbackReport.includes("Route swap") &&
+      betaFeedbackReport.includes("Walker beta feedback") &&
       betaFeedbackReport.includes(`${nycTrust.verifiedExhibitionCount} verified`),
-    "Gallery beta feedback should serialize route, note, and trust context into a copyable report."
+    "Walker beta feedback should serialize route, note, and trust context into a copyable report."
   );
   assert(
     previewReadiness.ready &&
@@ -1608,12 +1611,16 @@ async function main() {
     "Gallery route map model should expose confidence scoring, advisory stops, projected pins, current/next state, and external map links."
   );
   assert(
-    shareCard.shareText.includes(socialEventPlan.title) &&
+    getWalkerShareCardTheme().brandName === "Walker" &&
+      shareCard.theme.brandName === "Walker" &&
+      shareCard.shareText.includes("Walker") &&
+      shareCard.shareText.includes(socialEventPlan.title) &&
       shareCard.stats.some((stat) => stat.includes("visited")) &&
       passportMemory.completedWalkCount === 1 &&
       passportMemory.visitedStopCount === completedWalkSession.visitedStopIds.length &&
-      passportMemory.summary.includes("completed walks"),
-    "Gallery passport memory should turn completed walks into shareable recap and local memory summaries."
+      passportMemory.summary.includes("completed walks") &&
+      getWalkerMemorySummary(passportMemory).includes("Walker remembers"),
+    "Walker memory should turn completed walks into shareable recap and local memory summaries."
   );
 
   const activeConciergeSuggestions = createGalleryConciergeSuggestions({

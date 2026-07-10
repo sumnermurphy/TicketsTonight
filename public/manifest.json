@@ -1,22 +1,22 @@
 {
-  "name": "TicketsTonight Gallery Walk",
-  "short_name": "Gallery Walk",
-  "description": "A mobile-first gallery walk discovery beta with verified exhibition inventory, personalized routes, and active walk planning.",
+  "name": "Walker",
+  "short_name": "Walker",
+  "description": "A mobile-first cultural walk companion for discovering, planning, saving, and reflecting on art walks.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#F4F2ED",
-  "theme_color": "#111111",
+  "background_color": "#FAF6EF",
+  "theme_color": "#0D3B2E",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/gallery-icon-192.png",
+      "src": "/walker-icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/gallery-icon-512.png",
+      "src": "/walker-icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

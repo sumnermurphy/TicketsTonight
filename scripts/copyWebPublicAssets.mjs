@@ -17,8 +17,8 @@ if (existsSync(indexPath)) {
   const indexHtml = readFileSync(indexPath, "utf8");
   const pwaHeadTags = [
     '<link rel="manifest" href="/manifest.json">',
-    '<link rel="apple-touch-icon" href="/gallery-icon-192.png">',
-    '<meta name="theme-color" content="#111111">',
+    '<link rel="apple-touch-icon" href="/walker-icon-192.png">',
+    '<meta name="theme-color" content="#0D3B2E">',
     '<meta name="mobile-web-app-capable" content="yes">',
     '<meta name="apple-mobile-web-app-capable" content="yes">'
   ].join("");

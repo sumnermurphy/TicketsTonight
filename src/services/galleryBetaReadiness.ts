@@ -232,11 +232,11 @@ export function createGalleryBetaFeedback(
 
 export function createGalleryBetaFeedbackReport(feedback: GalleryBetaFeedback[]): string {
   if (feedback.length === 0) {
-    return "Gallery beta feedback\n\nNo local feedback captured yet.";
+    return "Walker beta feedback\n\nNo local feedback captured yet.";
   }
 
   return [
-    "Gallery beta feedback",
+    "Walker beta feedback",
     "",
     ...feedback.map((entry, index) =>
       [
@@ -405,7 +405,7 @@ export function createGalleryBetaReviewReport(input: GalleryBetaReviewReportInpu
         );
 
   return [
-    "Gallery walk beta review",
+    "Walker beta review",
     "",
     `Generated: ${generatedAt}`,
     `Preview URL: ${input.previewUrl ?? "Local or Sites preview pending"}`,

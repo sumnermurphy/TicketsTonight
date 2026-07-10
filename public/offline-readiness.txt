@@ -1,2 +1,2 @@
-TicketsTonight Gallery Walk beta uses checked-in gallery inventory, quiz metadata, and generated image assets.
+Walker beta uses checked-in gallery inventory, quiz metadata, and generated image assets.
 No runtime scraping is required for the preview. A full offline service worker/cache is intentionally out of scope for this sprint.

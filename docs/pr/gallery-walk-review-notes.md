@@ -1,14 +1,14 @@
-# Gallery Walk Review Notes
+# Walker Review Notes
 
 ## What This Branch Proves
-- TicketsTonight is refocused into a gallery-walk discovery app with verified gallery inventory, route planning, route stop swapping, active-walk state, Taste Passport personalization, beta-preview actions, route usability warnings, a professional mobile web shell, source trust labels, and local persistence.
+- Walker is a gallery and cultural-walk companion with verified gallery inventory, route planning, route stop swapping, active-walk state, taste personalization, beta-preview actions, route usability warnings, a premium mobile web shell, source trust labels, and local persistence.
 - NYC is the primary market for verified inventory depth: the beta target is now at least 60 imported/manual official-page records. Hudson has at least 5 imported/manual Hudson-market records, while Warren Street remains clearly labeled as the smaller walking test. LA remains secondary coverage.
 - The app intentionally distinguishes manually verified official-page inventory from fixture/demo, submitted, stale, and needs-review records.
 
 ## Demo Path
 - Start the app on web and choose NYC.
 - Confirm desktop still shows the visual hero, first-run choices, beta task checklist, resume-walk path when applicable, verified inventory counts, personalized modules, and a freshness queue.
-- On mobile web, confirm the first viewport is a polished app shell with location/date, visual featured recommendation, one primary walk CTA, compact trust row, useful-tonight feed, and bottom tabs for Tonight, Walk/Walking, For You, and Passport.
+- On mobile web, confirm the first viewport is a Walker app shell with the compass/wordmark, location/date context, visual featured recommendation, one primary walk CTA, compact trust row, Open Now feed, and bottom tabs for Tonight, Walk/Walking, For You, and Journal.
 - Switch route modes across quick loop, 2-hour walk, opening-night, last-chance, and For you.
 - Use a route "Swap" action from the route preview or stop list and confirm a nearby verified/source-backed replacement updates the draft or active route.
 - Start a NYC walk, mark a stop visited, and confirm the route map updates current/next/visited state.
@@ -36,9 +36,9 @@
 ## Beta Preview + Mobile Web
 - The first-run and beta preview surfaces now behave like a guided beta path instead of a feature wall: users can find a walk, take the taste quiz, resume an active walk, try NYC/Hudson/For You paths, or step through seven focused beta tasks.
 - Beta tasks are local-only and persist with the rest of gallery app state: find a walk, take quiz, start route, swap stop, mark visited, check Hudson, and send feedback.
-- The beta feedback panel stores notes locally and can generate a review report with route mode, market, active-walk state, verified/demo counts, route warnings, and tester notes, without introducing analytics, auth, or backend sync.
+- The beta feedback panel stores notes locally and can generate a Walker review report with route mode, market, active-walk state, verified/demo counts, route warnings, and tester notes, without introducing analytics, auth, or backend sync.
 - Mobile web now has a fixed bottom command surface for the highest-frequency actions. It is a PWA-readiness step, not native packaging.
-- `app.json` and `public/manifest.json` now include web name, short name, display mode, theme/background colors, and square icon metadata so the project is closer to an installable mobile-web shell later.
+- `app.json` and `public/manifest.json` now use Walker web name, short name, display mode, theme/background colors, and square icon metadata so the project is closer to an installable mobile-web shell later.
 - Checked-in gallery images and inventory continue to support an offline-friendly preview stance without adding a service worker.
 
 ## Known Limitations

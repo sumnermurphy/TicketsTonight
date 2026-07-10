@@ -1,8 +1,8 @@
-# TicketsTonight Gallery Walk
+# Walker
 
-TicketsTonight is currently focused as a gallery-walk discovery app. The active review surface helps a user decide what is worth seeing tonight, which galleries are open, which neighborhoods can support a walk, and which listings are verified versus fixture/demo inventory.
+Walker is a mobile-first cultural-walk companion. The active review surface helps a user decide what is worth seeing tonight, which galleries or cultural anchors are open, which neighborhoods can support a walk, and which listings are verified versus fixture/demo inventory.
 
-This branch intentionally replaces the legacy iOS-era TicketsTonight app tree with a modern Expo React Native app. The older concerts, ticketing, checkout, and Spotify seams remain present in services for future reuse, but they are not the active product surface in this PR.
+This branch intentionally replaces the legacy iOS-era TicketsTonight product surface with a modern Expo React Native app. The package name and legacy service filenames stay unchanged for now, but the visible product is Walker.
 
 ## Review Snapshot
 
@@ -15,19 +15,19 @@ This branch intentionally replaces the legacy iOS-era TicketsTonight app tree wi
 
 ## What Is Built
 
-- Gallery Walk Builder with quick loop, 2-hour walk, opening crawl, last-chance, and For you route modes.
+- Walker route builder with quick loop, 2-hour walk, opening crawl, last-chance, and For you route modes.
 - Map-like route planner with ordered stops, walking distance/time, route reasons, grouped same-gallery stops, stop swapping, and external Google Maps links.
 - Active-walk companion state with start/resume, current/next stop progress, visited/skipped actions, completed recap, and local persistence.
 - First-run choice surface for finding a walk, taking the taste quiz, or resuming an active walk.
-- Professional mobile web shell with a location/date bar, visual featured recommendation, useful-tonight feed, compact trust strip, and bottom tabs for Tonight, Walk, For You, and Passport.
-- Taste Passport personalization with quiz responses, behavior signals, personalized picks, quests, badges, and stamps.
+- Walker mobile web shell with a wordmark, location/date context, visual featured recommendation, Open Now feed, compact trust strip, and bottom tabs for Tonight, Walk, For You, and Journal.
+- Walker memory personalization with taste-card responses, behavior signals, personalized picks, quests, badges, stamps, saved walks, and journal notes.
 - Opening-night routing that prefers upcoming or active receptions and explains timing.
 - Last-chance and closing-soon signals.
 - Neighborhood Intelligence for walkable clusters.
 - Why Go cards, personal art-log controls, saved/visited/skipped states, and private notes.
 - Trust labels for `Verified as of`, `Official gallery link`, `Fixture/demo`, `Needs review`, and submitted/partner inventory.
 - PWA-readiness metadata with manifest/static icon assets while keeping the app local-first and offline-friendly through checked-in images/data.
-- Compact beta preview path with "Try a NYC walk", "Try For You", "Check Hudson", feedback capture, and copyable beta review report.
+- Compact beta preview path with "Try a NYC walk", "Try For You", "Check Hudson", feedback capture, and copyable Walker beta review report.
 - Route usability signals for open-now confidence, timing risk, best-start reasoning, closed/closing-soon warnings, and thin verified-route fallback copy.
 - Verified NYC gallery inventory depth above the initial fixture count, currently targeted at 72+ NYC exhibitions with 60+ imported/manual official-page records.
 - Hudson coverage kept honest as a smaller market: Warren Street remains the walk test, while nearby Hudson Valley official-page records add context without being presented as Warren Street stops.
@@ -102,14 +102,14 @@ npm run audit:source-directory
 ## Browser Smoke Checklist
 
 - NYC shows materially more than 12 exhibitions.
-- The top "Tonight in New York" surface explains first-run choices plus open-now, verified, demo/review, walkable, opening, and closing-soon supply.
+- The top Walker surface explains the featured route plus open-now, verified, demo/review, walkable, opening, and closing-soon supply.
 - Route modes switch between 45-minute loop, 2-hour walk, opening crawl, last chance, and For you.
 - Route swap works from the route preview or stop list without silently overwriting a preserved active walk.
 - Active walk progress survives refresh after marking a stop visited.
 - Grouped same-gallery stops still render compactly with show titles preserved.
 - Trust labels and official links are visible on cards and stops.
 - Hudson Warren Street renders as a smaller, honest market.
-- The beta preview surface can copy a report with market, route mode, active-walk status, verified/demo counts, route warnings, and tester notes.
+- The beta preview surface can copy a Walker report with market, route mode, active-walk status, verified/demo counts, route warnings, and tester notes.
 - Desktop and mobile layouts have no obvious overlap or cramped controls.
 - Browser console has no errors.
 
@@ -132,14 +132,14 @@ Known limitations: no service worker/offline cache yet, no auth/backend sync, no
 - `src/services/galleryDiscovery.ts`: filtering, trust labels, walk planning, route grouping, opening timing, last-chance alerts, and route map URLs.
 - `src/services/galleryWalkSession.ts`: active walk sessions, progress, replacement-safe stop swaps, and recaps.
 - `src/services/galleryAppPersistence.ts`: local persistence for walk state, art log, filters, alerts, personalization, saved walks, and first-run state.
-- `src/services/galleryTastePassport.ts`: quiz/behavior taste signals, personalized ranking, For you routes, quests, badges, and stamps.
+- `src/services/galleryTastePassport.ts`: quiz/behavior taste signals, personalized ranking, For you routes, Walker quests, badges, and stamps.
 - `src/services/galleryDataFoundation.ts`: import records, source audits, submission review queue, and market data audit helpers.
 - `scripts/galleryDiscoveryAudit.ts`: market-level gallery inventory and route-readiness audit.
 - `tests/serviceChecks.ts`: focused service checks for gallery inventory, route behavior, map links, trust labels, and legacy service seams.
 
 ## PR Notes
 
-This PR is intentionally large because it moves the repo from an old native TicketsTonight codebase to a modern Expo-based gallery-walk discovery app. Review should focus on:
+This PR is intentionally large because it moves the repo from an old native TicketsTonight codebase to Walker, a modern Expo-based cultural-walk discovery app. Review should focus on:
 
 - Whether replacing the legacy app tree is the accepted direction.
 - Whether the gallery-walk product surface is understandable and useful enough for the next iteration.
