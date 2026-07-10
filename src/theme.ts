@@ -66,11 +66,11 @@ export const typeScale = {
 
 export const walkerType = {
   displayFamily: Platform.select({
-    web: "Georgia, 'Times New Roman', serif",
+    web: "'Walker Display', 'EB Garamond', Georgia, 'Times New Roman', serif",
     default: "serif"
   }),
   uiFamily: Platform.select({
-    web: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    web: "'Walker Sans', Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     default: undefined
   }),
   display: { fontSize: 40, lineHeight: 48 },

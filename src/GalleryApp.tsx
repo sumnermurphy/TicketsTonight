@@ -199,6 +199,7 @@ type TonightFeedItem = {
   onPress: () => void;
 };
 type WalkerMobileTab = "home" | "explore" | "walks" | "saved" | "journal";
+type WalkerSavedMemoryTab = "collections" | "places" | "works" | "walks";
 
 const referenceNow = "2026-07-09T15:30:00-04:00";
 
@@ -719,6 +720,66 @@ function TonightStat({
         {detail}
       </Text>
     </View>
+  );
+}
+
+function WalkerExploreResultRow({
+  exhibition,
+  logEntry,
+  onOpenDetails
+}: {
+  exhibition: GalleryExhibition;
+  logEntry?: GalleryLogEntry;
+  onOpenDetails: () => void;
+}) {
+  const visual = getGalleryVisual(exhibition);
+  const status = getGalleryVisitStatus(exhibition, referenceNow);
+  const trust = getGalleryInventoryTrust(exhibition);
+  const isSaved =
+    logEntry?.status === "saved" ||
+    logEntry?.status === "want-to-see" ||
+    logEntry?.status === "visited";
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Open details for ${exhibition.title} at ${exhibition.galleryName}`}
+      onPress={onOpenDetails}
+      style={styles.walkerExploreRow}
+    >
+      <ImageBackground
+        source={galleryVisualSources[visual.assetKey]}
+        accessibilityLabel={visual.alt}
+        imageStyle={styles.walkerExploreThumbImage}
+        style={styles.walkerExploreThumb}
+      >
+        <View style={styles.walkerExploreThumbShade} />
+        <Text style={styles.walkerExploreDistance}>{exhibition.distanceMiles.toFixed(1)} mi</Text>
+      </ImageBackground>
+      <View style={styles.walkerExploreCopy}>
+        <View style={styles.walkerExploreTitleRow}>
+          <Text style={styles.walkerExploreTitle} numberOfLines={1}>
+            {exhibition.galleryName}
+          </Text>
+          <Heart
+            size={15}
+            color={isSaved ? colors.teal : colors.mutedInk}
+            fill={isSaved ? colors.teal : "transparent"}
+          />
+        </View>
+        <Text style={styles.walkerExploreSubtitle} numberOfLines={1}>
+          {exhibition.title}
+        </Text>
+        <Text style={styles.walkerExploreMeta} numberOfLines={1}>
+          {exhibition.neighborhood} - {galleryVisitStatusLabels[status]} - {getClosingCopy(exhibition)}
+        </Text>
+        <View style={styles.walkerExploreBadgeRow}>
+          <Text style={styles.walkerExploreBadge}>{trust.label}</Text>
+          <Text style={styles.walkerExploreBadge}>{visual.creditLabel}</Text>
+          {trust.hasOfficialLink ? <Text style={styles.walkerExploreBadge}>Official link</Text> : null}
+        </View>
+      </View>
+    </Pressable>
   );
 }
 
@@ -1590,10 +1651,23 @@ function WalkerSavedMemoryPanel({
   stamps: GalleryPassportStamp[];
   onCopySavedWalk: (savedWalk: GallerySavedWalk) => void;
 }) {
+  const [activeMemoryTab, setActiveMemoryTab] = useState<WalkerSavedMemoryTab>("collections");
   const exhibitionById = new Map(exhibitions.map((exhibition) => [exhibition.id, exhibition]));
   const savedEntries = logEntries.filter((entry) => entry.status === "saved" || entry.status === "want-to-see");
   const visitedEntries = logEntries.filter((entry) => entry.status === "visited");
   const notedEntries = logEntries.filter((entry) => Boolean(entry.note?.trim()));
+  const memoryTabs: Array<{ id: WalkerSavedMemoryTab; label: string; count: number }> = [
+    { id: "collections", label: "Collections", count: savedWalks.length },
+    { id: "places", label: "Places", count: savedEntries.length + visitedEntries.length },
+    { id: "works", label: "Works", count: notedEntries.length },
+    { id: "walks", label: "Walks", count: memory.completedWalkCount }
+  ];
+  const timelineEntries =
+    activeMemoryTab === "places"
+      ? [...visitedEntries, ...savedEntries]
+      : activeMemoryTab === "works"
+        ? notedEntries
+        : logEntries;
 
   return (
     <View style={styles.mobileMemoryShell}>
@@ -1614,10 +1688,49 @@ function WalkerSavedMemoryPanel({
         </View>
       </View>
 
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.mobileMemoryTabStrip}
+      >
+        {memoryTabs.map((tab) => (
+          <Pressable
+            key={tab.id}
+            accessibilityRole="button"
+            accessibilityLabel={`Show Walker ${tab.label}`}
+            onPress={() => setActiveMemoryTab(tab.id)}
+            style={[
+              styles.mobileMemoryTab,
+              activeMemoryTab === tab.id ? styles.activeMobileMemoryTab : null
+            ]}
+          >
+            <Text
+              style={[
+                styles.mobileMemoryTabLabel,
+                activeMemoryTab === tab.id ? styles.activeMobileMemoryTabLabel : null
+              ]}
+            >
+              {tab.label}
+            </Text>
+            <Text
+              style={[
+                styles.mobileMemoryTabCount,
+                activeMemoryTab === tab.id ? styles.activeMobileMemoryTabLabel : null
+              ]}
+            >
+              {tab.count}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      {activeMemoryTab === "collections" || activeMemoryTab === "walks" ? (
       <View style={styles.mobileCollectionPanel}>
         <View style={styles.mobileSectionHeading}>
-          <Text style={styles.mobileSectionTitle}>Collections</Text>
-          <Text style={styles.mobileSectionMeta}>{savedWalks.length} walks</Text>
+          <Text style={styles.mobileSectionTitle}>
+            {activeMemoryTab === "walks" ? "Walks" : "Collections"}
+          </Text>
+          <Text style={styles.mobileSectionMeta}>{savedWalks.length} saved routes</Text>
         </View>
         {savedWalks.slice(0, 4).map((savedWalk) => (
           <View key={savedWalk.id} style={styles.mobileSavedRow}>
@@ -1645,13 +1758,17 @@ function WalkerSavedMemoryPanel({
           <Text style={styles.emptyText}>Save a route from the Walks tab to build a collection.</Text>
         ) : null}
       </View>
+      ) : null}
 
+      {activeMemoryTab !== "collections" ? (
       <View style={styles.mobileCollectionPanel}>
         <View style={styles.mobileSectionHeading}>
-          <Text style={styles.mobileSectionTitle}>Journal</Text>
-          <Text style={styles.mobileSectionMeta}>{logEntries.length} entries</Text>
+          <Text style={styles.mobileSectionTitle}>
+            {activeMemoryTab === "works" ? "Works & notes" : "Places"}
+          </Text>
+          <Text style={styles.mobileSectionMeta}>{timelineEntries.length} entries</Text>
         </View>
-        {logEntries.slice(0, 6).map((entry) => (
+        {timelineEntries.slice(0, 6).map((entry) => (
           (() => {
             const exhibition = exhibitionById.get(entry.exhibitionId);
 
@@ -1674,10 +1791,11 @@ function WalkerSavedMemoryPanel({
             );
           })()
         ))}
-        {logEntries.length === 0 ? (
+        {timelineEntries.length === 0 ? (
           <Text style={styles.emptyText}>Mark shows saved, wanted, visited, or skipped to start your timeline.</Text>
         ) : null}
       </View>
+      ) : null}
 
       <View style={styles.mobileRecapCard}>
         <Text style={styles.mobileFeedLabel}>Monthly recap</Text>
@@ -2660,6 +2778,12 @@ function RoutePreview({
         </View>
       ) : null}
       <View style={styles.routeMapCanvas}>
+        <View style={[styles.routeMapMinorRoad, styles.routeMapMinorRoadOne]} />
+        <View style={[styles.routeMapMinorRoad, styles.routeMapMinorRoadTwo]} />
+        <View style={[styles.routeMapMinorRoad, styles.routeMapMinorRoadThree]} />
+        <View style={[styles.routeMapMinorRoadVertical, styles.routeMapMinorRoadFour]} />
+        <View style={[styles.routeMapMinorRoadVertical, styles.routeMapMinorRoadFive]} />
+        <View style={[styles.routeMapMinorRoadVertical, styles.routeMapMinorRoadSix]} />
         <View style={[styles.routeMapRoadBand, styles.routeMapRoadBandNorth]} />
         <View style={[styles.routeMapRoadBand, styles.routeMapRoadBandSouth]} />
         <View style={[styles.routeMapRoadBandVertical, styles.routeMapRoadBandWest]} />
@@ -3480,6 +3604,75 @@ function ExhibitionDetailSheet({
           </View>
         </View>
 
+        <View style={styles.detailQuickActions}>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={`Open map for ${exhibition.galleryName}`}
+            onPress={() => {
+              void Linking.openURL(getGalleryMapUrl(exhibition));
+            }}
+            style={styles.detailQuickAction}
+          >
+            <MapPin size={15} color={colors.teal} />
+            <Text style={styles.detailQuickActionText}>Directions</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Save ${exhibition.title}`}
+            onPress={() => onStatus(logEntry?.status === "saved" ? "want-to-see" : "saved")}
+            style={styles.detailQuickAction}
+          >
+            <Heart
+              size={15}
+              color={logEntry?.status === "saved" ? colors.teal : colors.ink}
+              fill={logEntry?.status === "saved" ? colors.teal : "transparent"}
+            />
+            <Text style={styles.detailQuickActionText}>Save</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={`Open official source for ${exhibition.title}`}
+            onPress={() => {
+              void Linking.openURL(sourceReceipt.officialUrl ?? exhibition.externalUrl);
+            }}
+            style={styles.detailQuickAction}
+          >
+            <ExternalLink size={15} color={colors.teal} />
+            <Text style={styles.detailQuickActionText}>
+              {trust.hasOfficialLink ? "Website" : "Listing"}
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Share ${exhibition.title}`}
+            onPress={onShare}
+            style={styles.detailQuickAction}
+          >
+            <Share2 size={15} color={colors.teal} />
+            <Text style={styles.detailQuickActionText}>Share</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.detailVisitPanel}>
+          <Text style={styles.detailVisitKicker}>Plan your visit</Text>
+          <View style={styles.detailVisitRow}>
+            <MapPin size={14} color={colors.teal} />
+            <Text style={styles.detailVisitText} numberOfLines={2}>{exhibition.address}</Text>
+          </View>
+          <View style={styles.detailVisitRow}>
+            <Clock size={14} color={colors.teal} />
+            <Text style={styles.detailVisitText}>
+              {galleryVisitStatusLabels[status]} - {getClosingCopy(exhibition)}
+            </Text>
+          </View>
+          <View style={styles.detailVisitRow}>
+            <Check size={14} color={colors.teal} />
+            <Text style={styles.detailVisitText}>
+              {sourceReceipt.evidenceLabel} - {getFreshnessCopy(exhibition)}
+            </Text>
+          </View>
+        </View>
+
         {routeProgress ? (
           <View
             style={[
@@ -3788,6 +3981,16 @@ export function GalleryApp() {
   useEffect(() => {
     if (Platform.OS === "web" && typeof document !== "undefined") {
       document.title = "Walker";
+
+      if (!document.getElementById("walker-web-fonts")) {
+        const style = document.createElement("style");
+        style.id = "walker-web-fonts";
+        style.textContent = [
+          "@font-face{font-family:'Walker Display';src:url('/fonts/EBGaramond.ttf') format('truetype');font-weight:400 800;font-style:normal;font-display:swap;}",
+          "@font-face{font-family:'Walker Sans';src:url('/fonts/Inter.ttf') format('truetype');font-weight:100 900;font-style:normal;font-display:swap;}"
+        ].join("");
+        document.head.appendChild(style);
+      }
     }
   }, []);
 
@@ -5375,30 +5578,10 @@ export function GalleryApp() {
           <Text style={styles.mobileSectionMeta}>{visibleExhibitions.length} shows</Text>
         </View>
         {visibleExhibitions.slice(0, 16).map((exhibition) => (
-          <ExhibitionCard
+          <WalkerExploreResultRow
             key={exhibition.id}
             exhibition={exhibition}
-            allExhibitions={galleryExhibitions}
-            savedIds={savedIds}
             logEntry={logEntryById.get(exhibition.id)}
-            onStatus={(status) => setLogStatus(exhibition.id, status)}
-            onNote={(note) => setLogNote(exhibition.id, note)}
-            savedAlertArtists={savedAlertArtists}
-            savedAlertGalleries={savedAlertGalleries}
-            savedAlertNeighborhoods={savedAlertNeighborhoods}
-            savedAlertMediums={savedAlertMediums}
-            onToggleAlertArtist={(artist) =>
-              setSavedAlertArtists((values) => toggleStringValue(values, artist))
-            }
-            onToggleAlertGallery={(gallery) =>
-              setSavedAlertGalleries((values) => toggleStringValue(values, gallery))
-            }
-            onToggleAlertNeighborhood={(neighborhood) =>
-              setSavedAlertNeighborhoods((values) => toggleStringValue(values, neighborhood))
-            }
-            onToggleAlertMedium={(medium) =>
-              setSavedAlertMediums((values) => toggleMediumValue(values, medium))
-            }
             onOpenDetails={() => setSelectedExhibitionId(exhibition.id)}
           />
         ))}
@@ -6392,7 +6575,7 @@ const styles = StyleSheet.create({
   },
   mobileTabShell: {
     backgroundColor: colors.fog,
-    gap: spacing.lg,
+    gap: spacing.md,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md
   },
@@ -6777,15 +6960,108 @@ const styles = StyleSheet.create({
   },
   mobileSearchPanel: {
     backgroundColor: colors.paper,
-    borderColor: colors.line,
-    borderRadius: radii.lg,
+    borderColor: "rgba(13, 59, 46, 0.08)",
+    borderRadius: 20,
     borderWidth: 1,
-    gap: spacing.sm,
+    gap: spacing.md,
     padding: spacing.md,
     ...shadows.card
   },
   mobileListPanel: {
-    gap: spacing.md
+    gap: spacing.sm
+  },
+  walkerExploreRow: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderColor: "rgba(13, 59, 46, 0.08)",
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.sm,
+    minHeight: 96,
+    padding: spacing.sm,
+    ...shadows.card
+  },
+  walkerExploreThumb: {
+    height: 72,
+    justifyContent: "flex-start",
+    overflow: "hidden",
+    padding: spacing.xs,
+    width: 72
+  },
+  walkerExploreThumbImage: {
+    borderRadius: 12,
+    resizeMode: "cover"
+  },
+  walkerExploreThumbShade: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(13, 59, 46, 0.12)"
+  },
+  walkerExploreDistance: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(250, 246, 239, 0.92)",
+    borderRadius: radii.pill,
+    color: colors.teal,
+    fontFamily: walkerType.uiFamily,
+    fontSize: 9,
+    fontWeight: "800",
+    overflow: "hidden",
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2
+  },
+  walkerExploreCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0
+  },
+  walkerExploreTitleRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm,
+    justifyContent: "space-between"
+  },
+  walkerExploreTitle: {
+    color: colors.ink,
+    flex: 1,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 22,
+    minWidth: 0
+  },
+  walkerExploreSubtitle: {
+    color: colors.ink,
+    fontFamily: walkerType.uiFamily,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 16
+  },
+  walkerExploreMeta: {
+    color: colors.mutedInk,
+    fontFamily: walkerType.uiFamily,
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 15
+  },
+  walkerExploreBadgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginTop: spacing.xs
+  },
+  walkerExploreBadge: {
+    backgroundColor: colors.fog,
+    borderColor: "rgba(13, 59, 46, 0.08)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: colors.teal,
+    fontFamily: walkerType.uiFamily,
+    fontSize: 9,
+    fontWeight: "800",
+    overflow: "hidden",
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    textTransform: "uppercase"
   },
   mobileDetailWrap: {
     marginHorizontal: -spacing.md
@@ -6810,7 +7086,7 @@ const styles = StyleSheet.create({
   },
   mobileHomeShell: {
     backgroundColor: colors.fog,
-    gap: spacing.lg,
+    gap: spacing.md,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md
   },
@@ -6845,6 +7121,7 @@ const styles = StyleSheet.create({
   },
   mobileDateLabel: {
     color: colors.mutedInk,
+    fontFamily: walkerType.uiFamily,
     fontSize: 12,
     fontWeight: "800",
     lineHeight: 17,
@@ -6861,14 +7138,15 @@ const styles = StyleSheet.create({
   },
   mobileVerifiedBadgeText: {
     color: colors.paper,
+    fontFamily: walkerType.uiFamily,
     fontSize: 11,
     fontWeight: "800"
   },
   mobileFeatureCard: {
     borderColor: "rgba(200, 161, 90, 0.35)",
-    borderRadius: radii.lg,
+    borderRadius: 20,
     borderWidth: 1,
-    minHeight: 336,
+    minHeight: 314,
     overflow: "hidden",
     ...shadows.card
   },
@@ -6899,6 +7177,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     color: colors.teal,
     flexShrink: 1,
+    fontFamily: walkerType.uiFamily,
     fontSize: 10,
     fontWeight: "800",
     maxWidth: "100%",
@@ -6915,9 +7194,9 @@ const styles = StyleSheet.create({
     color: colors.paper,
     flexShrink: 1,
     fontFamily: walkerType.displayFamily,
-    fontSize: 31,
+    fontSize: 34,
     fontWeight: "700",
-    lineHeight: 36,
+    lineHeight: 38,
     maxWidth: "100%",
     minWidth: 0,
     width: "100%"
@@ -6925,6 +7204,7 @@ const styles = StyleSheet.create({
   mobileFeatureSubtitle: {
     color: "#FAF6EF",
     flexShrink: 1,
+    fontFamily: walkerType.uiFamily,
     fontSize: 14,
     fontWeight: "800",
     lineHeight: 20,
@@ -6957,6 +7237,7 @@ const styles = StyleSheet.create({
   mobilePrimaryCtaText: {
     color: colors.paper,
     flexShrink: 1,
+    fontFamily: walkerType.uiFamily,
     fontSize: 14,
     fontWeight: "800",
     minWidth: 0
@@ -6975,6 +7256,7 @@ const styles = StyleSheet.create({
   mobileSecondaryCtaText: {
     color: colors.teal,
     flexShrink: 1,
+    fontFamily: walkerType.uiFamily,
     fontSize: 13,
     fontWeight: "800",
     minWidth: 0
@@ -6994,6 +7276,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     color: colors.teal,
     flexGrow: 1,
+    fontFamily: walkerType.uiFamily,
     fontSize: 11,
     fontWeight: "800",
     overflow: "hidden",
@@ -7147,6 +7430,7 @@ const styles = StyleSheet.create({
   },
   mobileFeedLabel: {
     color: colors.gold,
+    fontFamily: walkerType.uiFamily,
     fontSize: 10,
     fontWeight: "800",
     textTransform: "uppercase"
@@ -7177,8 +7461,8 @@ const styles = StyleSheet.create({
   },
   mobileTonightFeed: {
     backgroundColor: colors.paper,
-    borderColor: colors.line,
-    borderRadius: radii.lg,
+    borderColor: "rgba(13, 59, 46, 0.08)",
+    borderRadius: 20,
     borderWidth: 1,
     gap: spacing.sm,
     padding: spacing.md
@@ -7202,7 +7486,7 @@ const styles = StyleSheet.create({
   },
   mobileFeedRow: {
     alignItems: "center",
-    borderTopColor: colors.line,
+    borderTopColor: "rgba(13, 59, 46, 0.08)",
     borderTopWidth: 1,
     flexDirection: "row",
     gap: spacing.md,
@@ -7215,13 +7499,15 @@ const styles = StyleSheet.create({
   },
   mobileFeedTitle: {
     color: colors.ink,
+    fontFamily: walkerType.uiFamily,
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: "700",
     lineHeight: 19,
     marginTop: spacing.xs
   },
   mobileFeedDetail: {
     color: colors.mutedInk,
+    fontFamily: walkerType.uiFamily,
     fontSize: 12,
     fontWeight: "800",
     lineHeight: 17,
@@ -7229,6 +7515,7 @@ const styles = StyleSheet.create({
   },
   mobileFeedMeta: {
     color: colors.ink,
+    fontFamily: walkerType.uiFamily,
     fontSize: 11,
     fontWeight: "800",
     lineHeight: 15,
@@ -7240,6 +7527,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     borderWidth: 1,
     color: colors.teal,
+    fontFamily: walkerType.uiFamily,
     fontSize: 11,
     fontWeight: "800",
     overflow: "hidden",
@@ -7252,8 +7540,8 @@ const styles = StyleSheet.create({
   },
   mobileNeighborhoodChip: {
     backgroundColor: colors.paper,
-    borderColor: colors.line,
-    borderRadius: radii.lg,
+    borderColor: "rgba(13, 59, 46, 0.08)",
+    borderRadius: 16,
     borderWidth: 1,
     minHeight: 66,
     padding: spacing.sm,
@@ -7265,11 +7553,13 @@ const styles = StyleSheet.create({
   },
   mobileNeighborhoodName: {
     color: colors.teal,
+    fontFamily: walkerType.uiFamily,
     fontSize: 13,
     fontWeight: "800"
   },
   mobileNeighborhoodMeta: {
     color: colors.mutedInk,
+    fontFamily: walkerType.uiFamily,
     fontSize: 11,
     fontWeight: "800",
     lineHeight: 15,
@@ -7277,14 +7567,14 @@ const styles = StyleSheet.create({
   },
   mobileMemoryShell: {
     backgroundColor: colors.fog,
-    gap: spacing.lg,
+    gap: spacing.md,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md
   },
   mobileMemoryHero: {
     backgroundColor: colors.teal,
     borderColor: "rgba(200, 161, 90, 0.38)",
-    borderRadius: radii.lg,
+    borderRadius: 20,
     borderWidth: 1,
     gap: spacing.md,
     padding: spacing.lg,
@@ -7305,6 +7595,7 @@ const styles = StyleSheet.create({
   },
   mobileMemoryCopy: {
     color: "#EFE6E1",
+    fontFamily: walkerType.uiFamily,
     fontSize: 13,
     fontWeight: "800",
     lineHeight: 19
@@ -7320,6 +7611,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     borderWidth: 1,
     color: colors.paper,
+    fontFamily: walkerType.uiFamily,
     fontSize: 11,
     fontWeight: "800",
     overflow: "hidden",
@@ -7328,16 +7620,50 @@ const styles = StyleSheet.create({
   },
   mobileCollectionPanel: {
     backgroundColor: colors.paper,
-    borderColor: colors.line,
-    borderRadius: radii.lg,
+    borderColor: "rgba(13, 59, 46, 0.08)",
+    borderRadius: 20,
     borderWidth: 1,
     gap: spacing.sm,
     padding: spacing.md,
     ...shadows.card
   },
+  mobileMemoryTabStrip: {
+    gap: spacing.sm,
+    paddingBottom: spacing.xs
+  },
+  mobileMemoryTab: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderColor: "rgba(13, 59, 46, 0.1)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.xs,
+    minHeight: 36,
+    paddingHorizontal: spacing.md
+  },
+  activeMobileMemoryTab: {
+    backgroundColor: colors.teal,
+    borderColor: colors.teal
+  },
+  mobileMemoryTabLabel: {
+    color: colors.ink,
+    fontFamily: walkerType.uiFamily,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  mobileMemoryTabCount: {
+    color: colors.mutedInk,
+    fontFamily: walkerType.uiFamily,
+    fontSize: 11,
+    fontWeight: "800"
+  },
+  activeMobileMemoryTabLabel: {
+    color: colors.paper
+  },
   mobileSavedRow: {
     alignItems: "center",
-    borderTopColor: colors.line,
+    borderTopColor: "rgba(13, 59, 46, 0.08)",
     borderTopWidth: 1,
     flexDirection: "row",
     gap: spacing.sm,
@@ -7346,7 +7672,7 @@ const styles = StyleSheet.create({
   mobileSavedThumb: {
     alignItems: "center",
     backgroundColor: colors.tealSoft,
-    borderRadius: radii.md,
+    borderRadius: 14,
     height: 46,
     justifyContent: "center",
     width: 46
@@ -7576,11 +7902,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md
   },
   activeChip: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink
+    backgroundColor: colors.teal,
+    borderColor: colors.teal
   },
   chipText: {
     color: colors.ink,
+    fontFamily: walkerType.uiFamily,
     fontSize: 13,
     fontWeight: "800"
   },
@@ -7590,8 +7917,8 @@ const styles = StyleSheet.create({
   searchBox: {
     alignItems: "center",
     backgroundColor: colors.paper,
-    borderColor: colors.line,
-    borderRadius: radii.md,
+    borderColor: "rgba(13, 59, 46, 0.08)",
+    borderRadius: radii.pill,
     borderWidth: 1,
     flexDirection: "row",
     gap: spacing.sm,
@@ -7601,6 +7928,7 @@ const styles = StyleSheet.create({
   searchInput: {
     color: colors.ink,
     flex: 1,
+    fontFamily: walkerType.uiFamily,
     fontSize: 15,
     fontWeight: "600",
     minWidth: 0
@@ -9191,8 +9519,8 @@ const styles = StyleSheet.create({
   },
   routePreview: {
     backgroundColor: colors.paper,
-    borderColor: colors.line,
-    borderRadius: radii.lg,
+    borderColor: "rgba(13, 59, 46, 0.08)",
+    borderRadius: 20,
     borderWidth: 1,
     marginHorizontal: spacing.lg,
     marginTop: spacing.md,
@@ -9207,8 +9535,9 @@ const styles = StyleSheet.create({
   },
   routePreviewTitle: {
     color: colors.ink,
-    fontSize: 13,
-    fontWeight: "800"
+    fontFamily: walkerType.displayFamily,
+    fontSize: 18,
+    fontWeight: "700"
   },
   routePreviewMeta: {
     color: colors.mutedInk,
@@ -9233,8 +9562,8 @@ const styles = StyleSheet.create({
   },
   selectedRoutePreviewStop: {
     backgroundColor: colors.fog,
-    borderColor: colors.line,
-    borderRadius: radii.md,
+    borderColor: "rgba(200, 161, 90, 0.45)",
+    borderRadius: 16,
     borderWidth: 1
   },
   routePreviewNodeRow: {
@@ -9297,7 +9626,7 @@ const styles = StyleSheet.create({
   },
   routeMapSummaryPill: {
     backgroundColor: colors.fog,
-    borderColor: colors.line,
+    borderColor: "rgba(13, 59, 46, 0.08)",
     borderRadius: radii.pill,
     borderWidth: 1,
     color: colors.ink,
@@ -9316,8 +9645,8 @@ const styles = StyleSheet.create({
   },
   routeMapPrimaryAction: {
     alignItems: "center",
-    backgroundColor: colors.ink,
-    borderRadius: radii.md,
+    backgroundColor: colors.teal,
+    borderRadius: radii.pill,
     flexDirection: "row",
     gap: spacing.xs,
     minHeight: 34,
@@ -9331,8 +9660,8 @@ const styles = StyleSheet.create({
   routeMapSecondaryAction: {
     alignItems: "center",
     backgroundColor: colors.paper,
-    borderColor: colors.line,
-    borderRadius: radii.md,
+    borderColor: "rgba(13, 59, 46, 0.12)",
+    borderRadius: radii.pill,
     borderWidth: 1,
     flexDirection: "row",
     gap: spacing.xs,
@@ -9346,8 +9675,8 @@ const styles = StyleSheet.create({
   },
   routePreviewSwapPanel: {
     backgroundColor: colors.fog,
-    borderColor: colors.line,
-    borderRadius: radii.md,
+    borderColor: "rgba(13, 59, 46, 0.08)",
+    borderRadius: 16,
     borderWidth: 1,
     gap: spacing.sm,
     marginHorizontal: spacing.md,
@@ -9355,8 +9684,8 @@ const styles = StyleSheet.create({
     padding: spacing.sm
   },
   routeConfidencePanel: {
-    backgroundColor: colors.ink,
-    borderRadius: radii.md,
+    backgroundColor: colors.teal,
+    borderRadius: 18,
     gap: spacing.sm,
     marginHorizontal: spacing.md,
     marginTop: spacing.md,
@@ -9396,11 +9725,11 @@ const styles = StyleSheet.create({
     lineHeight: 17
   },
   routeMapCanvas: {
-    backgroundColor: "#EEF2ED",
-    borderColor: colors.line,
-    borderRadius: radii.lg,
+    backgroundColor: "#EEF2EA",
+    borderColor: "rgba(13, 59, 46, 0.08)",
+    borderRadius: 20,
     borderWidth: 1,
-    height: 238,
+    height: 254,
     marginHorizontal: spacing.md,
     marginTop: spacing.md,
     overflow: "hidden",
@@ -9413,9 +9742,51 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0
   },
+  routeMapMinorRoad: {
+    backgroundColor: "rgba(255, 253, 247, 0.64)",
+    borderColor: "rgba(13, 59, 46, 0.04)",
+    borderWidth: 1,
+    height: 18,
+    left: "-8%",
+    position: "absolute",
+    width: "120%"
+  },
+  routeMapMinorRoadOne: {
+    top: "9%",
+    transform: [{ rotate: "4deg" }]
+  },
+  routeMapMinorRoadTwo: {
+    top: "43%",
+    transform: [{ rotate: "-3deg" }]
+  },
+  routeMapMinorRoadThree: {
+    bottom: "6%",
+    transform: [{ rotate: "6deg" }]
+  },
+  routeMapMinorRoadVertical: {
+    backgroundColor: "rgba(255, 253, 247, 0.54)",
+    borderColor: "rgba(13, 59, 46, 0.04)",
+    borderWidth: 1,
+    height: "120%",
+    position: "absolute",
+    top: "-10%",
+    width: 18
+  },
+  routeMapMinorRoadFour: {
+    left: "9%",
+    transform: [{ rotate: "-5deg" }]
+  },
+  routeMapMinorRoadFive: {
+    left: "52%",
+    transform: [{ rotate: "7deg" }]
+  },
+  routeMapMinorRoadSix: {
+    right: "6%",
+    transform: [{ rotate: "-4deg" }]
+  },
   routeMapRoadBand: {
-    backgroundColor: "rgba(255, 253, 248, 0.92)",
-    borderColor: "rgba(13, 59, 46, 0.08)",
+    backgroundColor: "rgba(255, 253, 247, 0.9)",
+    borderColor: "rgba(13, 59, 46, 0.06)",
     borderWidth: 1,
     height: 34,
     left: "-10%",
@@ -9431,7 +9802,7 @@ const styles = StyleSheet.create({
     transform: [{ rotate: "7deg" }]
   },
   routeMapRoadBandVertical: {
-    backgroundColor: "rgba(255, 253, 248, 0.78)",
+    backgroundColor: "rgba(255, 253, 247, 0.76)",
     borderColor: "rgba(13, 59, 46, 0.07)",
     borderWidth: 1,
     height: "118%",
@@ -9449,7 +9820,7 @@ const styles = StyleSheet.create({
   },
   routeMapSegmentLabel: {
     backgroundColor: colors.paper,
-    borderColor: colors.line,
+    borderColor: "rgba(13, 59, 46, 0.08)",
     borderRadius: radii.pill,
     borderWidth: 1,
     color: colors.ink,
@@ -9477,7 +9848,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.teal,
     borderColor: colors.paper,
-    borderRadius: radii.pill,
+    borderRadius: 15,
     borderWidth: 2,
     height: 30,
     justifyContent: "center",
@@ -9498,10 +9869,10 @@ const styles = StyleSheet.create({
   },
   routeMapPinSelected: {
     borderColor: colors.gold,
-    borderWidth: 3,
-    height: 34,
-    transform: [{ translateX: -17 }, { translateY: -17 }],
-    width: 34,
+    borderWidth: 4,
+    height: 36,
+    transform: [{ translateX: -18 }, { translateY: -18 }],
+    width: 36,
     zIndex: 3
   },
   routeMapPinText: {
@@ -9511,8 +9882,8 @@ const styles = StyleSheet.create({
   },
   routeMapCanvasLegend: {
     backgroundColor: "rgba(255, 253, 248, 0.92)",
-    borderColor: colors.line,
-    borderRadius: radii.md,
+    borderColor: "rgba(13, 59, 46, 0.08)",
+    borderRadius: 16,
     borderWidth: 1,
     bottom: spacing.sm,
     left: spacing.sm,
@@ -9900,13 +10271,13 @@ const styles = StyleSheet.create({
   detailSheet: {
     backgroundColor: colors.paper,
     borderColor: "rgba(17, 17, 17, 0.08)",
-    borderRadius: radii.md,
+    borderRadius: 20,
     borderWidth: 1,
     overflow: "hidden",
     ...shadows.card
   },
   detailVisual: {
-    minHeight: 340,
+    minHeight: 318,
     justifyContent: "space-between",
     overflow: "hidden",
     padding: spacing.md
@@ -9933,8 +10304,9 @@ const styles = StyleSheet.create({
   detailVisualTitle: {
     color: colors.paper,
     flexShrink: 1,
+    fontFamily: walkerType.displayFamily,
     fontSize: 26,
-    fontWeight: "800",
+    fontWeight: "700",
     lineHeight: 31,
     maxWidth: "100%"
   },
@@ -9961,10 +10333,65 @@ const styles = StyleSheet.create({
   },
   detailArtists: {
     color: colors.ink,
-    fontSize: 16,
-    fontWeight: "800",
-    lineHeight: 22,
+    fontFamily: walkerType.displayFamily,
+    fontSize: 19,
+    fontWeight: "700",
+    lineHeight: 24,
     marginTop: spacing.xs
+  },
+  detailQuickActions: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    justifyContent: "space-between"
+  },
+  detailQuickAction: {
+    alignItems: "center",
+    backgroundColor: colors.fog,
+    borderColor: "rgba(13, 59, 46, 0.08)",
+    borderRadius: 16,
+    borderWidth: 1,
+    flex: 1,
+    gap: spacing.xs,
+    justifyContent: "center",
+    minHeight: 70,
+    minWidth: 0,
+    paddingHorizontal: spacing.xs
+  },
+  detailQuickActionText: {
+    color: colors.ink,
+    fontFamily: walkerType.uiFamily,
+    fontSize: 11,
+    fontWeight: "800"
+  },
+  detailVisitPanel: {
+    backgroundColor: colors.fog,
+    borderColor: "rgba(13, 59, 46, 0.08)",
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md
+  },
+  detailVisitKicker: {
+    color: colors.gold,
+    fontFamily: walkerType.uiFamily,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
+  },
+  detailVisitRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: spacing.sm
+  },
+  detailVisitText: {
+    color: colors.ink,
+    flex: 1,
+    fontFamily: walkerType.uiFamily,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17,
+    minWidth: 0
   },
   exhibitionCard: {
     backgroundColor: colors.paper,
@@ -10072,6 +10499,7 @@ const styles = StyleSheet.create({
   cardDescription: {
     color: colors.ink,
     flexShrink: 1,
+    fontFamily: walkerType.uiFamily,
     fontSize: 14,
     fontWeight: "600",
     lineHeight: 20,
@@ -10159,12 +10587,14 @@ const styles = StyleSheet.create({
   detailRouteFitTitle: {
     color: colors.paper,
     flex: 1,
+    fontFamily: walkerType.uiFamily,
     fontSize: 13,
     fontWeight: "800",
     minWidth: 120
   },
   detailRouteFitText: {
     color: "#F0ECE4",
+    fontFamily: walkerType.uiFamily,
     fontSize: 12,
     fontWeight: "700",
     lineHeight: 17
